@@ -1,46 +1,61 @@
 import { NextResponse } from "next/server";
-import { ZodError, z } from "zod";
-import {
-  SESSION_COOKIE,
-  createSessionToken,
-  sessionCookieOptions,
-} from "@/lib/auth";
-import { findUserByUsername } from "@/lib/db";
-import { verifyPassword } from "@/lib/password";
-
-export const runtime = "nodejs";
-
-const loginSchema = z.object({
-  username: z.string().trim().min(1, "Username is required"),
-  password: z.string().min(1, "Password is required"),
-});
+import bcrypt from "bcryptjs";
+import { db } from "@/lib/db";
 
 export async function POST(request: Request) {
-  let body: z.infer<typeof loginSchema>;
   try {
-    body = loginSchema.parse(await request.json());
-  } catch (err) {
-    const message =
-      err instanceof ZodError
-        ? err.issues[0]?.message || "Invalid request"
-        : "Invalid request";
-    return NextResponse.json({ ok: false, error: message }, { status: 400 });
-  }
+    const body = await request.json();
+    const username = body.username?.trim();
+    const password = body.password;
 
-  const user = findUserByUsername(body.username);
-  if (!user || !verifyPassword(body.password, user.password_hash)) {
+    if (!username || !password) {
+      return NextResponse.json(
+        { error: "Username and password are required" },
+        { status: 400 }
+      );
+    }
+
+    const result = await db.query(
+      `SELECT id, username, password_hash
+       FROM users
+       WHERE username = $1`,
+      [username]
+    );
+
+    if (result.rowCount === 0) {
+      return NextResponse.json(
+        { error: "Invalid username or password" },
+        { status: 401 }
+      );
+    }
+
+    const user = result.rows[0];
+
+    const passwordMatches = await bcrypt.compare(
+      password,
+      user.password_hash
+    );
+
+    if (!passwordMatches) {
+      return NextResponse.json(
+        { error: "Invalid username or password" },
+        { status: 401 }
+      );
+    }
+
+    return NextResponse.json({
+      message: "Login successful",
+      user: {
+        id: user.id,
+        username: user.username,
+      },
+    });
+  } catch (error) {
+    console.error("Login error:", error);
+
     return NextResponse.json(
-      { ok: false, error: "Invalid username or password" },
-      { status: 401 },
+      { error: "Unable to log in" },
+      { status: 500 }
     );
   }
-
-  const token = await createSessionToken(user.id, user.username);
-  const response = NextResponse.json({
-    ok: true,
-    username: user.username,
-    userId: user.id,
-  });
-  response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
-  return response;
 }

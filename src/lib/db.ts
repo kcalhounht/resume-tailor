@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { CandidateProfile } from "./types";
 import { EMPTY_PROFILE } from "./profile";
 import { hashPassword } from "./password";
+import { Pool } from "pg";
 
 export type DbUser = {
   id: number;
@@ -376,4 +377,22 @@ export function saveProfileForUser(
     JSON.stringify(profile.education),
   );
   return profile;
+}
+
+const globalForDb = globalThis as unknown as {
+  postgresPool?: Pool;
+};
+
+export const db =
+  globalForDb.postgresPool ??
+  new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl:
+      process.env.NODE_ENV === "production"
+        ? { rejectUnauthorized: false }
+        : undefined,
+  });
+
+if (process.env.NODE_ENV !== "production") {
+  globalForDb.postgresPool = db;
 }

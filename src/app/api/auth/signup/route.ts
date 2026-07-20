@@ -1,64 +1,61 @@
 import { NextResponse } from "next/server";
-import { ZodError, z } from "zod";
-import {
-  SESSION_COOKIE,
-  createSessionToken,
-  sessionCookieOptions,
-} from "@/lib/auth";
-import { createUser, findUserByUsername } from "@/lib/db";
-
-export const runtime = "nodejs";
-
-const signupSchema = z.object({
-  username: z
-    .string()
-    .trim()
-    .min(3, "Username must be at least 3 characters")
-    .max(40, "Username is too long")
-    .regex(
-      /^[a-zA-Z0-9._-]+$/,
-      "Username can only use letters, numbers, dots, underscores, and hyphens",
-    ),
-  password: z.string().min(6, "Password must be at least 6 characters"),
-});
+import bcrypt from "bcryptjs";
+import { db } from "@/lib/db";
 
 export async function POST(request: Request) {
-  let body: z.infer<typeof signupSchema>;
   try {
-    body = signupSchema.parse(await request.json());
-  } catch (err) {
-    const message =
-      err instanceof ZodError
-        ? err.issues[0]?.message || "Invalid request"
-        : "Invalid request";
-    return NextResponse.json({ ok: false, error: message }, { status: 400 });
-  }
+    const body = await request.json();
+    const username = body.username?.trim();
+    const password = body.password;
 
-  if (findUserByUsername(body.username)) {
-    return NextResponse.json(
-      { ok: false, error: "Username is already taken" },
-      { status: 409 },
-    );
-  }
-
-  try {
-    const user = createUser(body.username, body.password);
-    const token = await createSessionToken(user.id, user.username);
-    const response = NextResponse.json({
-      ok: true,
-      username: user.username,
-      userId: user.id,
-    });
-    response.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
-    return response;
-  } catch (err) {
-    const message = err instanceof Error ? err.message : "Signup failed";
-    if (/UNIQUE/i.test(message)) {
+    if (!username || !password) {
       return NextResponse.json(
-        { ok: false, error: "Username is already taken" },
-        { status: 409 },
+        { error: "Username and password are required" },
+        { status: 400 }
       );
     }
-    return NextResponse.json({ ok: false, error: message }, { status: 500 });
+
+    if (password.length < 8) {
+      return NextResponse.json(
+        { error: "Password must contain at least 8 characters" },
+        { status: 400 }
+      );
+    }
+
+    const existingUser = await db.query(
+      "SELECT id FROM users WHERE username = $1",
+      [username]
+    );
+
+    if (existingUser.rowCount && existingUser.rowCount > 0) {
+      return NextResponse.json(
+        { error: "Username already exists" },
+        { status: 409 }
+      );
+    }
+
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const result = await db.query(
+      `INSERT INTO users (username, password_hash)
+       VALUES ($1, $2)
+       RETURNING id, username, created_at`,
+      [username, passwordHash]
+    );
+
+    return NextResponse.json(
+      {
+        message: "Account created successfully",
+        user: result.rows[0],
+      },
+      { status: 201 }
+    );
+  } catch (error) {
+    console.error("Signup error:", error);
+
+    return NextResponse.json(
+      { error: "Unable to create account" },
+      { status: 500 }
+    );
   }
 }
