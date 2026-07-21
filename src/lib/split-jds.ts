@@ -1,7 +1,7 @@
 export const MIN_JD_CHARS = 80;
 
-/** Explicit user separators (still supported). */
-const EXPLICIT_SPLIT = /\n\s*---+\s*\n/;
+/** Explicit user separators: a line that is only --- (3+ dashes). */
+const EXPLICIT_SPLIT = /(?:^|\r?\n)\s*-{3,}\s*(?=\r?\n|$)/;
 
 const MARKER =
   /About the job|About the role|Job description|Role description|Position description|About this job|About this role/gi;
@@ -174,6 +174,26 @@ export function countJobHeaders(raw: string): number {
   return findJobHeaderStarts(String(raw || "")).length;
 }
 
+export function hasExplicitJdSeparators(raw: string): boolean {
+  return EXPLICIT_SPLIT.test(String(raw || ""));
+}
+
+/**
+ * Exact split on --- lines. One block = one JD (no merging).
+ * This is the preferred path when the user separates jobs with ---.
+ */
+export function splitByExplicitSeparators(raw: string): DetectedJd[] {
+  const text = String(raw || "").trim();
+  if (!text || !hasExplicitJdSeparators(text)) return [];
+
+  const blocks = text
+    .split(EXPLICIT_SPLIT)
+    .map((b) => b.replace(/\u0000/g, "").trim())
+    .filter((b) => b.length >= MIN_JD_CHARS);
+
+  return toDetectedJobs(blocks);
+}
+
 /**
  * Fast local split for pasted JD text.
  * Handles LinkedIn-style dumps where "About the job" is inline, not alone on a line.
@@ -182,11 +202,9 @@ export function splitJobDescriptions(raw: string): string[] {
   const text = String(raw || "").trim();
   if (!text) return [];
 
-  if (EXPLICIT_SPLIT.test(text)) {
-    const explicit = mergeTinyJobFragments(
-      sanitizeParts(cleanBlocks(text.split(EXPLICIT_SPLIT))),
-    );
-    if (explicit.length >= 1) return explicit;
+  // --- separators always win (exact multi-JD paste)
+  if (hasExplicitJdSeparators(text)) {
+    return splitByExplicitSeparators(text).map((j) => j.text);
   }
 
   const headerStarts = findJobHeaderStarts(text);
@@ -364,18 +382,9 @@ export function buildOpenRouterSplitChunks(raw: string): string[] {
   const text = String(raw || "").trim();
   if (!text) return [];
 
-  // Hard user boundaries first
-  if (EXPLICIT_SPLIT.test(text)) {
-    const parts = text
-      .split(EXPLICIT_SPLIT)
-      .map((b) => b.trim())
-      .filter((b) => b.length >= MIN_JD_CHARS);
-    const out: string[] = [];
-    for (const part of parts) {
-      if (part.length <= 12000) out.push(part);
-      else out.push(...chunkPasteForLlm(part, 8000));
-    }
-    return out;
+  // Hard user boundaries first — one --- block per request
+  if (hasExplicitJdSeparators(text)) {
+    return splitByExplicitSeparators(text).map((j) => j.text);
   }
 
   // Structured Company: blocks — still sent to OpenRouter

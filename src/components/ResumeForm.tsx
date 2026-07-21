@@ -23,6 +23,8 @@ import {
 } from "@/lib/download-folder";
 import {
   splitJobDescriptionsDetailed,
+  splitByExplicitSeparators,
+  hasExplicitJdSeparators,
   jdPreviewSnippet,
   shouldDetectJdsWithOpenRouter,
   buildOpenRouterSplitChunks,
@@ -427,14 +429,21 @@ export default function ResumeForm() {
   }, []);
 
   const heuristicJdJobs = useMemo(() => {
+    const byDashes = splitByExplicitSeparators(pastedJd);
+    if (byDashes.length) return byDashes;
     const structured = parseStructuredJdList(pastedJd);
     if (structured.length) return structured;
     return splitJobDescriptionsDetailed(pastedJd);
   }, [pastedJd]);
 
-  const isStructuredPaste = useMemo(
-    () => looksLikeStructuredJdPaste(pastedJd),
+  const isDashSeparated = useMemo(
+    () => hasExplicitJdSeparators(pastedJd),
     [pastedJd],
+  );
+
+  const isStructuredPaste = useMemo(
+    () => !isDashSeparated && looksLikeStructuredJdPaste(pastedJd),
+    [pastedJd, isDashSeparated],
   );
 
   // Prefer OpenRouter-labeled results; always keep split cards visible for instant count
@@ -459,8 +468,9 @@ export default function ResumeForm() {
     }
 
     // Provisional cards immediately
-    const provisional =
-      parseStructuredJdList(text).length > 0
+    const provisional = hasExplicitJdSeparators(text)
+      ? splitByExplicitSeparators(text)
+      : parseStructuredJdList(text).length > 0
         ? parseStructuredJdList(text)
         : splitJobDescriptionsDetailed(text);
     if (provisional.length) {
@@ -569,6 +579,27 @@ export default function ResumeForm() {
     const timer = window.setTimeout(async () => {
       try {
         setJdSplitStatus("refining");
+
+        // --- separators: exact 1 block = 1 JD, then tailor each on Generate
+        if (hasExplicitJdSeparators(text)) {
+          const base = splitByExplicitSeparators(text);
+          if (!base.length) {
+            setJdSplitStatus("error");
+            setError(
+              "No JDs found between --- separators. Put --- on its own line between jobs.",
+            );
+            return;
+          }
+          setRefinedJdJobs(base);
+          const labeled = await labelJobsFast(base);
+          if (cancelled) return;
+          setRefinedJdJobs(labeled);
+          setJdSplitStatus("ready");
+          setJdDetectProgress(null);
+          setError(null);
+          return;
+        }
+
         const headerCount = countJobHeaders(text);
 
         // LinkedIn / clear "About the job" mixtures:
@@ -1516,22 +1547,24 @@ export default function ResumeForm() {
             <div>
               <h2>Job description</h2>
               <p className="hint">
-                Prefer structured lists for exact detection: Company, URL, Role
-                (optional), JD — separate jobs with ---. Freeform LinkedIn /
-                other pastes still work via OpenRouter.
+                Paste multiple JDs separated by a --- line. Each block becomes
+                one tailored resume. Optional: Company / URL / Role fields per
+                block.
               </p>
             </div>
             <div className="link-count" aria-live="polite">
               {instantJdCount} JD{instantJdCount === 1 ? "" : "s"}
+              {isDashSeparated ? " · --- split" : ""}
               {isStructuredPaste ? " · structured" : ""}
               {jdSplitStatus === "refining"
                 ? jdDetectProgress
-                  ? ` · OpenRouter split ${jdDetectProgress.current}/${jdDetectProgress.total}`
-                  : " · OpenRouter splitting…"
+                  ? ` · OpenRouter ${jdDetectProgress.current}/${jdDetectProgress.total}`
+                  : " · detecting…"
                 : jdSplitStatus === "ready"
-                  ? " · OpenRouter ready"
+                  ? " · ready"
                   : ""}
-              {!isStructuredPaste &&
+              {!isDashSeparated &&
+              !isStructuredPaste &&
               jobHeaderCount > 0 &&
               jdSplitStatus !== "refining"
                 ? ` · ${jobHeaderCount} headers`
@@ -1545,17 +1578,27 @@ export default function ResumeForm() {
             value={pastedJd}
             onChange={(e) => setPastedJd(e.target.value)}
             placeholder={
-              "Company: Acme\nURL: https://example.com/jobs/123\nRole: Software Engineer\nJD:\nPaste the full job description here…\n\n---\n\nCompany: Tyk\nURL: https://example.com/jobs/456\nRole: Backend Engineer\nJD:\nPaste the next job description…"
+              "Paste job description 1…\n\n---\n\nPaste job description 2…\n\n---\n\nPaste job description 3…"
             }
             spellCheck={false}
           />
 
-          {instantJdCount > 0 && (
+          {isDashSeparated && instantJdCount > 0 && (
+            <p className="hint" style={{ marginTop: "0.75rem" }}>
+              {instantJdCount} JD{instantJdCount === 1 ? "" : "s"} split exactly
+              on ---. Generate will tailor a separate resume for each.
+              {jdSplitStatus === "refining"
+                ? " Labeling company + role…"
+                : ""}
+            </p>
+          )}
+
+          {instantJdCount > 0 && !isDashSeparated && (
             <p className="hint" style={{ marginTop: "0.75rem" }}>
               {jdSplitStatus === "refining"
-                ? `Provisional ${instantJdCount} JD${instantJdCount === 1 ? "" : "s"} shown. OpenRouter is splitting exactly (company + role on each card)…`
+                ? `Provisional ${instantJdCount} JD${instantJdCount === 1 ? "" : "s"} shown. Detecting…`
                 : jdSplitStatus === "ready"
-                  ? `Exact split from OpenRouter: ${instantJdCount} JD${instantJdCount === 1 ? "" : "s"} with company + role/position.`
+                  ? `${instantJdCount} JD${instantJdCount === 1 ? "" : "s"} ready — Generate tailors one package each.`
                   : `${instantJdCount} JD${instantJdCount === 1 ? "" : "s"} detected.`}
             </p>
           )}
@@ -1566,16 +1609,17 @@ export default function ResumeForm() {
                 <h3>
                   Detected job{pastedJdJobs.length === 1 ? "" : "s"} (
                   {pastedJdJobs.length})
+                  {isDashSeparated ? " · ---" : ""}
                   {jdSplitStatus === "refining"
-                    ? " · OpenRouter splitting…"
+                    ? " · labeling…"
                     : jdSplitStatus === "ready"
-                      ? " · OpenRouter"
+                      ? " · ready"
                       : ""}
                 </h3>
                 <p className="hint">
-                  OpenRouter detects every JD from the mixture (company +
-                  role/position). Local code only sizes requests so large pastes
-                  do not time out.
+                  {isDashSeparated
+                    ? "Each --- block is one JD. Generate packages will tailor a resume for every card below."
+                    : "OpenRouter detects jobs from the mixture when possible. Prefer --- between JDs for exact splits."}
                 </p>
               </div>
               <ol className="jd-detect-list">
