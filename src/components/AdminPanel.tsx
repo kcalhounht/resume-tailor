@@ -43,6 +43,18 @@ function emptyProfile(): CandidateProfile {
   };
 }
 
+function generatePassword(length = 12): string {
+  const chars =
+    "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%";
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  let out = "";
+  for (let i = 0; i < length; i++) {
+    out += chars[bytes[i] % chars.length];
+  }
+  return out;
+}
+
 function cloneProfile(profile: CandidateProfile): CandidateProfile {
   return {
     personal: { ...profile.personal },
@@ -65,6 +77,10 @@ export default function AdminPanel() {
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newIsAdmin, setNewIsAdmin] = useState(false);
+  const [lastIssuedPassword, setLastIssuedPassword] = useState<{
+    username: string;
+    password: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -149,7 +165,17 @@ export default function AdminPanel() {
         throw new Error(data?.error || "Failed to save");
       }
       setPassword("");
-      setMessage("Saved.");
+      setMessage(
+        password.trim()
+          ? `Saved. New password for “${username}”: ${password.trim()}`
+          : "Saved.",
+      );
+      if (password.trim()) {
+        setLastIssuedPassword({
+          username: username.trim(),
+          password: password.trim(),
+        });
+      }
       await loadUsers();
       if (data.user) {
         setUsername(data.user.username);
@@ -203,13 +229,14 @@ export default function AdminPanel() {
     setCreating(true);
     setError(null);
     setMessage(null);
+    const createdPassword = newPassword;
     try {
       const response = await fetch("/api/admin/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           username: newUsername.trim(),
-          password: newPassword,
+          password: createdPassword,
           isAdmin: newIsAdmin,
         }),
       });
@@ -221,7 +248,13 @@ export default function AdminPanel() {
       setNewPassword("");
       setNewIsAdmin(false);
       setShowCreate(false);
-      setMessage(`Account “${data.user.username}” created.`);
+      setLastIssuedPassword({
+        username: data.user.username,
+        password: createdPassword,
+      });
+      setMessage(
+        `Account “${data.user.username}” created. Password: ${createdPassword}`,
+      );
       const list = await loadUsers();
       if (data.user?.id) {
         await loadUser(data.user.id);
@@ -296,7 +329,11 @@ export default function AdminPanel() {
               className="admin-create-form"
               onSubmit={(e) => void onCreateAccount(e)}
             >
-              <p className="hint">Create a new login (admin only).</p>
+              <p className="hint">
+                Create a new login (admin only). Passwords are hashed in the
+                database — copy the password when you set it; it cannot be
+                viewed again later.
+              </p>
               <label className="field">
                 <span>Username</span>
                 <input
@@ -311,14 +348,23 @@ export default function AdminPanel() {
               <label className="field">
                 <span>Password</span>
                 <input
-                  type="password"
+                  type="text"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   required
                   minLength={6}
-                  autoComplete="new-password"
+                  autoComplete="off"
+                  spellCheck={false}
                 />
               </label>
+              <button
+                type="button"
+                className="ghost-btn"
+                onClick={() => setNewPassword(generatePassword())}
+                disabled={creating || saving}
+              >
+                Generate password
+              </button>
               <label className="admin-check">
                 <input
                   type="checkbox"
@@ -391,6 +437,31 @@ export default function AdminPanel() {
 
               {error && <p className="error">{error}</p>}
               {message && <p className="profile-save-msg">{message}</p>}
+              {lastIssuedPassword && (
+                <div className="admin-password-card">
+                  <p className="hint">
+                    Latest password you set (copy now — cannot be recovered
+                    later):
+                  </p>
+                  <p>
+                    <strong>{lastIssuedPassword.username}</strong>
+                    {" · "}
+                    <code>{lastIssuedPassword.password}</code>
+                  </p>
+                  <button
+                    type="button"
+                    className="ghost-btn"
+                    onClick={() => {
+                      void navigator.clipboard.writeText(
+                        lastIssuedPassword.password,
+                      );
+                      setMessage("Password copied to clipboard.");
+                    }}
+                  >
+                    Copy password
+                  </button>
+                </div>
+              )}
 
               <div className="field-grid">
                 <label className="field">
@@ -403,16 +474,31 @@ export default function AdminPanel() {
                   />
                 </label>
                 <label className="field">
-                  <span>New password (optional)</span>
+                  <span>Set / reset password</span>
                   <input
-                    type="password"
+                    type="text"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     minLength={6}
-                    placeholder="Leave blank to keep"
+                    placeholder="Type a new password to reset"
+                    autoComplete="off"
+                    spellCheck={false}
                   />
                 </label>
               </div>
+              <button
+                type="button"
+                className="ghost-btn"
+                style={{ marginBottom: "0.75rem" }}
+                onClick={() => setPassword(generatePassword())}
+                disabled={saving}
+              >
+                Generate new password
+              </button>
+              <p className="hint" style={{ marginTop: 0 }}>
+                Existing passwords are hashed and cannot be viewed. Set a new
+                one here whenever you need to know a user’s login password.
+              </p>
 
               <label className="admin-check">
                 <input

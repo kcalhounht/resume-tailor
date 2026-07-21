@@ -1178,6 +1178,19 @@ button {
   margin-top: 0.2rem;
 }
 
+.admin-password-card {
+  margin: 0 0 1rem;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+
+.admin-password-card code {
+  user-select: all;
+  word-break: break-all;
+}
+
 .admin-user-list {
   list-style: none;
   margin: 0 0 1.1rem;
