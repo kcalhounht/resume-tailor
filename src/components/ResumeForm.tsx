@@ -21,7 +21,7 @@ import {
   pickDownloadFolder,
   type DownloadFolderHandle,
 } from "@/lib/download-folder";
-import { splitJobDescriptions, jdPreviewSnippet, jdPreviewTitle } from "@/lib/split-jds";
+import { splitJobDescriptions, jdPreviewSnippet, jdPreviewTitle, shouldRefineJdSplit } from "@/lib/split-jds";
 import ResumePreview from "@/components/ResumePreview";
 
 type StepStatus = "pending" | "active" | "done" | "error";
@@ -359,6 +359,10 @@ export default function ResumeForm() {
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [resumePdfBase64, setResumePdfBase64] = useState<string | null>(null);
   const [pastedJd, setPastedJd] = useState("");
+  const [refinedJdJobs, setRefinedJdJobs] = useState<string[] | null>(null);
+  const [jdSplitStatus, setJdSplitStatus] = useState<
+    "idle" | "refining" | "ready" | "error"
+  >("idle");
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -407,7 +411,51 @@ export default function ResumeForm() {
     setFolderSupported(isDirectoryPickerSupported());
   }, []);
 
-  const pastedJdJobs = useMemo(() => splitJobDescriptions(pastedJd), [pastedJd]);
+  const heuristicJdJobs = useMemo(
+    () => splitJobDescriptions(pastedJd),
+    [pastedJd],
+  );
+
+  const pastedJdJobs = refinedJdJobs ?? heuristicJdJobs;
+
+  useEffect(() => {
+    setRefinedJdJobs(null);
+    setJdSplitStatus("idle");
+
+    const text = pastedJd.trim();
+    if (!shouldRefineJdSplit(text, heuristicJdJobs.length)) {
+      return;
+    }
+
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
+      setJdSplitStatus("refining");
+      try {
+        const response = await fetch("/api/split-jds", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const data = await response.json().catch(() => null);
+        if (cancelled) return;
+        if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
+          setJdSplitStatus("error");
+          return;
+        }
+        if (data.jobs.length >= 1) {
+          setRefinedJdJobs(data.jobs);
+        }
+        setJdSplitStatus("ready");
+      } catch {
+        if (!cancelled) setJdSplitStatus("error");
+      }
+    }, 700);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [pastedJd, heuristicJdJobs.length]);
 
   const canSubmit =
     pastedJdJobs.length > 0 &&
@@ -1205,6 +1253,7 @@ export default function ResumeForm() {
             </div>
             <div className="link-count" aria-live="polite">
               {pastedJdJobs.length} JD{pastedJdJobs.length === 1 ? "" : "s"}
+              {jdSplitStatus === "refining" ? " · detecting…" : ""}
             </div>
           </div>
 
@@ -1225,6 +1274,7 @@ export default function ResumeForm() {
                 <h3>
                   Detected job{pastedJdJobs.length === 1 ? "" : "s"} (
                   {pastedJdJobs.length})
+                  {jdSplitStatus === "refining" ? " · refining…" : ""}
                 </h3>
                 <p className="hint">
                   Shown as soon as you paste. Each item becomes one tailored
