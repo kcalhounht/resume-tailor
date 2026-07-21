@@ -25,6 +25,7 @@ import {
   splitJobDescriptionsDetailed,
   jdPreviewSnippet,
   shouldDetectJdsWithOpenRouter,
+  chunkPasteByJobHeaders,
   countJobHeaders,
   type DetectedJd,
 } from "@/lib/split-jds";
@@ -370,6 +371,10 @@ export default function ResumeForm() {
   const [jdSplitStatus, setJdSplitStatus] = useState<
     "idle" | "refining" | "ready" | "error"
   >("idle");
+  const [jdDetectProgress, setJdDetectProgress] = useState<{
+    current: number;
+    total: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -423,17 +428,21 @@ export default function ResumeForm() {
     [pastedJd],
   );
 
-  // Prefer OpenRouter labels; keep heuristics visible while detecting
+  // OpenRouter results only (local split is temporary while detecting)
   const pastedJdJobs =
     jdOverrides ??
-    (refinedJdJobs && refinedJdJobs.length > 0 ? refinedJdJobs : null) ??
-    heuristicJdJobs;
+    (refinedJdJobs && refinedJdJobs.length > 0
+      ? refinedJdJobs
+      : jdSplitStatus === "refining"
+        ? heuristicJdJobs
+        : refinedJdJobs ?? heuristicJdJobs);
   const jobHeaderCount = useMemo(() => countJobHeaders(pastedJd), [pastedJd]);
 
   useEffect(() => {
     setRefinedJdJobs(null);
     setJdOverrides(null);
     setJdSplitStatus("idle");
+    setJdDetectProgress(null);
     setError(null);
 
     const text = pastedJd.trim();
@@ -443,84 +452,99 @@ export default function ResumeForm() {
 
     let cancelled = false;
     const controller = new AbortController();
+
+    function normalizeJobs(jobs: unknown): DetectedJd[] {
+      if (!Array.isArray(jobs)) return [];
+      return jobs
+        .map((item: unknown) => {
+          if (typeof item === "string") {
+            return splitJobDescriptionsDetailed(item)[0] || null;
+          }
+          if (!item || typeof item !== "object") return null;
+          const row = item as Record<string, unknown>;
+          const jdText = String(row.text || "").trim();
+          if (jdText.length < 80) return null;
+          const fallback = splitJobDescriptionsDetailed(jdText)[0];
+          return {
+            text: jdText,
+            company:
+              String(row.company || "").trim() ||
+              fallback?.company ||
+              "Unknown company",
+            role:
+              String(row.role || row.position || "").trim() ||
+              fallback?.role ||
+              "Unknown role",
+          } satisfies DetectedJd;
+        })
+        .filter(Boolean) as DetectedJd[];
+    }
+
     const timer = window.setTimeout(async () => {
       setJdSplitStatus("refining");
-      try {
-        const response = await fetch("/api/split-jds", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
-          signal: controller.signal,
-        });
-        const data = await response.json().catch(() => null);
+      const chunks = chunkPasteByJobHeaders(text, 3);
+      setJdDetectProgress({ current: 0, total: chunks.length });
+
+      const collected: DetectedJd[] = [];
+      const failures: string[] = [];
+
+      for (let i = 0; i < chunks.length; i++) {
         if (cancelled) return;
-
-        // 504 / timeout: keep local split, do not block generate
-        if (response.status === 504 || response.status === 408) {
-          setJdSplitStatus("ready");
-          setError(
-            "OpenRouter timed out on this large paste. Using local JD detection — you can still generate.",
+        setJdDetectProgress({ current: i + 1, total: chunks.length });
+        try {
+          const response = await fetch("/api/split-jds", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ text: chunks[i] }),
+            signal: controller.signal,
+          });
+          const data = await response.json().catch(() => null);
+          if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
+            failures.push(
+              data?.error ||
+                `chunk ${i + 1}/${chunks.length} failed (HTTP ${response.status})`,
+            );
+            continue;
+          }
+          const part = normalizeJobs(data.jobs);
+          collected.push(...part);
+          // Show progressive OpenRouter results as chunks complete
+          if (!cancelled && collected.length) {
+            setRefinedJdJobs([...collected]);
+          }
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") return;
+          failures.push(
+            err instanceof Error
+              ? err.message
+              : `chunk ${i + 1}/${chunks.length} failed`,
           );
-          return;
         }
+      }
 
-        if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
-          setJdSplitStatus("ready");
-          setError(
-            data?.error ||
-              data?.notice ||
-              `JD labeling failed (HTTP ${response.status}). Using local detection — you can still generate.`,
-          );
-          return;
-        }
+      if (cancelled) return;
 
-        const normalized: DetectedJd[] = data.jobs
-          .map((item: unknown) => {
-            if (typeof item === "string") {
-              return splitJobDescriptionsDetailed(item)[0] || null;
-            }
-            if (!item || typeof item !== "object") return null;
-            const row = item as Record<string, unknown>;
-            const jdText = String(row.text || "").trim();
-            if (jdText.length < 80) return null;
-            const fallback = splitJobDescriptionsDetailed(jdText)[0];
-            return {
-              text: jdText,
-              company:
-                String(row.company || "").trim() ||
-                fallback?.company ||
-                "Unknown company",
-              role:
-                String(row.role || row.position || "").trim() ||
-                fallback?.role ||
-                "Unknown role",
-            } satisfies DetectedJd;
-          })
-          .filter(Boolean);
-
-        if (normalized.length) setRefinedJdJobs(normalized);
+      if (collected.length > 0) {
+        setRefinedJdJobs(collected);
         setJdSplitStatus("ready");
-        if (typeof data.notice === "string" && data.notice.trim()) {
-          setError(data.notice);
+        setJdDetectProgress(null);
+        if (failures.length) {
+          setError(
+            `OpenRouter detected ${collected.length} job(s); ${failures.length} chunk(s) failed: ${failures[0]}`,
+          );
         } else {
           setError(null);
         }
-      } catch (err) {
-        if (cancelled) return;
-        setJdSplitStatus("ready");
-        if (err instanceof DOMException && err.name === "AbortError") {
-          setError(
-            "JD labeling cancelled. Using local detection — you can still generate.",
-          );
-          return;
-        }
-        setError(
-          err instanceof Error
-            ? `${err.message} Using local JD detection — you can still generate.`
-            : "OpenRouter failed. Using local JD detection — you can still generate.",
-        );
+        return;
       }
-    }, 500);
+
+      setJdSplitStatus("error");
+      setJdDetectProgress(null);
+      setError(
+        failures[0] ||
+          "OpenRouter could not detect job descriptions. Check OPENROUTER_API_KEY / model, then try again.",
+      );
+    }, 400);
 
     return () => {
       cancelled = true;
@@ -534,6 +558,7 @@ export default function ResumeForm() {
   }
 
   const canSubmit =
+    jdSplitStatus !== "refining" &&
     pastedJdJobs.length > 0 &&
     (inputMode === "profile_jd" || Boolean(resumePdfBase64));
 
@@ -933,9 +958,15 @@ export default function ResumeForm() {
       setError("Paste a job description.");
       return;
     }
+    if (jdSplitStatus === "refining") {
+      setError("Wait for OpenRouter to finish detecting jobs.");
+      return;
+    }
     if (!pastedJdJobs.length) {
       setError(
-        "Paste at least ~80 characters of JD text. Multiple JDs are auto-detected (or separate with ---).",
+        jdSplitStatus === "error"
+          ? "OpenRouter could not detect jobs. Check OPENROUTER_API_KEY / model, then paste again."
+          : "Paste at least ~80 characters of JD text.",
       );
       return;
     }
@@ -1328,10 +1359,10 @@ export default function ResumeForm() {
               </p>
             </div>
             <div className="link-count" aria-live="polite">
-              {jdSplitStatus === "refining"
-                ? `${pastedJdJobs.length} JD${pastedJdJobs.length === 1 ? "" : "s"} · labeling…`
+              {jdSplitStatus === "refining" && jdDetectProgress
+                ? `OpenRouter ${jdDetectProgress.current}/${jdDetectProgress.total}…`
                 : `${pastedJdJobs.length} JD${pastedJdJobs.length === 1 ? "" : "s"}`}
-              {jobHeaderCount > 0
+              {jobHeaderCount > 0 && jdSplitStatus !== "refining"
                 ? ` · ${jobHeaderCount} headers`
                 : ""}
             </div>
@@ -1350,8 +1381,11 @@ export default function ResumeForm() {
 
           {jdSplitStatus === "refining" && (
             <p className="hint" style={{ marginTop: "0.75rem" }}>
-              Labeling company + role with OpenRouter. You can generate with the
-              detected list below anytime.
+              Detecting with OpenRouter
+              {jdDetectProgress
+                ? ` (chunk ${jdDetectProgress.current} of ${jdDetectProgress.total})`
+                : ""}
+              . Large pastes are split into small requests so they don’t time out.
             </p>
           )}
 
@@ -1362,11 +1396,11 @@ export default function ResumeForm() {
                   Detected job{pastedJdJobs.length === 1 ? "" : "s"} (
                   {pastedJdJobs.length})
                   {refinedJdJobs ? " · OpenRouter" : ""}
-                  {jdSplitStatus === "refining" ? " · labeling…" : ""}
+                  {jdSplitStatus === "refining" ? " · detecting…" : ""}
                 </h3>
                 <p className="hint">
-                  Company and role/position. Remove a wrong card with × before
-                  generating if needed.
+                  Exact jobs, company, and role from OpenRouter. Wait until
+                  detecting finishes for the final count when possible.
                 </p>
               </div>
               <ol className="jd-detect-list">

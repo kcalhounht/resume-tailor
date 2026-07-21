@@ -244,10 +244,10 @@ export function shouldDetectJdsWithOpenRouter(raw: string): boolean {
 }
 
 /**
- * Soft-chunk a large paste so each OpenRouter call stays within context limits.
- * Prefers cutting on known "About the job" headers.
+ * Soft-chunk a large paste so each OpenRouter call stays within Vercel time limits.
+ * Prefers cutting on known "About the job" headers. Keep chunks small (~8–10k).
  */
-export function chunkPasteForLlm(raw: string, maxChars = 22000): string[] {
+export function chunkPasteForLlm(raw: string, maxChars = 9000): string[] {
   const text = String(raw || "").trim();
   if (!text) return [];
   if (text.length <= maxChars) return [text];
@@ -276,6 +276,52 @@ export function chunkPasteForLlm(raw: string, maxChars = 22000): string[] {
   chunks.push(text.slice(chunkStart));
 
   return chunks.map((c) => c.trim()).filter((c) => c.length >= MIN_JD_CHARS);
+}
+
+/** One job per About-the-job header when possible — used only to size OpenRouter requests. */
+export function chunkPasteByJobHeaders(raw: string, maxJobsPerChunk = 4): string[] {
+  const text = String(raw || "").trim();
+  if (!text) return [];
+  const starts = findJobHeaderStarts(text);
+  if (starts.length < 2) return chunkPasteForLlm(text);
+
+  const jobSlices: string[] = [];
+  for (let i = 0; i < starts.length; i++) {
+    const end = i + 1 < starts.length ? starts[i + 1] : text.length;
+    const slice = text.slice(starts[i], end).trim();
+    if (slice.length >= MIN_JD_CHARS) jobSlices.push(slice);
+  }
+
+  const MAX = 12000;
+  const chunks: string[] = [];
+  let batch: string[] = [];
+  let batchLen = 0;
+
+  const flush = () => {
+    if (!batch.length) return;
+    chunks.push(batch.join("\n\n"));
+    batch = [];
+    batchLen = 0;
+  };
+
+  for (const slice of jobSlices) {
+    if (slice.length > MAX) {
+      flush();
+      chunks.push(...chunkPasteForLlm(slice, MAX));
+      continue;
+    }
+    if (
+      batch.length >= maxJobsPerChunk ||
+      (batchLen + slice.length > MAX && batch.length > 0)
+    ) {
+      flush();
+    }
+    batch.push(slice);
+    batchLen += slice.length;
+  }
+  flush();
+
+  return chunks.filter((c) => c.length >= MIN_JD_CHARS);
 }
 
 /** @deprecated use shouldDetectJdsWithOpenRouter */

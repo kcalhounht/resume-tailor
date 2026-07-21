@@ -3,8 +3,6 @@ import { getLlmClient, getLlmModel } from "@/lib/llm";
 import { parseModelJson } from "@/lib/parse-json";
 import {
   MIN_JD_CHARS,
-  countJobHeaders,
-  splitJobDescriptions,
   toDetectedJobs,
   type DetectedJd,
 } from "@/lib/split-jds";
@@ -12,21 +10,33 @@ import {
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-const LABEL_PROMPT = `You label job postings. Given short previews of already-split jobs, return company and role/position for each.
+/** Keep each request small so Vercel does not 504. Client sends chunks. */
+const MAX_CHUNK_CHARS = 14000;
+
+const SYSTEM_PROMPT = `You are an expert job-posting parser.
+Split this pasted hiring text into exact individual job descriptions and label each one.
 
 Return ONLY valid JSON:
 {
-  "labels": [
-    { "index": number, "company": string, "role": string }
+  "jobs": [
+    {
+      "company": string,
+      "role": string,
+      "text": string
+    }
   ]
 }
 
-Rules:
-1. index matches the input preview index.
-2. company = employer name. role = job title / position.
-3. If unclear, use "Unknown company" or "Unknown role".
-4. Do not invent extra jobs. One label per preview.
-5. Prefer names clearly stated in the preview (e.g. "Who are Tyk" → company Tyk).`;
+Hard rules:
+1. Count EXACTLY the real job postings. Do not invent jobs. Do not merge two jobs. Do not split one job into two.
+2. "text" must be the original wording for that posting only (no paraphrasing). Keep each posting complete.
+3. "company" = employer/organization name. "role" = job title / position.
+4. If a field is unclear, use "Unknown company" or "Unknown role".
+5. Ignore LinkedIn chrome (People also viewed, Easy Apply buttons alone, ads).
+6. Footers (website, email, Apply!) belong to the same job, not a new job.
+7. Typical LinkedIn dumps start sections with "About the job". One such section = one job.
+8. "Who are X" / "X is the leading…" usually means company X.
+9. Return jobs in the same order as in the paste.`;
 
 function formatLlmError(err: unknown): string {
   if (!(err instanceof Error)) return "OpenRouter request failed";
@@ -45,84 +55,63 @@ function formatLlmError(err: unknown): string {
   return detail;
 }
 
-function previewForLabel(text: string, maxLen = 700): string {
-  const flat = text.replace(/\s+/g, " ").trim();
-  if (flat.length <= maxLen) return flat;
-  return `${flat.slice(0, maxLen - 1)}…`;
+function normalizeDetected(jobs: unknown): DetectedJd[] {
+  if (!Array.isArray(jobs)) return [];
+
+  if (jobs.every((j) => typeof j === "string")) {
+    return toDetectedJobs(
+      jobs.map((j) => String(j).trim()).filter((j) => j.length >= MIN_JD_CHARS),
+    );
+  }
+
+  return jobs
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const text = String(row.text || row.jd || row.content || "").trim();
+      if (text.length < MIN_JD_CHARS) return null;
+      const fallback = toDetectedJobs([text])[0];
+      const company =
+        String(row.company || row.companyName || "").trim() || fallback.company;
+      const role =
+        String(row.role || row.jobTitle || row.title || row.position || "").trim() ||
+        fallback.role;
+      return { text, company, role } satisfies DetectedJd;
+    })
+    .filter((j): j is DetectedJd => Boolean(j));
 }
 
-async function labelJobsWithOpenRouter(
-  jobs: DetectedJd[],
-): Promise<DetectedJd[]> {
+async function splitChunkWithOpenRouter(chunk: string): Promise<DetectedJd[]> {
   if (!process.env.OPENROUTER_API_KEY?.trim()) {
     throw new Error(
       "OPENROUTER_API_KEY is not set on the server. Add it in Vercel → Environment Variables, then Redeploy.",
     );
   }
-  if (!jobs.length) return jobs;
 
   const client = getLlmClient();
   const model = getLlmModel();
 
-  // Small batches keep latency under Vercel limits
-  const BATCH = 12;
-  const labeled = jobs.map((j) => ({ ...j }));
+  const completion = await client.chat.completions.create({
+    model,
+    temperature: 0,
+    messages: [
+      { role: "system", content: SYSTEM_PROMPT },
+      {
+        role: "user",
+        content: JSON.stringify({
+          pastedText: chunk,
+          task: "Split into exact jobs. For each job return company, role/position, and full original text. JSON only.",
+        }),
+      },
+    ],
+  });
 
-  const batches: Array<{ offset: number; slice: DetectedJd[] }> = [];
-  for (let i = 0; i < jobs.length; i += BATCH) {
-    batches.push({ offset: i, slice: jobs.slice(i, i + BATCH) });
+  const content = completion.choices[0]?.message?.content || "";
+  if (!content.trim()) {
+    throw new Error("OpenRouter returned an empty JD split response.");
   }
 
-  // Run a few batches in parallel (not all — avoids rate limits / huge fanout)
-  const PARALLEL = 3;
-  for (let b = 0; b < batches.length; b += PARALLEL) {
-    const wave = batches.slice(b, b + PARALLEL);
-    await Promise.all(
-      wave.map(async ({ offset, slice }) => {
-        const completion = await client.chat.completions.create({
-          model,
-          temperature: 0,
-          messages: [
-            { role: "system", content: LABEL_PROMPT },
-            {
-              role: "user",
-              content: JSON.stringify({
-                previews: slice.map((job, i) => ({
-                  index: offset + i,
-                  preview: previewForLabel(job.text),
-                  heuristicCompany: job.company,
-                  heuristicRole: job.role,
-                })),
-              }),
-            },
-          ],
-        });
-
-        const content = completion.choices[0]?.message?.content || "";
-        if (!content.trim()) return;
-
-        const parsed = parseModelJson<{ labels?: unknown }>(content);
-        if (!Array.isArray(parsed.labels)) return;
-
-        for (const item of parsed.labels) {
-          if (!item || typeof item !== "object") continue;
-          const row = item as Record<string, unknown>;
-          const index = Number(row.index);
-          if (!Number.isInteger(index) || index < 0 || index >= labeled.length) {
-            continue;
-          }
-          const company = String(row.company || "").trim();
-          const role = String(
-            row.role || row.position || row.title || "",
-          ).trim();
-          if (company) labeled[index].company = company;
-          if (role) labeled[index].role = role;
-        }
-      }),
-    );
-  }
-
-  return labeled;
+  return normalizeDetected(parseModelJson<{ jobs?: unknown }>(content).jobs);
 }
 
 export async function POST(request: Request) {
@@ -137,59 +126,23 @@ export async function POST(request: Request) {
       });
     }
 
-    // Fast local split first — avoids 504 on large pastes
-    const baseJobs = toDetectedJobs(splitJobDescriptions(text));
-    const headers = countJobHeaders(text);
-
-    if (!baseJobs.length) {
+    if (text.length > MAX_CHUNK_CHARS) {
       return NextResponse.json(
         {
           ok: false,
-          jobs: [] as DetectedJd[],
-          error: "No job descriptions detected in the pasted text.",
+          error: `Chunk too large (${text.length} chars). Client must send smaller OpenRouter chunks (max ${MAX_CHUNK_CHARS}).`,
         },
-        { status: 422 },
+        { status: 413 },
       );
     }
 
-    // Skip OpenRouter labeling for huge dumps if explicitly requested,
-    // or when local split already found many clear headers (still try labels).
-    const skipLlm = Boolean(body?.skipLlm);
-
-    if (skipLlm || !process.env.OPENROUTER_API_KEY?.trim()) {
-      return NextResponse.json({
-        ok: true,
-        jobs: baseJobs,
-        source: skipLlm ? "heuristic" : "heuristic_no_key",
-        headers,
-        ...(process.env.OPENROUTER_API_KEY?.trim()
-          ? {}
-          : {
-              notice:
-                "OPENROUTER_API_KEY is missing on the server. Used local JD split. Add the key in Vercel and Redeploy.",
-            }),
-      });
-    }
-
-    try {
-      const jobs = await labelJobsWithOpenRouter(baseJobs);
-      return NextResponse.json({
-        ok: true,
-        jobs,
-        source: "openrouter_labels",
-        headers,
-        count: jobs.length,
-      });
-    } catch (err) {
-      console.error("split-jds label error:", err);
-      return NextResponse.json({
-        ok: true,
-        jobs: baseJobs,
-        source: "heuristic_fallback",
-        headers,
-        notice: formatLlmError(err),
-      });
-    }
+    const jobs = await splitChunkWithOpenRouter(text);
+    return NextResponse.json({
+      ok: true,
+      jobs,
+      source: "openrouter",
+      count: jobs.length,
+    });
   } catch (error) {
     console.error("split-jds error:", error);
     return NextResponse.json(
