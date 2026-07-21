@@ -4,10 +4,42 @@ import { parseModelJson } from "@/lib/parse-json";
 import {
   MIN_JD_CHARS,
   splitJobDescriptions,
+  toDetectedJobs,
+  type DetectedJd,
 } from "@/lib/split-jds";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
+
+function normalizeDetected(jobs: unknown): DetectedJd[] {
+  if (!Array.isArray(jobs)) return [];
+
+  // Legacy: string[]
+  if (jobs.every((j) => typeof j === "string")) {
+    return toDetectedJobs(
+      jobs.map((j) => String(j).trim()).filter((j) => j.length >= MIN_JD_CHARS),
+    );
+  }
+
+  return jobs
+    .map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const row = item as Record<string, unknown>;
+      const text = String(row.text || row.jd || row.content || "").trim();
+      if (text.length < MIN_JD_CHARS) return null;
+      const fallback = toDetectedJobs([text])[0];
+      return {
+        text,
+        company:
+          String(row.company || row.companyName || "").trim() ||
+          fallback.company,
+        role:
+          String(row.role || row.jobTitle || row.title || "").trim() ||
+          fallback.role,
+      } satisfies DetectedJd;
+    })
+    .filter((j): j is DetectedJd => Boolean(j));
+}
 
 export async function POST(request: Request) {
   try {
@@ -16,14 +48,13 @@ export async function POST(request: Request) {
     if (text.length < MIN_JD_CHARS) {
       return NextResponse.json({
         ok: true,
-        jobs: [],
+        jobs: [] as DetectedJd[],
         source: "empty",
       });
     }
 
-    const heuristic = splitJobDescriptions(text);
+    const heuristic = toDetectedJobs(splitJobDescriptions(text));
 
-    // If heuristics already found several clean jobs and paste isn't huge, skip LLM
     if (heuristic.length >= 2 && text.length < 14000) {
       return NextResponse.json({
         ok: true,
@@ -41,20 +72,25 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "system",
-          content: `You split pasted hiring text into separate job descriptions.
-Return ONLY JSON: { "jobs": string[] }
+          content: `You split pasted hiring text into separate job descriptions and label each one.
+Return ONLY JSON:
+{
+  "jobs": [
+    { "company": string, "role": string, "text": string }
+  ]
+}
 Rules:
-1. Each item in jobs is one full job posting's text (keep original wording).
-2. If there is only one job, return a one-element array.
-3. Do not invent text. Only split.
-4. Typical signals: "About the job", different companies, different apply emails/websites, new role titles.
+1. text is the full original posting text for that job (do not invent wording).
+2. company is the employer name. role is the job title.
+3. If unknown, use "Unknown company" / "Unknown role".
+4. If only one job exists, return one item.
 5. Ignore tiny fragments under ~80 characters.`,
         },
         {
           role: "user",
           content: JSON.stringify({
             pastedText: text.slice(0, 50000),
-            hint: `Heuristic split found ${heuristic.length} block(s). Correct/improve the split.`,
+            hint: `Heuristic split found ${heuristic.length} block(s). Correct/improve the split and labels.`,
           }),
         },
       ],
@@ -62,17 +98,12 @@ Rules:
 
     const content = completion.choices[0]?.message?.content || "";
     const parsed = parseModelJson<{ jobs?: unknown }>(content);
-    const jobs = Array.isArray(parsed.jobs)
-      ? parsed.jobs
-          .map((j) => String(j || "").trim())
-          .filter((j) => j.length >= MIN_JD_CHARS)
-      : [];
+    const jobs = normalizeDetected(parsed.jobs);
 
     if (jobs.length >= 2) {
       return NextResponse.json({ ok: true, jobs, source: "llm" });
     }
 
-    // Prefer heuristic multi over LLM single when heuristic was better
     if (heuristic.length >= 2) {
       return NextResponse.json({
         ok: true,
@@ -92,7 +123,9 @@ Rules:
       {
         ok: false,
         error:
-          error instanceof Error ? error.message : "Failed to split job descriptions",
+          error instanceof Error
+            ? error.message
+            : "Failed to split job descriptions",
       },
       { status: 500 },
     );

@@ -459,6 +459,26 @@ a {
   font-weight: 700;
 }
 
+.jd-detect-meta {
+  flex: 1 1 14rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.jd-detect-company {
+  font-size: 0.95rem;
+  font-weight: 750;
+  line-height: 1.25;
+}
+
+.jd-detect-role {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.3;
+}
+
 .jd-detect-chars {
   color: var(--muted);
   font-size: 0.75rem;

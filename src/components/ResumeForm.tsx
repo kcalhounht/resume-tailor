@@ -21,7 +21,12 @@ import {
   pickDownloadFolder,
   type DownloadFolderHandle,
 } from "@/lib/download-folder";
-import { splitJobDescriptions, jdPreviewSnippet, jdPreviewTitle, shouldRefineJdSplit } from "@/lib/split-jds";
+import {
+  splitJobDescriptionsDetailed,
+  jdPreviewSnippet,
+  shouldRefineJdSplit,
+  type DetectedJd,
+} from "@/lib/split-jds";
 import ResumePreview from "@/components/ResumePreview";
 
 type StepStatus = "pending" | "active" | "done" | "error";
@@ -359,7 +364,7 @@ export default function ResumeForm() {
   const [resumeFileName, setResumeFileName] = useState<string | null>(null);
   const [resumePdfBase64, setResumePdfBase64] = useState<string | null>(null);
   const [pastedJd, setPastedJd] = useState("");
-  const [refinedJdJobs, setRefinedJdJobs] = useState<string[] | null>(null);
+  const [refinedJdJobs, setRefinedJdJobs] = useState<DetectedJd[] | null>(null);
   const [jdSplitStatus, setJdSplitStatus] = useState<
     "idle" | "refining" | "ready" | "error"
   >("idle");
@@ -412,7 +417,7 @@ export default function ResumeForm() {
   }, []);
 
   const heuristicJdJobs = useMemo(
-    () => splitJobDescriptions(pastedJd),
+    () => splitJobDescriptionsDetailed(pastedJd),
     [pastedJd],
   );
 
@@ -443,7 +448,26 @@ export default function ResumeForm() {
           return;
         }
         if (data.jobs.length >= 1) {
-          setRefinedJdJobs(data.jobs);
+          const normalized: DetectedJd[] = data.jobs
+            .map((item: unknown) => {
+              if (typeof item === "string") {
+                return splitJobDescriptionsDetailed(item)[0];
+              }
+              if (!item || typeof item !== "object") return null;
+              const row = item as Record<string, unknown>;
+              const jdText = String(row.text || "").trim();
+              if (jdText.length < 80) return null;
+              const fallback = splitJobDescriptionsDetailed(jdText)[0];
+              return {
+                text: jdText,
+                company:
+                  String(row.company || "").trim() || fallback?.company || "Unknown company",
+                role:
+                  String(row.role || "").trim() || fallback?.role || "Unknown role",
+              } satisfies DetectedJd;
+            })
+            .filter(Boolean);
+          if (normalized.length) setRefinedJdJobs(normalized);
         }
         setJdSplitStatus("ready");
       } catch {
@@ -873,7 +897,7 @@ export default function ResumeForm() {
       pastedJdJobs.map((jd, i) => ({
         url: `manual://pasted-job-${i + 1}`,
         index: i + 1,
-        manualJd: jd,
+        manualJd: jd.text,
       })),
       "batch",
     );
@@ -1286,14 +1310,19 @@ export default function ResumeForm() {
                   <li key={`jd-preview-${index}`} className="jd-detect-item">
                     <div className="jd-detect-item-top">
                       <span className="jd-detect-index">{index + 1}</span>
-                      <strong className="jd-detect-title">
-                        {jdPreviewTitle(jd)}
-                      </strong>
+                      <div className="jd-detect-meta">
+                        <strong className="jd-detect-company">
+                          {jd.company}
+                        </strong>
+                        <span className="jd-detect-role">{jd.role}</span>
+                      </div>
                       <span className="jd-detect-chars">
-                        {jd.length.toLocaleString()} chars
+                        {jd.text.length.toLocaleString()} chars
                       </span>
                     </div>
-                    <p className="jd-detect-snippet">{jdPreviewSnippet(jd)}</p>
+                    <p className="jd-detect-snippet">
+                      {jdPreviewSnippet(jd.text)}
+                    </p>
                   </li>
                 ))}
               </ol>
