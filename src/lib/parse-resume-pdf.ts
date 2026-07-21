@@ -1,9 +1,9 @@
-import { PDFParse } from "pdf-parse";
-
 const MAX_PDF_BYTES = 8 * 1024 * 1024; // 8 MB
 
 /**
  * Extract plain text from a resume PDF buffer.
+ * Uses `unpdf` (serverless-friendly) instead of `pdf-parse`/`pdfjs`,
+ * which requires browser APIs like DOMMatrix and crashes on Vercel.
  */
 export async function extractTextFromPdf(
   data: Buffer | Uint8Array,
@@ -16,24 +16,22 @@ export async function extractTextFromPdf(
     throw new Error("PDF is too large. Please upload a file under 8 MB.");
   }
 
-  const parser = new PDFParse({ data: new Uint8Array(bytes) });
-  try {
-    const result = await parser.getText();
-    const text = String(result.text || "")
-      .replace(/\u0000/g, "")
-      .replace(/[ \t]+\n/g, "\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
+  const { extractText, getDocumentProxy } = await import("unpdf");
+  const pdf = await getDocumentProxy(new Uint8Array(bytes));
+  const { text } = await extractText(pdf, { mergePages: true });
 
-    if (text.length < 80) {
-      throw new Error(
-        "Could not read enough text from the PDF. Try a text-based resume (not a scanned image).",
-      );
-    }
-    return text.slice(0, 60000);
-  } finally {
-    await parser.destroy().catch(() => undefined);
+  const normalized = String(text || "")
+    .replace(/\u0000/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+
+  if (normalized.length < 80) {
+    throw new Error(
+      "Could not read enough text from the PDF. Try a text-based resume (not a scanned image).",
+    );
   }
+  return normalized.slice(0, 60000);
 }
 
 export function decodePdfBase64(base64: string): Buffer {
