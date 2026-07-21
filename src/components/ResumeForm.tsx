@@ -458,7 +458,7 @@ export default function ResumeForm() {
       return;
     }
 
-    // Provisional count only — final jobs always come from OpenRouter split
+    // Provisional cards immediately
     const provisional =
       parseStructuredJdList(text).length > 0
         ? parseStructuredJdList(text)
@@ -502,10 +502,108 @@ export default function ResumeForm() {
         .filter(Boolean) as DetectedJd[];
     }
 
+    async function labelJobsFast(base: DetectedJd[]): Promise<DetectedJd[]> {
+      const BATCH = 10;
+      const batches: Array<{ offset: number; slice: DetectedJd[] }> = [];
+      for (let i = 0; i < base.length; i += BATCH) {
+        batches.push({ offset: i, slice: base.slice(i, i + BATCH) });
+      }
+
+      const labeled = base.map((j) => ({ ...j }));
+      let done = 0;
+      for (let b = 0; b < batches.length; b += 2) {
+        if (cancelled) return labeled;
+        const wave = batches.slice(b, b + 2);
+        const results = await Promise.all(
+          wave.map(async ({ offset, slice }) => {
+            const response = await fetch("/api/split-jds", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                mode: "label",
+                previews: slice.map((job, i) => ({
+                  index: offset + i,
+                  preview: job.text.replace(/\s+/g, " ").trim().slice(0, 600),
+                  hintCompany: job.company,
+                  hintRole: job.role,
+                })),
+              }),
+              signal: controller.signal,
+            });
+            const data = await response.json().catch(() => null);
+            if (!response.ok || !data?.ok || !Array.isArray(data.labels)) {
+              // Soft-fail a label batch — keep provisional company/role
+              return [] as Array<{ index: number; company?: string; role?: string }>;
+            }
+            return data.labels as Array<{
+              index: number;
+              company?: string;
+              role?: string;
+            }>;
+          }),
+        );
+        done = Math.min(b + wave.length, batches.length);
+        if (!cancelled) setJdDetectProgress({ current: done, total: batches.length });
+
+        for (const labels of results) {
+          for (const row of labels) {
+            const index = Number(row.index);
+            if (!Number.isInteger(index) || index < 0 || index >= labeled.length) {
+              continue;
+            }
+            const company = row.company?.trim();
+            const role = row.role?.trim();
+            if (company && !/^unknown company$/i.test(company)) {
+              labeled[index].company = company;
+            }
+            if (role && !/^unknown role$/i.test(role)) {
+              labeled[index].role = role;
+            }
+          }
+        }
+        if (!cancelled) setRefinedJdJobs(labeled.map((j) => ({ ...j })));
+      }
+      return labeled;
+    }
+
     const timer = window.setTimeout(async () => {
       try {
         setJdSplitStatus("refining");
-        // OpenRouter is the source of truth for exact split + company/role
+        const headerCount = countJobHeaders(text);
+
+        // LinkedIn / clear "About the job" mixtures:
+        // exact sections locally + OpenRouter labels only (avoids 504 from rewriting full JD text)
+        if (headerCount >= 2) {
+          const base = splitJobDescriptionsDetailed(text);
+          if (!base.length) {
+            setJdSplitStatus("error");
+            setError("No About-the-job sections could be split.");
+            return;
+          }
+          setRefinedJdJobs(base);
+          const labeled = await labelJobsFast(base);
+          if (cancelled) return;
+          setRefinedJdJobs(labeled);
+          setJdSplitStatus("ready");
+          setJdDetectProgress(null);
+          setError(null);
+          return;
+        }
+
+        // Structured Company/URL/JD lists: exact blocks + OpenRouter labels
+        const structured = parseStructuredJdList(text);
+        if (structured.length >= 1) {
+          setRefinedJdJobs(structured);
+          const labeled = await labelJobsFast(structured);
+          if (cancelled) return;
+          setRefinedJdJobs(labeled);
+          setJdSplitStatus("ready");
+          setJdDetectProgress(null);
+          setError(null);
+          return;
+        }
+
+        // True freeform mixture: OpenRouter full split, soft-fail timed-out chunks
         const chunks = buildOpenRouterSplitChunks(text);
         if (!chunks.length) {
           setJdSplitStatus("error");
@@ -514,7 +612,8 @@ export default function ResumeForm() {
         }
 
         const collected: DetectedJd[] = [];
-        const CONCURRENCY = 3;
+        const failures: string[] = [];
+        const CONCURRENCY = 2;
         for (let i = 0; i < chunks.length; i += CONCURRENCY) {
           if (cancelled) return;
           const wave = chunks.slice(i, i + CONCURRENCY);
@@ -524,20 +623,45 @@ export default function ResumeForm() {
           });
           const waveJobs = await Promise.all(
             wave.map(async (chunk, wi) => {
-              const response = await fetch("/api/split-jds", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ mode: "split", text: chunk }),
-                signal: controller.signal,
-              });
-              const data = await response.json().catch(() => null);
-              if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
-                throw new Error(
-                  data?.error ||
-                    `OpenRouter split failed (chunk ${i + wi + 1}/${chunks.length}, HTTP ${response.status})`,
+              try {
+                const response = await fetch("/api/split-jds", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ mode: "split", text: chunk }),
+                  signal: controller.signal,
+                });
+                const data = await response.json().catch(() => null);
+                if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
+                  // Fallback: treat chunk as one JD so a 504 does not kill the batch
+                  failures.push(
+                    `chunk ${i + wi + 1}/${chunks.length} HTTP ${response.status}`,
+                  );
+                  return normalizeJobs([
+                    {
+                      text: chunk,
+                      company: "Unknown company",
+                      role: "Unknown role",
+                    },
+                  ]);
+                }
+                return normalizeJobs(data.jobs);
+              } catch (err) {
+                if (err instanceof DOMException && err.name === "AbortError") {
+                  throw err;
+                }
+                failures.push(
+                  `chunk ${i + wi + 1}/${chunks.length}: ${
+                    err instanceof Error ? err.message : "failed"
+                  }`,
                 );
+                return normalizeJobs([
+                  {
+                    text: chunk,
+                    company: "Unknown company",
+                    role: "Unknown role",
+                  },
+                ]);
               }
-              return normalizeJobs(data.jobs);
             }),
           );
           for (const part of waveJobs) collected.push(...part);
@@ -548,7 +672,6 @@ export default function ResumeForm() {
 
         if (cancelled) return;
 
-        // Light dedupe if chunk boundaries overlapped the same posting
         const seen = new Set<string>();
         const deduped = collected.filter((job) => {
           const key = `${job.company.toLowerCase()}|${job.role.toLowerCase()}|${job.text.slice(0, 160).toLowerCase()}`;
@@ -567,7 +690,11 @@ export default function ResumeForm() {
         setRefinedJdJobs(deduped);
         setJdSplitStatus("ready");
         setJdDetectProgress(null);
-        setError(null);
+        setError(
+          failures.length
+            ? `Detected ${deduped.length} JD(s). Some OpenRouter chunks timed out (${failures[0]}); those kept provisional labels.`
+            : null,
+        );
       } catch (err) {
         if (cancelled) return;
         if (err instanceof DOMException && err.name === "AbortError") return;

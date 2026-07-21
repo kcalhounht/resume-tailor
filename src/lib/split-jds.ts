@@ -394,10 +394,10 @@ export function buildOpenRouterSplitChunks(raw: string): string[] {
     }
   }
 
-  // Mixture with detectable starts: 1–2 jobs per OpenRouter call
+  // Mixture with detectable starts: prefer fewer, larger OpenRouter units
   const starts = findMixtureJobStarts(text);
   if (starts.length >= 2) {
-    return chunkPasteByJobHeaders(text, 2);
+    return chunkPasteByJobHeaders(text, 3);
   }
 
   // Dense mixture with no clear markers
