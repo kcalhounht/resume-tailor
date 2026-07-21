@@ -84,7 +84,9 @@ Rules:
 2. company is the employer name. role is the job title.
 3. If unknown, use "Unknown company" / "Unknown role".
 4. If only one job exists, return one item.
-5. Ignore tiny fragments under ~80 characters.`,
+5. Ignore tiny fragments under ~80 characters.
+6. Do NOT over-split. Footers like websites, emails, or "Apply!" are part of the previous job, not a new job.
+7. If the paste has N clear "About the job" sections, return about N jobs (not N+1).`,
         },
         {
           role: "user",

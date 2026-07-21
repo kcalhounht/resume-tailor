@@ -6,6 +6,8 @@ const EXPLICIT_SPLIT = /\n\s*---+\s*\n/;
 const MARKER =
   /About the job|About the role|Job description|Role description|Position description|About this job|About this role/gi;
 
+const ABOUT_JOB = /About the job\b/gi;
+
 export type DetectedJd = {
   text: string;
   company: string;
@@ -23,12 +25,95 @@ function countMatches(text: string, re: RegExp): number {
   return (text.match(new RegExp(re.source, flags)) || []).length;
 }
 
-function bestSplit(candidates: string[][]): string[] {
-  const valid = candidates
-    .map(cleanBlocks)
-    .filter((parts) => parts.length >= 2)
-    .sort((a, b) => b.length - a.length);
-  return valid[0] || [];
+function hasJobMarker(block: string): boolean {
+  return countMatches(block, MARKER) > 0;
+}
+
+function looksLikeFooterOrPreamble(block: string): boolean {
+  const flat = block.replace(/\s+/g, " ").trim();
+  if (flat.length < 220 && !hasJobMarker(block)) return true;
+  if (
+    /^(contact:|discover the power|apply!|to learn more|www\.|https?:\/\/)/i.test(
+      flat,
+    ) &&
+    !hasJobMarker(block)
+  ) {
+    return true;
+  }
+  // LinkedIn chrome / nav leftovers
+  if (
+    !hasJobMarker(block) &&
+    flat.length < 500 &&
+    /people also viewed|similar jobs|set alert|easy apply/i.test(flat)
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/** Drop/merge fragments so we don't invent an extra JD. */
+function sanitizeParts(parts: string[]): string[] {
+  if (parts.length <= 1) return parts;
+
+  const out: string[] = [];
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (!trimmed) continue;
+
+    if (looksLikeFooterOrPreamble(trimmed)) {
+      // Attach weak chunk to previous real JD when possible
+      if (out.length > 0) {
+        out[out.length - 1] = `${out[out.length - 1]}\n\n${trimmed}`;
+      }
+      // else drop leading preamble
+      continue;
+    }
+    out.push(trimmed);
+  }
+
+  return out.filter((b) => b.length >= MIN_JD_CHARS);
+}
+
+/**
+ * Prefer splits that match "About the job" markers instead of maximizing
+ * fragment count (www/URL splits often over-detect).
+ */
+function pickBestSplit(
+  text: string,
+  candidates: string[][],
+): string[] {
+  const markerTarget = countMatches(text, ABOUT_JOB);
+  const normalized = candidates
+    .map((parts) => sanitizeParts(cleanBlocks(parts)))
+    .filter((parts) => parts.length >= 2);
+
+  if (!normalized.length) return [];
+
+  if (markerTarget >= 2) {
+    // Closest to marker count wins; ties prefer fewer extras
+    normalized.sort((a, b) => {
+      const da = Math.abs(a.length - markerTarget);
+      const db = Math.abs(b.length - markerTarget);
+      if (da !== db) return da - db;
+      return a.length - b.length;
+    });
+    return normalized[0];
+  }
+
+  // No reliable marker count: prefer moderate splits (not max fragmentation)
+  normalized.sort((a, b) => {
+    // Prefer 2-8 jobs, then more content coverage
+    const score = (parts: string[]) => {
+      const lenPenalty = parts.length > 8 ? parts.length - 8 : 0;
+      const tooFew = parts.length < 2 ? 10 : 0;
+      return tooFew + lenPenalty;
+    };
+    const sa = score(a);
+    const sb = score(b);
+    if (sa !== sb) return sa - sb;
+    return b.length - a.length;
+  });
+  return normalized[0];
 }
 
 /**
@@ -40,46 +125,57 @@ export function splitJobDescriptions(raw: string): string[] {
   if (!text) return [];
 
   if (EXPLICIT_SPLIT.test(text)) {
-    const explicit = cleanBlocks(text.split(EXPLICIT_SPLIT));
+    const explicit = sanitizeParts(cleanBlocks(text.split(EXPLICIT_SPLIT)));
     if (explicit.length >= 1) return explicit;
+  }
+
+  const aboutCount = countMatches(text, ABOUT_JOB);
+  const markerCount = countMatches(text, MARKER);
+
+  // Primary: split on About the job (most common LinkedIn paste)
+  if (aboutCount >= 2) {
+    let parts = text.split(/(?=About the job\b)/i).map((p) => p.trim());
+    // Leading text before first "About the job" is usually not its own JD
+    if (parts.length >= 2 && !/About the job\b/i.test(parts[0])) {
+      parts = parts.slice(1);
+    }
+    const cleaned = sanitizeParts(cleanBlocks(parts));
+    if (cleaned.length >= 2) return cleaned;
   }
 
   const candidates: string[][] = [];
 
-  if (countMatches(text, MARKER) >= 2) {
-    candidates.push(text.split(/(?=About the job\b)/i));
-    candidates.push(text.split(/(?=About the role\b)/i));
-    candidates.push(text.split(/(?=About this job\b)/i));
-    candidates.push(text.split(/(?=Job description\b)/i));
+  if (markerCount >= 2) {
     candidates.push(
       text.split(
         /(?=(?:About the job|About the role|About this job|Job description|Role description|Position description)\b)/i,
       ),
     );
+    candidates.push(text.split(/(?=About the role\b)/i));
+    candidates.push(text.split(/(?=Job description\b)/i));
   }
 
-  const siteHits = text.match(/\bwww\.[a-z0-9.-]+\.[a-z]{2,}\b/gi) || [];
-  if (new Set(siteHits.map((s) => s.toLowerCase())).size >= 2) {
-    candidates.push(
-      text.split(/(?=\n[^\n]{0,80}\bwww\.[a-z0-9.-]+\.[a-z]{2,}\b)/i),
-    );
+  // Only use weaker signals when markers are missing
+  if (markerCount < 2) {
+    const siteHits = text.match(/\bwww\.[a-z0-9.-]+\.[a-z]{2,}\b/gi) || [];
+    if (new Set(siteHits.map((s) => s.toLowerCase())).size >= 2) {
+      candidates.push(
+        text.split(/(?=\n[^\n]{0,80}\bwww\.[a-z0-9.-]+\.[a-z]{2,}\b)/i),
+      );
+    }
+
+    const careerUrlRe =
+      /https?:\/\/[^\s)]*(?:careers|jobs|greenhouse|lever\.co|ashbyhq|workday|linkedin\.com\/jobs)[^\s)]*/gi;
+    if (countMatches(text, careerUrlRe) >= 2) {
+      candidates.push(
+        text.split(
+          /(?=https?:\/\/[^\s)]*(?:careers|jobs|greenhouse|lever\.co|ashbyhq|workday|linkedin\.com\/jobs)[^\s)]*)/i,
+        ),
+      );
+    }
   }
 
-  const careerUrlRe =
-    /https?:\/\/[^\s)]*(?:careers|jobs|greenhouse|lever\.co|ashbyhq|workday|linkedin\.com\/jobs)[^\s)]*/gi;
-  if (countMatches(text, careerUrlRe) >= 2) {
-    candidates.push(
-      text.split(
-        /(?=https?:\/\/[^\s)]*(?:careers|jobs|greenhouse|lever\.co|ashbyhq|workday|linkedin\.com\/jobs)[^\s)]*)/i,
-      ),
-    );
-  }
-
-  if (countMatches(text, /Show more/gi) >= 2) {
-    candidates.push(text.split(/(?=Show more\b)/i));
-  }
-
-  const multi = bestSplit(candidates);
+  const multi = pickBestSplit(text, candidates);
   if (multi.length >= 2) return multi;
 
   return text.length >= MIN_JD_CHARS ? [text] : [];
@@ -88,9 +184,18 @@ export function splitJobDescriptions(raw: string): string[] {
 export function shouldRefineJdSplit(raw: string, heuristicCount: number): boolean {
   const text = String(raw || "").trim();
   if (text.length < 1800) return false;
-  if (heuristicCount >= 2) {
-    return text.length >= 12000 && heuristicCount < 8;
+
+  const aboutCount = countMatches(text, ABOUT_JOB);
+  // If About-the-job count already matches detected jobs, trust it
+  if (aboutCount >= 2 && heuristicCount === aboutCount) {
+    return false;
   }
+
+  if (heuristicCount >= 2) {
+    // Only refine when clearly under-split on a huge paste
+    return text.length >= 12000 && heuristicCount < aboutCount;
+  }
+
   const markerHits = countMatches(text, MARKER);
   const wwwHits = new Set(
     (text.match(/\bwww\.[a-z0-9.-]+\.[a-z]{2,}\b/gi) || []).map((s) =>
