@@ -62,21 +62,44 @@ function normalizeDetected(jobs: unknown): DetectedJd[] {
     .filter((j): j is DetectedJd => Boolean(j));
 }
 
+function formatLlmError(err: unknown): string {
+  if (!(err instanceof Error)) return "OpenRouter request failed";
+  const anyErr = err as Error & {
+    status?: number;
+    error?: { message?: string };
+    message?: string;
+  };
+  const detail =
+    anyErr.error?.message || anyErr.message || "OpenRouter request failed";
+  if (/api key|unauthorized|401|403|not set/i.test(detail)) {
+    return `OpenRouter auth failed: ${detail}. Check OPENROUTER_API_KEY in Vercel and redeploy.`;
+  }
+  if (/model|404|not found/i.test(detail)) {
+    return `OpenRouter model error: ${detail}. Check OPENROUTER_MODEL (expected deepseek/deepseek-v4-flash).`;
+  }
+  return detail;
+}
+
 async function extractJobsWithOpenRouter(chunk: string): Promise<DetectedJd[]> {
+  if (!process.env.OPENROUTER_API_KEY?.trim()) {
+    throw new Error(
+      "OPENROUTER_API_KEY is not set on the server. Add it in Vercel → Environment Variables, then Redeploy.",
+    );
+  }
+
   const client = getLlmClient();
   const model = getLlmModel();
 
   const completion = await client.chat.completions.create({
     model,
     temperature: 0,
-    response_format: { type: "json_object" },
     messages: [
       { role: "system", content: SYSTEM_PROMPT },
       {
         role: "user",
         content: JSON.stringify({
           pastedText: chunk,
-          task: "Split into exact jobs. For each job return company, role/position, and full original text.",
+          task: "Split into exact jobs. For each job return company, role/position, and full original text. JSON only.",
         }),
       },
     ],
@@ -126,8 +149,7 @@ export async function POST(request: Request) {
         const part = await extractJobsWithOpenRouter(chunks[i]);
         collected.push(...part);
       } catch (err) {
-        const message =
-          err instanceof Error ? err.message : "OpenRouter chunk failed";
+        const message = formatLlmError(err);
         errors.push(`chunk ${i + 1}/${chunks.length}: ${message}`);
         console.error("split-jds OpenRouter chunk error:", err);
       }
@@ -145,23 +167,41 @@ export async function POST(request: Request) {
       });
     }
 
-    // Fallback only if OpenRouter failed entirely
-    return NextResponse.json({
-      ok: true,
-      jobs: heuristicFallback,
-      source: "heuristic_fallback",
-      chunks: chunks.length,
-      ...(errors.length ? { warnings: errors } : {}),
-    });
+    // Always return something usable when heuristics find jobs
+    if (heuristicFallback.length >= 1) {
+      return NextResponse.json({
+        ok: true,
+        jobs: heuristicFallback,
+        source: "heuristic_fallback",
+        chunks: chunks.length,
+        ...(errors.length
+          ? {
+              warnings: errors,
+              notice:
+                errors[0] ||
+                "OpenRouter failed; used local JD split instead. Fix OPENROUTER_API_KEY / model and redeploy for better labels.",
+            }
+          : {}),
+      });
+    }
+
+    return NextResponse.json(
+      {
+        ok: false,
+        jobs: [] as DetectedJd[],
+        error:
+          errors[0] ||
+          "No job descriptions detected. Check OPENROUTER_API_KEY and paste full JD text.",
+        chunks: chunks.length,
+      },
+      { status: 502 },
+    );
   } catch (error) {
     console.error("split-jds error:", error);
     return NextResponse.json(
       {
         ok: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to split job descriptions with OpenRouter",
+        error: formatLlmError(error),
       },
       { status: 500 },
     );

@@ -423,15 +423,18 @@ export default function ResumeForm() {
     [pastedJd],
   );
 
-  // Prefer OpenRouter results; heuristic is only a temporary preview while detecting
+  // Prefer OpenRouter results; never let an empty array hide heuristics
   const pastedJdJobs =
-    jdOverrides ?? refinedJdJobs ?? (jdSplitStatus === "refining" ? [] : heuristicJdJobs);
+    jdOverrides ??
+    (refinedJdJobs && refinedJdJobs.length > 0 ? refinedJdJobs : null) ??
+    (jdSplitStatus === "refining" ? [] : heuristicJdJobs);
   const jobHeaderCount = useMemo(() => countJobHeaders(pastedJd), [pastedJd]);
 
   useEffect(() => {
     setRefinedJdJobs(null);
     setJdOverrides(null);
     setJdSplitStatus("idle");
+    setError(null);
 
     const text = pastedJd.trim();
     if (!shouldDetectJdsWithOpenRouter(text)) {
@@ -453,7 +456,8 @@ export default function ResumeForm() {
           setJdSplitStatus("error");
           setError(
             data?.error ||
-              "OpenRouter could not detect job descriptions. Check OPENROUTER_API_KEY.",
+              data?.notice ||
+              `JD detection failed (HTTP ${response.status}). Check OPENROUTER_API_KEY / OPENROUTER_MODEL in Vercel, then Redeploy.`,
           );
           return;
         }
@@ -484,6 +488,13 @@ export default function ResumeForm() {
 
         setRefinedJdJobs(normalized);
         setJdSplitStatus("ready");
+        if (typeof data.notice === "string" && data.notice.trim()) {
+          setError(data.notice);
+        } else if (Array.isArray(data.warnings) && data.warnings.length) {
+          setError(`OpenRouter warning: ${String(data.warnings[0])}`);
+        } else {
+          setError(null);
+        }
       } catch (err) {
         if (!cancelled) {
           setJdSplitStatus("error");
@@ -914,7 +925,7 @@ export default function ResumeForm() {
     if (!pastedJdJobs.length) {
       setError(
         jdSplitStatus === "error"
-          ? "OpenRouter could not detect jobs. Check OPENROUTER_API_KEY, then paste again."
+          ? "JD detection failed. Confirm OPENROUTER_API_KEY and OPENROUTER_MODEL in Vercel, Redeploy, then paste again."
           : "Paste at least ~80 characters of JD text. Multiple JDs are auto-detected (or separate with ---).",
       );
       return;
