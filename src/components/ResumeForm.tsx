@@ -29,6 +29,31 @@ import {
   countJobHeaders,
   type DetectedJd,
 } from "@/lib/split-jds";
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+  onProgress?: (done: number, total: number) => void,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  let done = 0;
+  const runners = Array.from(
+    { length: Math.min(concurrency, items.length) },
+    async () => {
+      while (true) {
+        const i = next++;
+        if (i >= items.length) return;
+        results[i] = await worker(items[i], i);
+        done += 1;
+        onProgress?.(done, items.length);
+      }
+    },
+  );
+  await Promise.all(runners);
+  return results;
+}
 import ResumePreview from "@/components/ResumePreview";
 
 type StepStatus = "pending" | "active" | "done" | "error";
@@ -428,7 +453,7 @@ export default function ResumeForm() {
     [pastedJd],
   );
 
-  // OpenRouter results only (local split is temporary while detecting)
+  // Prefer OpenRouter results; show local only while waiting for first OpenRouter chunk
   const pastedJdJobs =
     jdOverrides ??
     (refinedJdJobs && refinedJdJobs.length > 0
@@ -480,71 +505,135 @@ export default function ResumeForm() {
         .filter(Boolean) as DetectedJd[];
     }
 
-    const timer = window.setTimeout(async () => {
-      setJdSplitStatus("refining");
-      const chunks = chunkPasteByJobHeaders(text, 3);
-      setJdDetectProgress({ current: 0, total: chunks.length });
+    async function labelJobsFast(base: DetectedJd[]): Promise<DetectedJd[]> {
+      const BATCH = 12;
+      const batches: Array<{ offset: number; slice: DetectedJd[] }> = [];
+      for (let i = 0; i < base.length; i += BATCH) {
+        batches.push({ offset: i, slice: base.slice(i, i + BATCH) });
+      }
 
-      const collected: DetectedJd[] = [];
-      const failures: string[] = [];
-
-      for (let i = 0; i < chunks.length; i++) {
-        if (cancelled) return;
-        setJdDetectProgress({ current: i + 1, total: chunks.length });
-        try {
+      const labeled = base.map((j) => ({ ...j }));
+      const batchResults = await mapPool(
+        batches,
+        4,
+        async ({ offset, slice }) => {
           const response = await fetch("/api/split-jds", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ text: chunks[i] }),
+            body: JSON.stringify({
+              mode: "label",
+              previews: slice.map((job, i) => ({
+                index: offset + i,
+                preview: job.text.replace(/\s+/g, " ").trim().slice(0, 700),
+              })),
+            }),
+            signal: controller.signal,
+          });
+          const data = await response.json().catch(() => null);
+          if (!response.ok || !data?.ok || !Array.isArray(data.labels)) {
+            throw new Error(
+              data?.error || `Label batch failed (HTTP ${response.status})`,
+            );
+          }
+          return data.labels as Array<{
+            index: number;
+            company?: string;
+            role?: string;
+            keep?: boolean;
+          }>;
+        },
+        (done, total) => {
+          if (!cancelled) setJdDetectProgress({ current: done, total });
+        },
+      );
+
+      const drop = new Set<number>();
+      for (const labels of batchResults) {
+        for (const row of labels) {
+          const index = Number(row.index);
+          if (!Number.isInteger(index) || index < 0 || index >= labeled.length) {
+            continue;
+          }
+          if (row.keep === false) {
+            drop.add(index);
+            continue;
+          }
+          if (row.company?.trim()) labeled[index].company = row.company.trim();
+          if (row.role?.trim()) labeled[index].role = row.role.trim();
+        }
+      }
+
+      return labeled.filter((_, i) => !drop.has(i));
+    }
+
+    async function splitJobsExact(chunks: string[]): Promise<DetectedJd[]> {
+      const parts = await mapPool(
+        chunks,
+        3,
+        async (chunk, index) => {
+          const response = await fetch("/api/split-jds", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ mode: "split", text: chunk }),
             signal: controller.signal,
           });
           const data = await response.json().catch(() => null);
           if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
-            failures.push(
+            throw new Error(
               data?.error ||
-                `chunk ${i + 1}/${chunks.length} failed (HTTP ${response.status})`,
+                `Split chunk ${index + 1}/${chunks.length} failed (HTTP ${response.status})`,
             );
-            continue;
           }
-          const part = normalizeJobs(data.jobs);
-          collected.push(...part);
-          // Show progressive OpenRouter results as chunks complete
-          if (!cancelled && collected.length) {
-            setRefinedJdJobs([...collected]);
-          }
-        } catch (err) {
-          if (err instanceof DOMException && err.name === "AbortError") return;
-          failures.push(
-            err instanceof Error
-              ? err.message
-              : `chunk ${i + 1}/${chunks.length} failed`,
-          );
+          return normalizeJobs(data.jobs);
+        },
+        (done, total) => {
+          if (!cancelled) setJdDetectProgress({ current: done, total });
+        },
+      );
+      return parts.flat();
+    }
+
+    const timer = window.setTimeout(async () => {
+      setJdSplitStatus("refining");
+      try {
+        const headers = countJobHeaders(text);
+        let jobs: DetectedJd[] = [];
+
+        if (headers >= 2) {
+          // Exact boundaries from LinkedIn headers + fast OpenRouter company/role
+          const base = splitJobDescriptionsDetailed(text);
+          if (!cancelled) setRefinedJdJobs(base);
+          jobs = await labelJobsFast(base);
+        } else {
+          // Messy paste: full OpenRouter split on small parallel chunks
+          const chunks = chunkPasteByJobHeaders(text, 2);
+          jobs = await splitJobsExact(chunks);
         }
-      }
 
-      if (cancelled) return;
+        if (cancelled) return;
+        if (!jobs.length) {
+          setJdSplitStatus("error");
+          setJdDetectProgress(null);
+          setError("OpenRouter returned no jobs. Try pasting again.");
+          return;
+        }
 
-      if (collected.length > 0) {
-        setRefinedJdJobs(collected);
+        setRefinedJdJobs(jobs);
         setJdSplitStatus("ready");
         setJdDetectProgress(null);
-        if (failures.length) {
-          setError(
-            `OpenRouter detected ${collected.length} job(s); ${failures.length} chunk(s) failed: ${failures[0]}`,
-          );
-        } else {
-          setError(null);
-        }
-        return;
+        setError(null);
+      } catch (err) {
+        if (cancelled) return;
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setJdSplitStatus("error");
+        setJdDetectProgress(null);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "OpenRouter JD detection failed",
+        );
       }
-
-      setJdSplitStatus("error");
-      setJdDetectProgress(null);
-      setError(
-        failures[0] ||
-          "OpenRouter could not detect job descriptions. Check OPENROUTER_API_KEY / model, then try again.",
-      );
-    }, 400);
+    }, 350);
 
     return () => {
       cancelled = true;
@@ -1381,11 +1470,13 @@ export default function ResumeForm() {
 
           {jdSplitStatus === "refining" && (
             <p className="hint" style={{ marginTop: "0.75rem" }}>
-              Detecting with OpenRouter
+              OpenRouter detecting
               {jdDetectProgress
-                ? ` (chunk ${jdDetectProgress.current} of ${jdDetectProgress.total})`
+                ? ` (${jdDetectProgress.current}/${jdDetectProgress.total})`
                 : ""}
-              . Large pastes are split into small requests so they don’t time out.
+              {jobHeaderCount >= 2
+                ? " — exact LinkedIn sections + company/role labels (fast)."
+                : " — full split on small parallel chunks (exact)."}
             </p>
           )}
 
