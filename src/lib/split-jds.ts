@@ -10,6 +10,8 @@ export type DetectedJd = {
   text: string;
   company: string;
   role: string;
+  /** Optional job posting URL from structured paste */
+  url?: string;
 };
 
 function cleanBlocks(blocks: string[]): string[] {
@@ -438,4 +440,142 @@ export function jdPreviewSnippet(jd: string, maxLen = 160): string {
     .trim();
   if (flat.length <= maxLen) return flat;
   return `${flat.slice(0, maxLen - 1)}…`;
+}
+
+const FIELD_LINE =
+  /^(?:company|employer|organization|org|job\s*url|url|link|role|title|position|job\s*title)\s*:\s*(.+)$/i;
+const JD_START =
+  /^(?:jd|job\s*description|description|job\s*text|posting)\s*:\s*(.*)$/i;
+
+function readField(
+  lines: string[],
+  names: RegExp,
+): { value: string; lineIndex: number } | null {
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(names);
+    if (m?.[1]?.trim()) {
+      return { value: m[1].trim(), lineIndex: i };
+    }
+  }
+  return null;
+}
+
+function parseOneStructuredBlock(block: string, index: number): DetectedJd | null {
+  const raw = String(block || "").replace(/\u0000/g, "").trim();
+  if (!raw) return null;
+
+  const lines = raw
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const companyHit =
+    readField(lines, /^(?:company|employer|organization|org)\s*:\s*(.+)$/i) ||
+    null;
+  const urlHit =
+    readField(
+      lines,
+      /^(?:job\s*url|url|link|posting\s*url|job\s*link)\s*:\s*(.+)$/i,
+    ) || null;
+  const roleHit =
+    readField(
+      lines,
+      /^(?:role|title|position|job\s*title)\s*:\s*(.+)$/i,
+    ) || null;
+
+  let jdText = "";
+  const jdLineIdx = lines.findIndex((l) => JD_START.test(l));
+  if (jdLineIdx >= 0) {
+    const first = lines[jdLineIdx].match(JD_START)?.[1]?.trim() || "";
+    const rest = lines.slice(jdLineIdx + 1).join("\n").trim();
+    jdText = [first, rest].filter(Boolean).join("\n").trim();
+  } else if (companyHit || urlHit) {
+    // Structured header fields present: JD is remaining non-field lines
+    const skip = new Set<number>();
+    if (companyHit) skip.add(companyHit.lineIndex);
+    if (urlHit) skip.add(urlHit.lineIndex);
+    if (roleHit) skip.add(roleHit.lineIndex);
+    jdText = lines
+      .filter((_, i) => !skip.has(i))
+      .filter((l) => !FIELD_LINE.test(l))
+      .join("\n")
+      .trim();
+  }
+
+  if (jdText.length < MIN_JD_CHARS) return null;
+
+  const company =
+    cleanLabel(companyHit?.value || "") ||
+    extractJdMeta(jdText).company ||
+    "Unknown company";
+  const role =
+    cleanLabel(roleHit?.value || "") ||
+    extractJdMeta(jdText).role ||
+    "Unknown role";
+  let url = (urlHit?.value || "").trim();
+  if (url && !/^https?:\/\//i.test(url) && /^[\w.-]+\.[a-z]{2,}/i.test(url)) {
+    url = `https://${url}`;
+  }
+  if (!url) url = `manual://structured-job-${index + 1}`;
+
+  // Keep company/role/url visible to downstream extract
+  const text = [
+    `Company: ${company}`,
+    `Role: ${role}`,
+    `URL: ${url}`,
+    "",
+    jdText,
+  ].join("\n");
+
+  return { text, company, role, url };
+}
+
+/**
+ * True when the paste looks like structured Company/URL/JD blocks.
+ */
+export function looksLikeStructuredJdPaste(raw: string): boolean {
+  const text = String(raw || "").trim();
+  if (!text) return false;
+
+  const companyHits = (
+    text.match(/^(?:company|employer|organization|org)\s*:/gim) || []
+  ).length;
+  const urlHits = (
+    text.match(/^(?:job\s*url|url|link|posting\s*url|job\s*link)\s*:/gim) || []
+  ).length;
+  const jdHits = (
+    text.match(/^(?:jd|job\s*description|description|job\s*text|posting)\s*:/gim) ||
+    []
+  ).length;
+
+  if (companyHits >= 1 && (urlHits >= 1 || jdHits >= 1)) return true;
+  if (companyHits >= 2) return true;
+  return false;
+}
+
+/**
+ * Parse structured JD lists into exact jobs (one block = one JD).
+ * Preferred separators: --- between jobs.
+ */
+export function parseStructuredJdList(raw: string): DetectedJd[] {
+  const text = String(raw || "").trim();
+  if (!text || !looksLikeStructuredJdPaste(text)) return [];
+
+  let blocks: string[] = [];
+  if (EXPLICIT_SPLIT.test(text)) {
+    blocks = text.split(EXPLICIT_SPLIT).map((b) => b.trim()).filter(Boolean);
+  } else {
+    // Split before each new Company: line (except the first)
+    const parts = text.split(
+      /\n(?=(?:company|employer|organization|org)\s*:)/i,
+    );
+    blocks = parts.map((b) => b.trim()).filter(Boolean);
+  }
+
+  const jobs: DetectedJd[] = [];
+  for (let i = 0; i < blocks.length; i++) {
+    const parsed = parseOneStructuredBlock(blocks[i], jobs.length);
+    if (parsed) jobs.push(parsed);
+  }
+  return jobs;
 }

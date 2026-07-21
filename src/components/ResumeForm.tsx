@@ -27,6 +27,8 @@ import {
   shouldDetectJdsWithOpenRouter,
   chunkPasteByJobHeaders,
   countJobHeaders,
+  looksLikeStructuredJdPaste,
+  parseStructuredJdList,
   type DetectedJd,
 } from "@/lib/split-jds";
 
@@ -448,12 +450,18 @@ export default function ResumeForm() {
     setFolderSupported(isDirectoryPickerSupported());
   }, []);
 
-  const heuristicJdJobs = useMemo(
-    () => splitJobDescriptionsDetailed(pastedJd),
+  const heuristicJdJobs = useMemo(() => {
+    const structured = parseStructuredJdList(pastedJd);
+    if (structured.length) return structured;
+    return splitJobDescriptionsDetailed(pastedJd);
+  }, [pastedJd]);
+
+  const isStructuredPaste = useMemo(
+    () => looksLikeStructuredJdPaste(pastedJd),
     [pastedJd],
   );
 
-  // Prefer OpenRouter results; show local only while waiting for first OpenRouter chunk
+  // Prefer OpenRouter / structured results; show local only while waiting
   const pastedJdJobs =
     jdOverrides ??
     (refinedJdJobs && refinedJdJobs.length > 0
@@ -472,6 +480,15 @@ export default function ResumeForm() {
 
     const text = pastedJd.trim();
     if (!shouldDetectJdsWithOpenRouter(text)) {
+      return;
+    }
+
+    // Structured Company + URL + JD lists: exact, no OpenRouter split needed
+    const structured = parseStructuredJdList(text);
+    if (structured.length) {
+      setRefinedJdJobs(structured);
+      setJdSplitStatus("ready");
+      setError(null);
       return;
     }
 
@@ -500,6 +517,7 @@ export default function ResumeForm() {
               String(row.role || row.position || "").trim() ||
               fallback?.role ||
               "Unknown role",
+            url: String(row.url || "").trim() || undefined,
           } satisfies DetectedJd;
         })
         .filter(Boolean) as DetectedJd[];
@@ -546,7 +564,6 @@ export default function ResumeForm() {
         },
       );
 
-      // Never drop jobs while labeling — only update company/role
       for (const labels of batchResults) {
         for (const row of labels) {
           const index = Number(row.index);
@@ -595,12 +612,10 @@ export default function ResumeForm() {
         let jobs: DetectedJd[] = [];
 
         if (headers >= 2) {
-          // Exact boundaries from LinkedIn headers + fast OpenRouter company/role
           const base = splitJobDescriptionsDetailed(text);
           if (!cancelled) setRefinedJdJobs(base);
           jobs = await labelJobsFast(base);
         } else {
-          // Messy paste: full OpenRouter split on small parallel chunks
           const chunks = chunkPasteByJobHeaders(text, 2);
           jobs = await splitJobsExact(chunks);
         }
@@ -1062,7 +1077,7 @@ export default function ResumeForm() {
 
     await runJobs(
       pastedJdJobs.map((jd, i) => ({
-        url: `manual://pasted-job-${i + 1}`,
+        url: jd.url || `manual://pasted-job-${i + 1}`,
         index: i + 1,
         manualJd: jd.text,
       })),
@@ -1438,17 +1453,20 @@ export default function ResumeForm() {
             <div>
               <h2>Job description</h2>
               <p className="hint">
-                Paste one or more JDs. OpenRouter detects exact jobs, company,
-                and role/position automatically.
+                Prefer structured lists for exact detection: Company, URL, Role
+                (optional), JD — separate jobs with ---. Freeform LinkedIn /
+                other pastes still work via OpenRouter.
               </p>
             </div>
             <div className="link-count" aria-live="polite">
               {jdSplitStatus === "refining" && jdDetectProgress
                 ? `OpenRouter ${jdDetectProgress.current}/${jdDetectProgress.total}…`
                 : `${pastedJdJobs.length} JD${pastedJdJobs.length === 1 ? "" : "s"}`}
-              {jobHeaderCount > 0 && jdSplitStatus !== "refining"
-                ? ` · ${jobHeaderCount} headers`
-                : ""}
+              {isStructuredPaste
+                ? " · structured"
+                : jobHeaderCount > 0 && jdSplitStatus !== "refining"
+                  ? ` · ${jobHeaderCount} headers`
+                  : ""}
             </div>
           </div>
 
@@ -1458,12 +1476,19 @@ export default function ResumeForm() {
             value={pastedJd}
             onChange={(e) => setPastedJd(e.target.value)}
             placeholder={
-              "Paste one or more job descriptions…\n\nOpenRouter will detect each job, company, and role."
+              "Company: Acme\nURL: https://example.com/jobs/123\nRole: Software Engineer\nJD:\nPaste the full job description here…\n\n---\n\nCompany: Tyk\nURL: https://example.com/jobs/456\nRole: Backend Engineer\nJD:\nPaste the next job description…"
             }
             spellCheck={false}
           />
 
-          {jdSplitStatus === "refining" && (
+          {isStructuredPaste && pastedJdJobs.length > 0 && (
+            <p className="hint" style={{ marginTop: "0.75rem" }}>
+              Structured list detected — each block is exactly one JD (no
+              guessing).
+            </p>
+          )}
+
+          {jdSplitStatus === "refining" && !isStructuredPaste && (
             <p className="hint" style={{ marginTop: "0.75rem" }}>
               OpenRouter detecting
               {jdDetectProgress
@@ -1481,12 +1506,17 @@ export default function ResumeForm() {
                 <h3>
                   Detected job{pastedJdJobs.length === 1 ? "" : "s"} (
                   {pastedJdJobs.length})
-                  {refinedJdJobs ? " · OpenRouter" : ""}
+                  {isStructuredPaste
+                    ? " · structured"
+                    : refinedJdJobs
+                      ? " · OpenRouter"
+                      : ""}
                   {jdSplitStatus === "refining" ? " · detecting…" : ""}
                 </h3>
                 <p className="hint">
-                  Exact jobs, company, and role from OpenRouter. Wait until
-                  detecting finishes for the final count when possible.
+                  {isStructuredPaste
+                    ? "Exact count from your Company / URL / JD blocks."
+                    : "Exact jobs, company, and role from OpenRouter when possible."}
                 </p>
               </div>
               <ol className="jd-detect-list">
@@ -1514,6 +1544,11 @@ export default function ResumeForm() {
                         ×
                       </button>
                     </div>
+                    {jd.url && !jd.url.startsWith("manual://") && (
+                      <p className="hint" style={{ margin: "0.15rem 0 0" }}>
+                        {jd.url}
+                      </p>
+                    )}
                     <p className="jd-detect-snippet">
                       {jdPreviewSnippet(jd.text)}
                     </p>
