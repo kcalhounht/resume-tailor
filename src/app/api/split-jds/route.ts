@@ -13,8 +13,9 @@ export const maxDuration = 60;
 /** Keep each split request small so Vercel does not 504. */
 const MAX_CHUNK_CHARS = 14000;
 
-const SPLIT_PROMPT = `You are an expert job-posting parser.
-Split this pasted hiring text into EXACT individual job descriptions.
+const SPLIT_PROMPT = `You are an expert job-posting parser for MIXED pastes of multiple job descriptions.
+
+Your job: detect EVERY distinct job posting in the text and split them exactly.
 
 Return ONLY valid JSON:
 {
@@ -24,16 +25,18 @@ Return ONLY valid JSON:
 }
 
 Hard rules:
-1. Count EXACTLY the real job postings in this chunk. Do not invent jobs. Do not merge two jobs. Do not split one job into two.
-2. "text" = original wording for that posting only (no paraphrasing). Include the full posting body from this chunk.
-3. "company" = employer/organization name. "role" = job title / position.
-4. "url" = job URL if present in the chunk, else "".
-5. If this chunk is clearly ONE structured job (Company/URL/JD fields), return exactly one job.
-6. If this chunk is one LinkedIn "About the job" section, return exactly one job.
-7. Ignore LinkedIn chrome (People also viewed, ads). Footers belong to the same job.
-8. "Who are X" / "X is the leading…" usually means company X.
-9. Keep original order.
-10. If unclear company/role: "Unknown company" / "Unknown role".`;
+1. Return EVERY real job posting in this chunk. Missing a job is a critical failure.
+2. Do not invent jobs. Do not merge two jobs. Do not split one job into two.
+3. "text" = original wording for that posting only (no paraphrasing). Keep the full body from this chunk.
+4. "company" = employer/organization. "role" = job title / position.
+5. "url" = job URL if present, else "".
+6. LinkedIn: each "About the job" section is usually one job.
+7. Structured blocks (Company/URL/JD) are usually one job each — but if a block clearly contains two postings, split them.
+8. Ignore LinkedIn chrome (People also viewed, ads, Easy Apply alone). Footers belong to the same job.
+9. "Who are X" / "X is the leading…" usually means company X.
+10. Keep original order.
+11. If unclear company/role: "Unknown company" / "Unknown role".
+12. If the chunk has N clear postings, return N jobs (not N-1 and not N+1).`;
 
 const LABEL_PROMPT = `You label already-split job postings from short previews.
 
@@ -123,7 +126,7 @@ async function splitChunkWithOpenRouter(chunk: string): Promise<DetectedJd[]> {
         role: "user",
         content: JSON.stringify({
           pastedText: chunk,
-          task: "Split into exact jobs with company, role, and full original text. JSON only.",
+          task: "Detect EVERY job description in this mixture. Split exactly. Return company, role/position, url, and full original text for each job. JSON only.",
         }),
       },
     ],

@@ -547,14 +547,24 @@ export default function ResumeForm() {
         }
 
         if (cancelled) return;
-        if (!collected.length) {
+
+        // Light dedupe if chunk boundaries overlapped the same posting
+        const seen = new Set<string>();
+        const deduped = collected.filter((job) => {
+          const key = `${job.company.toLowerCase()}|${job.role.toLowerCase()}|${job.text.slice(0, 160).toLowerCase()}`;
+          if (seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
+
+        if (!deduped.length) {
           setJdSplitStatus("error");
           setJdDetectProgress(null);
           setError("OpenRouter returned no jobs. Try pasting again.");
           return;
         }
 
-        setRefinedJdJobs(collected);
+        setRefinedJdJobs(deduped);
         setJdSplitStatus("ready");
         setJdDetectProgress(null);
         setError(null);
@@ -1436,8 +1446,9 @@ export default function ResumeForm() {
                       : ""}
                 </h3>
                 <p className="hint">
-                  Final job count, company, and role/position come from
-                  OpenRouter. Local parsing is only a temporary preview.
+                  OpenRouter detects every JD from the mixture (company +
+                  role/position). Local code only sizes requests so large pastes
+                  do not time out.
                 </p>
               </div>
               <ol className="jd-detect-list">

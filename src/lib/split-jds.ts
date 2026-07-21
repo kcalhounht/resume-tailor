@@ -231,44 +231,90 @@ export function shouldDetectJdsWithOpenRouter(raw: string): boolean {
 
 /**
  * Soft-chunk a large paste so each OpenRouter call stays within Vercel time limits.
- * Prefers cutting on known "About the job" headers. Keep chunks small (~8–10k).
+ * Never hard-cut mid-paragraph when avoidable — that drops half-JDs from mixtures.
  */
 export function chunkPasteForLlm(raw: string, maxChars = 9000): string[] {
   const text = String(raw || "").trim();
   if (!text) return [];
   if (text.length <= maxChars) return [text];
 
-  const starts = findJobHeaderStarts(text);
-  if (starts.length < 2) {
+  const starts = findMixtureJobStarts(text);
+  if (starts.length >= 2) {
     const chunks: string[] = [];
-    for (let i = 0; i < text.length; i += maxChars) {
-      chunks.push(text.slice(i, i + maxChars));
+    let chunkStart = starts[0];
+    let prevBreak = starts[0];
+
+    for (let i = 0; i < starts.length; i++) {
+      const jobEnd = i + 1 < starts.length ? starts[i + 1] : text.length;
+      if (jobEnd - chunkStart > maxChars && prevBreak > chunkStart) {
+        chunks.push(text.slice(chunkStart, prevBreak));
+        chunkStart = prevBreak;
+      }
+      prevBreak = jobEnd;
     }
+    chunks.push(text.slice(chunkStart));
     return chunks.map((c) => c.trim()).filter((c) => c.length >= MIN_JD_CHARS);
   }
 
+  // Paragraph-aware size chunks (prefer \n\n near the limit)
   const chunks: string[] = [];
-  let chunkStart = starts[0];
-  let prevBreak = starts[0];
-
-  for (let i = 0; i < starts.length; i++) {
-    const jobEnd = i + 1 < starts.length ? starts[i + 1] : text.length;
-    if (jobEnd - chunkStart > maxChars && prevBreak > chunkStart) {
-      chunks.push(text.slice(chunkStart, prevBreak));
-      chunkStart = prevBreak;
+  let cursor = 0;
+  while (cursor < text.length) {
+    if (text.length - cursor <= maxChars) {
+      chunks.push(text.slice(cursor));
+      break;
     }
-    prevBreak = jobEnd;
+    const window = text.slice(cursor, cursor + maxChars);
+    let cut = window.lastIndexOf("\n\n");
+    if (cut < maxChars * 0.4) cut = window.lastIndexOf("\n");
+    if (cut < maxChars * 0.4) cut = maxChars;
+    chunks.push(text.slice(cursor, cursor + cut));
+    cursor += cut;
   }
-  chunks.push(text.slice(chunkStart));
-
   return chunks.map((c) => c.trim()).filter((c) => c.length >= MIN_JD_CHARS);
 }
 
-/** One job per About-the-job header when possible — used only to size OpenRouter requests. */
+/**
+ * Likely start offsets for distinct jobs in a mixed paste (request sizing only).
+ * OpenRouter still decides the final job list inside each chunk.
+ */
+function findMixtureJobStarts(text: string): number[] {
+  const about = findJobHeaderStarts(text);
+  if (about.length >= 2) return about;
+
+  const patterns: RegExp[] = [
+    /^Company\s*:/gim,
+    /^Employer\s*:/gim,
+    /^Job\s*title\s*:/gim,
+    /^Position\s*:/gim,
+    /^Role\s*:/gim,
+    /^Job\s*description\b/gim,
+    /^About the role\b/gim,
+    /^About this job\b/gim,
+    /^We(?:'re| are) (?:hiring|looking for)\b/gim,
+  ];
+
+  const indices = new Set<number>();
+  for (const re of patterns) {
+    let match: RegExpExecArray | null;
+    const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : `${re.flags}g`);
+    while ((match = g.exec(text)) !== null) {
+      const idx = match.index;
+      const prev = idx === 0 ? "\n" : text[idx - 1];
+      if (idx === 0 || prev === "\n" || prev === "\r") {
+        indices.add(idx);
+      }
+    }
+  }
+
+  return [...indices].sort((a, b) => a - b);
+}
+
+/** Group soft job starts into OpenRouter-sized chunks. */
 export function chunkPasteByJobHeaders(raw: string, maxJobsPerChunk = 4): string[] {
   const text = String(raw || "").trim();
   if (!text) return [];
-  const starts = findJobHeaderStarts(text);
+  const starts = findMixtureJobStarts(text);
   if (starts.length < 2) return chunkPasteForLlm(text);
 
   const jobSlices: string[] = [];
@@ -310,7 +356,10 @@ export function chunkPasteByJobHeaders(raw: string, maxJobsPerChunk = 4): string
   return chunks.filter((c) => c.length >= MIN_JD_CHARS);
 }
 
-/** Build small OpenRouter request units for exact splitting (not final JD logic). */
+/**
+ * Build OpenRouter request units for mixture JD detection.
+ * Local cutting is ONLY for size/timeouts — OpenRouter detects every JD inside each unit.
+ */
 export function buildOpenRouterSplitChunks(raw: string): string[] {
   const text = String(raw || "").trim();
   if (!text) return [];
@@ -323,13 +372,13 @@ export function buildOpenRouterSplitChunks(raw: string): string[] {
       .filter((b) => b.length >= MIN_JD_CHARS);
     const out: string[] = [];
     for (const part of parts) {
-      if (part.length <= 10000) out.push(part);
+      if (part.length <= 12000) out.push(part);
       else out.push(...chunkPasteForLlm(part, 8000));
     }
     return out;
   }
 
-  // Structured Company: blocks — one block per request when possible
+  // Structured Company: blocks — still sent to OpenRouter
   if (looksLikeStructuredJdPaste(text)) {
     const parts = text.split(
       /\n(?=(?:company|employer|organization|org)\s*:)/i,
@@ -338,20 +387,21 @@ export function buildOpenRouterSplitChunks(raw: string): string[] {
     if (blocks.length >= 1) {
       const out: string[] = [];
       for (const block of blocks) {
-        if (block.length <= 10000) out.push(block);
+        if (block.length <= 12000) out.push(block);
         else out.push(...chunkPasteForLlm(block, 8000));
       }
       return out;
     }
   }
 
-  // LinkedIn-style: one "About the job" section per request (most exact)
-  const headers = findJobHeaderStarts(text);
-  if (headers.length >= 2) {
-    return chunkPasteByJobHeaders(text, 1);
+  // Mixture with detectable starts: 1–2 jobs per OpenRouter call
+  const starts = findMixtureJobStarts(text);
+  if (starts.length >= 2) {
+    return chunkPasteByJobHeaders(text, 2);
   }
 
-  // Messy freeform: soft size chunks only to avoid Vercel 504
+  // Dense mixture with no clear markers
+  if (text.length <= 12000) return [text];
   return chunkPasteForLlm(text, 8000);
 }
 
