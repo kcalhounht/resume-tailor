@@ -21,6 +21,7 @@ import {
   pickDownloadFolder,
   type DownloadFolderHandle,
 } from "@/lib/download-folder";
+import { splitJobDescriptions } from "@/lib/split-jds";
 import ResumePreview from "@/components/ResumePreview";
 
 type StepStatus = "pending" | "active" | "done" | "error";
@@ -406,12 +407,7 @@ export default function ResumeForm() {
     setFolderSupported(isDirectoryPickerSupported());
   }, []);
 
-  const pastedJdJobs = useMemo(() => {
-    return pastedJd
-      .split(/\n\s*---\s*\n/)
-      .map((block) => block.trim())
-      .filter((block) => block.length >= 80);
-  }, [pastedJd]);
+  const pastedJdJobs = useMemo(() => splitJobDescriptions(pastedJd), [pastedJd]);
 
   const canSubmit =
     pastedJdJobs.length > 0 &&
@@ -815,7 +811,7 @@ export default function ResumeForm() {
     }
     if (!pastedJdJobs.length) {
       setError(
-        "Paste at least ~80 characters of JD text. For multiple jobs, separate them with a line containing only ---",
+        "Paste at least ~80 characters of JD text. Multiple JDs are auto-detected (or separate with ---).",
       );
       return;
     }
@@ -1203,8 +1199,8 @@ export default function ResumeForm() {
             <div>
               <h2>Job description</h2>
               <p className="hint">
-                Paste JD text here. For multiple jobs, separate with a line
-                containing only ---
+                Paste one or more JDs. Multiple postings are auto-split when
+                possible; you can still use a --- line between jobs.
               </p>
             </div>
             <div className="link-count" aria-live="polite">
@@ -1218,7 +1214,7 @@ export default function ResumeForm() {
             value={pastedJd}
             onChange={(e) => setPastedJd(e.target.value)}
             placeholder={
-              "Paste the full job description here…\n\n---\n\n(Optional second JD after a --- separator)"
+              "Paste one or more job descriptions…\n\nMultiple JDs are detected automatically when possible.\nOptional: put --- on its own line between jobs."
             }
             spellCheck={false}
           />
