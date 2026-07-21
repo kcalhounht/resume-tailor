@@ -383,14 +383,38 @@ const globalForDb = globalThis as unknown as {
   postgresPool?: Pool;
 };
 
+/**
+ * Normalize SSL query params so `pg` stops warning about sslmode aliases.
+ * Prefer explicit libpq-compatible `require` (typical for Neon / Vercel Postgres).
+ */
+function getPostgresConnectionString(): string | undefined {
+  const raw =
+    process.env.CUSTOM_DATABASE_URL || process.env.DATABASE_URL || undefined;
+  if (!raw) return undefined;
+
+  try {
+    const url = new URL(raw);
+    const sslmode = (url.searchParams.get("sslmode") || "").toLowerCase();
+
+    if (sslmode === "prefer" || sslmode === "require" || sslmode === "verify-ca") {
+      url.searchParams.set("uselibpqcompat", "true");
+      url.searchParams.set("sslmode", "require");
+    } else if (!sslmode && process.env.NODE_ENV === "production") {
+      // Hosted Postgres almost always needs TLS; set an explicit mode.
+      url.searchParams.set("uselibpqcompat", "true");
+      url.searchParams.set("sslmode", "require");
+    }
+
+    return url.toString();
+  } catch {
+    return raw;
+  }
+}
+
 export const db =
   globalForDb.postgresPool ??
   new Pool({
-    connectionString: process.env.CUSTOM_DATABASE_URL,
-    ssl:
-      process.env.NODE_ENV === "production"
-        ? { rejectUnauthorized: false }
-        : undefined,
+    connectionString: getPostgresConnectionString(),
   });
 
 if (process.env.NODE_ENV !== "production") {
