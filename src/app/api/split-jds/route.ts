@@ -38,16 +38,16 @@ const LABEL_PROMPT = `You label already-split job postings from short previews.
 Return ONLY valid JSON:
 {
   "labels": [
-    { "index": number, "company": string, "role": string, "keep": true }
+    { "index": number, "company": string, "role": string }
   ]
 }
 
 Rules:
-1. One label per preview index.
+1. One label per preview index. Never skip an index.
 2. company = employer. role = job title/position.
-3. keep=false only if the preview is clearly NOT a job posting (nav junk, ads).
-4. Prefer names in the preview (e.g. "Who are Tyk" → Tyk).
-5. If unclear: "Unknown company" / "Unknown role", keep=true.`;
+3. Prefer names in the preview (e.g. "Who are Tyk" → Tyk).
+4. If unclear: "Unknown company" / "Unknown role".
+5. Do NOT drop or merge jobs — labeling only.`;
 
 function formatLlmError(err: unknown): string {
   if (!(err instanceof Error)) return "OpenRouter request failed";
@@ -131,7 +131,6 @@ type LabelResult = {
   index: number;
   company: string;
   role: string;
-  keep: boolean;
 };
 
 async function labelPreviewsWithOpenRouter(
@@ -173,7 +172,6 @@ async function labelPreviewsWithOpenRouter(
         role:
           String(row.role || row.position || row.title || "").trim() ||
           "Unknown role",
-        keep: row.keep !== false,
       } satisfies LabelResult;
     })
     .filter((x): x is LabelResult => Boolean(x));

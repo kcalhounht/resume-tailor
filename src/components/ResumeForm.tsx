@@ -539,7 +539,6 @@ export default function ResumeForm() {
             index: number;
             company?: string;
             role?: string;
-            keep?: boolean;
           }>;
         },
         (done, total) => {
@@ -547,15 +546,11 @@ export default function ResumeForm() {
         },
       );
 
-      const drop = new Set<number>();
+      // Never drop jobs while labeling — only update company/role
       for (const labels of batchResults) {
         for (const row of labels) {
           const index = Number(row.index);
           if (!Number.isInteger(index) || index < 0 || index >= labeled.length) {
-            continue;
-          }
-          if (row.keep === false) {
-            drop.add(index);
             continue;
           }
           if (row.company?.trim()) labeled[index].company = row.company.trim();
@@ -563,7 +558,7 @@ export default function ResumeForm() {
         }
       }
 
-      return labeled.filter((_, i) => !drop.has(i));
+      return labeled;
     }
 
     async function splitJobsExact(chunks: string[]): Promise<DetectedJd[]> {

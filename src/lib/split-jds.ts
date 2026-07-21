@@ -112,7 +112,9 @@ function pickBestSplit(
 }
 
 /**
- * Only treat "About the job" as a NEW posting header (not mid-JD mentions).
+ * Treat each "About the job" as a posting boundary.
+ * LinkedIn dumps almost never mention this phrase mid-JD, so counting all
+ * matches is more accurate than over-filtering (which under-counted jobs).
  */
 function findJobHeaderStarts(text: string): number[] {
   const re = /About the job\b/gi;
@@ -121,29 +123,9 @@ function findJobHeaderStarts(text: string): number[] {
 
   while ((match = re.exec(text)) !== null) {
     const idx = match.index;
-    const before = text.slice(Math.max(0, idx - 40), idx);
-    const after = text.slice(idx, Math.min(text.length, idx + 60));
-    const prevChar = idx === 0 ? "\n" : text[idx - 1];
-
-    // A) Start of string / new line
-    const atLineStart =
-      idx === 0 || prevChar === "\n" || prevChar === "\r";
-
-    // B) Right after a URL/domain/quote/Apply (common paste join between JDs)
-    const afterJobEnd =
-      /(?:https?:\/\/\S+|www\.\S+|\.(?:com|io|ai|co|net|org|dev|uk|de|fr)\b|Apply(?:\s+now)!?|["'”\)])\s*$/i.test(
-        before,
-      );
-
-    // C) Classic LinkedIn opener: "About the job At Acme"
-    const classicOpener = /^About the job\s+At\s+[A-Z]/i.test(after);
-    const okBeforeClassic = idx === 0 || /[\s"'”\(\[]/.test(prevChar);
-
-    if (atLineStart || afterJobEnd || (classicOpener && okBeforeClassic)) {
-      // Avoid double-counting nearly identical adjacent matches
-      if (indices.length && idx - indices[indices.length - 1] < 12) continue;
-      indices.push(idx);
-    }
+    // Skip duplicate / overlapping matches only
+    if (indices.length && idx - indices[indices.length - 1] < 8) continue;
+    indices.push(idx);
   }
 
   return indices;
@@ -156,9 +138,11 @@ function splitAtIndices(text: string, indices: number[]): string[] {
     const start = indices[i];
     const end = i + 1 < indices.length ? indices[i + 1] : text.length;
     const slice = text.slice(start, end).trim();
-    if (slice) parts.push(slice);
+    // Keep every header section — even short ones (real JDs can be brief)
+    if (slice.length >= 40) parts.push(slice);
   }
-  return mergeTinyJobFragments(parts.filter((p) => p.length >= MIN_JD_CHARS));
+  // Do NOT mergeTiny here — that was merging real short JDs and under-counting
+  return parts;
 }
 
 /**
