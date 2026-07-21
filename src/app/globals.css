@@ -402,6 +402,75 @@ a {
   padding-top: 0.2rem;
 }
 
+.jd-detect {
+  margin-top: 0.9rem;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  padding: 0.85rem 0.9rem;
+}
+
+.jd-detect-head h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+
+.jd-detect-head .hint {
+  margin: 0.25rem 0 0.7rem;
+}
+
+.jd-detect-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+
+.jd-detect-item {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 92%, black);
+  padding: 0.65rem 0.75rem;
+}
+
+.jd-detect-item-top {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  flex-wrap: wrap;
+}
+
+.jd-detect-index {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.35rem;
+  height: 1.35rem;
+  padding: 0 0.3rem;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.jd-detect-title {
+  flex: 1 1 12rem;
+  font-size: 0.9rem;
+  font-weight: 700;
+}
+
+.jd-detect-chars {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.jd-detect-snippet {
+  margin: 0.4rem 0 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
 textarea {
   width: 100%;
   min-height: 11rem;

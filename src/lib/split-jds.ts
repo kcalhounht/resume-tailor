@@ -84,4 +84,29 @@ export function splitJobDescriptions(raw: string): string[] {
   return text.length >= MIN_JD_CHARS ? [text] : [];
 }
 
+/** Short label for UI lists: first meaningful line of a JD block. */
+export function jdPreviewTitle(jd: string, maxLen = 90): string {
+  const lines = String(jd || "")
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const skip =
+    /^(about the job|about the role|job description|role description|position description|the role|responsibilities|show more|show less)$/i;
+
+  const line =
+    lines.find((l) => !skip.test(l) && l.length >= 4) || lines[0] || "Job description";
+
+  if (line.length <= maxLen) return line;
+  return `${line.slice(0, maxLen - 1)}…`;
+}
+
+export function jdPreviewSnippet(jd: string, maxLen = 160): string {
+  const flat = String(jd || "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (flat.length <= maxLen) return flat;
+  return `${flat.slice(0, maxLen - 1)}…`;
+}
+
 export { MIN_JD_CHARS };

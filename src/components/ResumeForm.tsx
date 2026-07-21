@@ -21,7 +21,7 @@ import {
   pickDownloadFolder,
   type DownloadFolderHandle,
 } from "@/lib/download-folder";
-import { splitJobDescriptions } from "@/lib/split-jds";
+import { splitJobDescriptions, jdPreviewSnippet, jdPreviewTitle } from "@/lib/split-jds";
 import ResumePreview from "@/components/ResumePreview";
 
 type StepStatus = "pending" | "active" | "done" | "error";
@@ -1218,6 +1218,37 @@ export default function ResumeForm() {
             }
             spellCheck={false}
           />
+
+          {pastedJdJobs.length > 0 && (
+            <div className="jd-detect" aria-live="polite">
+              <div className="jd-detect-head">
+                <h3>
+                  Detected job{pastedJdJobs.length === 1 ? "" : "s"} (
+                  {pastedJdJobs.length})
+                </h3>
+                <p className="hint">
+                  Shown as soon as you paste. Each item becomes one tailored
+                  resume package.
+                </p>
+              </div>
+              <ol className="jd-detect-list">
+                {pastedJdJobs.map((jd, index) => (
+                  <li key={`jd-preview-${index}`} className="jd-detect-item">
+                    <div className="jd-detect-item-top">
+                      <span className="jd-detect-index">{index + 1}</span>
+                      <strong className="jd-detect-title">
+                        {jdPreviewTitle(jd)}
+                      </strong>
+                      <span className="jd-detect-chars">
+                        {jd.length.toLocaleString()} chars
+                      </span>
+                    </div>
+                    <p className="jd-detect-snippet">{jdPreviewSnippet(jd)}</p>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </section>
 
         <div className="composer-footer">
