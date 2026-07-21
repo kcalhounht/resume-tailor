@@ -6,8 +6,6 @@ const EXPLICIT_SPLIT = /\n\s*---+\s*\n/;
 const MARKER =
   /About the job|About the role|Job description|Role description|Position description|About this job|About this role/gi;
 
-const ABOUT_JOB = /About the job\b/gi;
-
 export type DetectedJd = {
   text: string;
   company: string;
@@ -82,7 +80,7 @@ function pickBestSplit(
   text: string,
   candidates: string[][],
 ): string[] {
-  const markerTarget = countMatches(text, ABOUT_JOB);
+  const markerTarget = findJobHeaderStarts(text).length;
   const normalized = candidates
     .map((parts) => mergeTinyJobFragments(sanitizeParts(cleanBlocks(parts))))
     .filter((parts) => parts.length >= 2);
@@ -114,22 +112,45 @@ function pickBestSplit(
 }
 
 /**
- * Slice text at each real job-marker index so we never create an N+1
- * preamble chunk. Skips mid-word / mid-sentence false positives.
+ * Only treat "About the job" as a NEW posting header (not mid-JD mentions).
  */
-function splitByMarkerIndices(text: string, markerSource: string): string[] {
-  const re = new RegExp(markerSource, "gi");
+function findJobHeaderStarts(text: string): number[] {
+  const re = /About the job\b/gi;
   const indices: number[] = [];
   let match: RegExpExecArray | null;
+
   while ((match = re.exec(text)) !== null) {
     const idx = match.index;
-    const before = idx === 0 ? "\n" : text[idx - 1];
-    // Must start at beginning or after whitespace/newline/punctuation
-    if (idx > 0 && !/[\s\n\r\"'([]/.test(before)) continue;
-    indices.push(idx);
-  }
-  if (indices.length < 2) return [];
+    const before = text.slice(Math.max(0, idx - 40), idx);
+    const after = text.slice(idx, Math.min(text.length, idx + 60));
+    const prevChar = idx === 0 ? "\n" : text[idx - 1];
 
+    // A) Start of string / new line
+    const atLineStart =
+      idx === 0 || prevChar === "\n" || prevChar === "\r";
+
+    // B) Right after a URL/domain/quote/Apply (common paste join between JDs)
+    const afterJobEnd =
+      /(?:https?:\/\/\S+|www\.\S+|\.(?:com|io|ai|co|net|org|dev|uk|de|fr)\b|Apply(?:\s+now)!?|["'”\)])\s*$/i.test(
+        before,
+      );
+
+    // C) Classic LinkedIn opener: "About the job At Acme"
+    const classicOpener = /^About the job\s+At\s+[A-Z]/i.test(after);
+    const okBeforeClassic = idx === 0 || /[\s"'”\(\[]/.test(prevChar);
+
+    if (atLineStart || afterJobEnd || (classicOpener && okBeforeClassic)) {
+      // Avoid double-counting nearly identical adjacent matches
+      if (indices.length && idx - indices[indices.length - 1] < 12) continue;
+      indices.push(idx);
+    }
+  }
+
+  return indices;
+}
+
+function splitAtIndices(text: string, indices: number[]): string[] {
+  if (indices.length < 2) return [];
   const parts: string[] = [];
   for (let i = 0; i < indices.length; i++) {
     const start = indices[i];
@@ -141,14 +162,15 @@ function splitByMarkerIndices(text: string, markerSource: string): string[] {
 }
 
 /**
- * If a false "About the job" mid-body creates a tiny extra JD, fold it back.
+ * If a false header creates a tiny extra JD, fold it back.
  */
 function mergeTinyJobFragments(parts: string[]): string[] {
   if (parts.length <= 1) return parts;
 
   const lengths = [...parts.map((p) => p.length)].sort((a, b) => a - b);
   const median = lengths[Math.floor(lengths.length / 2)] || 0;
-  const threshold = Math.max(280, Math.floor(median * 0.18));
+  // More aggressive: false extras are usually much shorter than real LinkedIn JDs
+  const threshold = Math.max(400, Math.floor(median * 0.25));
 
   const out: string[] = [];
   for (const part of parts) {
@@ -159,6 +181,11 @@ function mergeTinyJobFragments(parts: string[]): string[] {
     out.push(part);
   }
   return out;
+}
+
+/** How many strict JD headers were found (for UI debugging). */
+export function countJobHeaders(raw: string): number {
+  return findJobHeaderStarts(String(raw || "")).length;
 }
 
 /**
@@ -176,28 +203,17 @@ export function splitJobDescriptions(raw: string): string[] {
     if (explicit.length >= 1) return explicit;
   }
 
-  const aboutCount = countMatches(text, ABOUT_JOB);
+  const headerStarts = findJobHeaderStarts(text);
+  if (headerStarts.length >= 2) {
+    const byHeaders = splitAtIndices(text, headerStarts);
+    if (byHeaders.length >= 2) return byHeaders;
+  }
+
   const markerCount = countMatches(text, MARKER);
-
-  // Primary: exact index slices on "About the job" (never N+1 from preamble)
-  if (aboutCount >= 2) {
-    const byIndex = splitByMarkerIndices(text, String.raw`About the job\b`);
-    if (byIndex.length >= 2) return byIndex;
-  }
-
-  // Secondary: other section markers via index slicing
-  if (markerCount >= 2) {
-    const byAnyMarker = splitByMarkerIndices(
-      text,
-      String.raw`(?:About the job|About the role|About this job|Job description|Role description|Position description)\b`,
-    );
-    if (byAnyMarker.length >= 2) return byAnyMarker;
-  }
-
   const candidates: string[][] = [];
 
-  // Only use weaker signals when markers are missing
-  if (markerCount < 2) {
+  // Only use weaker signals when strict headers are missing
+  if (headerStarts.length < 2 && markerCount < 2) {
     const siteHits = text.match(/\bwww\.[a-z0-9.-]+\.[a-z]{2,}\b/gi) || [];
     if (new Set(siteHits.map((s) => s.toLowerCase())).size >= 2) {
       candidates.push(
@@ -222,18 +238,13 @@ export function splitJobDescriptions(raw: string): string[] {
   return text.length >= MIN_JD_CHARS ? [text] : [];
 }
 
-export function shouldRefineJdSplit(raw: string, heuristicCount: number): boolean {
+export function shouldRefineJdSplit(raw: string, _heuristicCount: number): boolean {
   const text = String(raw || "").trim();
   if (text.length < 1800) return false;
 
-  const aboutCount = countMatches(text, ABOUT_JOB);
-  // For LinkedIn-style dumps, trust local About-the-job slicing completely.
-  // LLM refine on 50+ JDs is slow and often invents an extra job.
-  if (aboutCount >= 2) {
-    return false;
-  }
-
-  if (heuristicCount >= 2) {
+  // If we already found strict About-the-job headers, never LLM-refine
+  // (large batches were getting +1 fake JD from the model).
+  if (findJobHeaderStarts(text).length >= 2) {
     return false;
   }
 

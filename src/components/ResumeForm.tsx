@@ -25,6 +25,7 @@ import {
   splitJobDescriptionsDetailed,
   jdPreviewSnippet,
   shouldRefineJdSplit,
+  countJobHeaders,
   type DetectedJd,
 } from "@/lib/split-jds";
 import ResumePreview from "@/components/ResumePreview";
@@ -365,6 +366,7 @@ export default function ResumeForm() {
   const [resumePdfBase64, setResumePdfBase64] = useState<string | null>(null);
   const [pastedJd, setPastedJd] = useState("");
   const [refinedJdJobs, setRefinedJdJobs] = useState<DetectedJd[] | null>(null);
+  const [jdOverrides, setJdOverrides] = useState<DetectedJd[] | null>(null);
   const [jdSplitStatus, setJdSplitStatus] = useState<
     "idle" | "refining" | "ready" | "error"
   >("idle");
@@ -421,10 +423,12 @@ export default function ResumeForm() {
     [pastedJd],
   );
 
-  const pastedJdJobs = refinedJdJobs ?? heuristicJdJobs;
+  const pastedJdJobs = jdOverrides ?? refinedJdJobs ?? heuristicJdJobs;
+  const jobHeaderCount = useMemo(() => countJobHeaders(pastedJd), [pastedJd]);
 
   useEffect(() => {
     setRefinedJdJobs(null);
+    setJdOverrides(null);
     setJdSplitStatus("idle");
 
     const text = pastedJd.trim();
@@ -461,9 +465,13 @@ export default function ResumeForm() {
               return {
                 text: jdText,
                 company:
-                  String(row.company || "").trim() || fallback?.company || "Unknown company",
+                  String(row.company || "").trim() ||
+                  fallback?.company ||
+                  "Unknown company",
                 role:
-                  String(row.role || "").trim() || fallback?.role || "Unknown role",
+                  String(row.role || "").trim() ||
+                  fallback?.role ||
+                  "Unknown role",
               } satisfies DetectedJd;
             })
             .filter(Boolean);
@@ -480,6 +488,10 @@ export default function ResumeForm() {
       window.clearTimeout(timer);
     };
   }, [pastedJd, heuristicJdJobs.length]);
+
+  function removeDetectedJd(index: number) {
+    setJdOverrides(pastedJdJobs.filter((_, i) => i !== index));
+  }
 
   const canSubmit =
     pastedJdJobs.length > 0 &&
@@ -1277,6 +1289,7 @@ export default function ResumeForm() {
             </div>
             <div className="link-count" aria-live="polite">
               {pastedJdJobs.length} JD{pastedJdJobs.length === 1 ? "" : "s"}
+              {jobHeaderCount > 0 ? ` · ${jobHeaderCount} headers` : ""}
               {jdSplitStatus === "refining" ? " · detecting…" : ""}
             </div>
           </div>
@@ -1301,8 +1314,8 @@ export default function ResumeForm() {
                   {jdSplitStatus === "refining" ? " · refining…" : ""}
                 </h3>
                 <p className="hint">
-                  Shown as soon as you paste. Each item becomes one tailored
-                  resume package.
+                  Each item becomes one tailored package. If one is wrong, remove
+                  it with × before generating.
                 </p>
               </div>
               <ol className="jd-detect-list">
@@ -1319,6 +1332,16 @@ export default function ResumeForm() {
                       <span className="jd-detect-chars">
                         {jd.text.length.toLocaleString()} chars
                       </span>
+                      <button
+                        type="button"
+                        className="jd-detect-remove"
+                        disabled={batchBusy}
+                        onClick={() => removeDetectedJd(index)}
+                        aria-label={`Remove detected job ${index + 1}`}
+                        title="Remove this detected JD"
+                      >
+                        ×
+                      </button>
                     </div>
                     <p className="jd-detect-snippet">
                       {jdPreviewSnippet(jd.text)}

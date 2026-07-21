@@ -484,6 +484,23 @@ a {
   font-size: 0.75rem;
 }
 
+.jd-detect-remove {
+  margin-left: auto;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  width: 1.6rem;
+  height: 1.6rem;
+  line-height: 1;
+  font-size: 1.1rem;
+  padding: 0;
+}
+
+.jd-detect-remove:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--line-strong);
+}
+
 .jd-detect-snippet {
   margin: 0.4rem 0 0;
   color: var(--muted);
