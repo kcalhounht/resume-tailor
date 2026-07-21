@@ -56,17 +56,218 @@ function uniqueList(...lists: string[][]): string[] {
   return out;
 }
 
-export async function extractJobDescription(
+function fieldMatch(text: string, labels: string[]): string {
+  for (const label of labels) {
+    const re = new RegExp(
+      `(?:^|\\n)\\s*${label}\\s*[:\\-]\\s*(.+)`,
+      "i",
+    );
+    const m = text.match(re);
+    if (m?.[1]?.trim()) return m[1].trim().split(/\n/)[0].trim();
+  }
+  return "";
+}
+
+function extractSkillsHeuristic(text: string): string[] {
+  const known = [
+    "Python",
+    "JavaScript",
+    "TypeScript",
+    "Java",
+    "Go",
+    "Rust",
+    "C#",
+    "C\\+\\+",
+    "React",
+    "Node\\.js",
+    "Node",
+    "Next\\.js",
+    "AWS",
+    "GCP",
+    "Azure",
+    "Docker",
+    "Kubernetes",
+    "SQL",
+    "PostgreSQL",
+    "MongoDB",
+    "Redis",
+    "Kafka",
+    "Spark",
+    "TensorFlow",
+    "PyTorch",
+    "LLM",
+    "GraphQL",
+    "REST",
+    "CI/CD",
+    "Terraform",
+  ];
+  const found: string[] = [];
+  for (const skill of known) {
+    const re = new RegExp(`\\b${skill}\\b`, "i");
+    if (re.test(text)) {
+      found.push(skill.replace(/\\/g, ""));
+    }
+  }
+  return found;
+}
+
+/** Local fallback when OpenRouter returns an empty extract response. */
+export function extractJobDescriptionHeuristic(
   rawJd: string,
   pageTitle: string,
   jobUrl: string,
-): Promise<ExtractedJD> {
-  const client = getLlmClient();
+): ExtractedJD {
+  const text = String(rawJd || "").trim();
+  const flat = text.replace(/\s+/g, " ").trim();
 
+  let company =
+    fieldMatch(text, ["Company", "Employer", "Organization", "Org"]) ||
+    flat.match(/\bAbout the (?:job|role)\s+At\s+([A-Z][A-Za-z0-9&.'’\-]{1,60})/i)?.[1] ||
+    flat.match(/\bAt\s+([A-Z][A-Za-z0-9&.'’\-]{1,60})\b/)?.[1] ||
+    "";
+
+  if (!company && jobUrl && !jobUrl.startsWith("manual://")) {
+    try {
+      const host = new URL(jobUrl).hostname.replace(/^www\./, "");
+      company = host.split(".")[0] || "";
+      if (company) {
+        company = company.charAt(0).toUpperCase() + company.slice(1);
+      }
+    } catch {
+      // ignore
+    }
+  }
+  if (!company) company = "Unknown Company";
+
+  const jobTitle =
+    fieldMatch(text, [
+      "Job Title",
+      "Title",
+      "Position",
+      "Role",
+      "Job role",
+    ]) ||
+    flat.match(
+      /\b((?:Senior|Junior|Staff|Principal|Lead)?\s*(?:Software|Full[-\s]?Stack|Backend|Frontend|Data|AI|ML|DevOps|Solutions)?\s*(?:Engineer|Developer|Scientist|Analyst|Architect|Manager)(?:\s+[IVX0-9]+)?)\b/i,
+    )?.[1] ||
+    pageTitle.replace(/^Pasted JD\s+\d+$/i, "").trim() ||
+    "Software Engineer";
+
+  const location =
+    fieldMatch(text, ["Location", "Work location", "Based in"]) ||
+    "Not specified";
+  const workMode = normalizeWorkMode(
+    fieldMatch(text, ["Work mode", "Work arrangement", "Job Type"]) ||
+      location ||
+      flat,
+  );
+
+  const skills = extractSkillsHeuristic(text);
+  const summary =
+    flat.slice(0, 420) ||
+    `${jobTitle} role at ${company}.`;
+
+  return {
+    company: company.trim(),
+    jobTitle: jobTitle.trim(),
+    summary,
+    type: normalizeType(jobTitle),
+    salaryExpectation:
+      fieldMatch(text, ["Salary", "Compensation", "Pay"]) || "Not specified",
+    workMode,
+    hardTechnicalSkills: skills,
+    softSkills: [],
+    mustHave: skills.slice(0, 8),
+    niceToHave: [],
+    qualifications: [],
+    responsibilities: [],
+    requiredSkills: skills,
+    yearsOfExperience:
+      flat.match(/\b(\d+\+?\s*years?(?:\s+of\s+experience)?)\b/i)?.[1] ||
+      "Not specified",
+    educationRequirements:
+      fieldMatch(text, ["Education", "Degree"]) || "Not specified",
+    benefits: [],
+    locationRequirement: location,
+  };
+}
+
+function normalizeExtracted(
+  parsed: Record<string, unknown>,
+  fallback: ExtractedJD,
+): ExtractedJD {
+  const mustHave = asStringList(parsed.mustHave);
+  const niceToHave = asStringList(parsed.niceToHave);
+  const qualifications = asStringList(parsed.qualifications);
+  const responsibilities = asStringList(parsed.responsibilities);
+  const requiredSkills = asStringList(parsed.requiredSkills);
+  const hardTechnicalSkills = asStringList(parsed.hardTechnicalSkills);
+  const softSkills = asStringList(parsed.softSkills);
+
+  return {
+    company:
+      String(parsed.company || fallback.company || "Unknown Company").trim() ||
+      fallback.company,
+    jobTitle:
+      String(parsed.jobTitle || fallback.jobTitle || "Software Engineer").trim() ||
+      fallback.jobTitle,
+    summary: String(parsed.summary || fallback.summary || "").trim(),
+    type: normalizeType(
+      String(parsed.type || fallback.type || "Software Engineer"),
+    ),
+    salaryExpectation: String(
+      parsed.salaryExpectation || fallback.salaryExpectation || "Not specified",
+    ).trim(),
+    workMode: normalizeWorkMode(
+      String(parsed.workMode || fallback.workMode || "Onsite"),
+    ),
+    hardTechnicalSkills: uniqueList(
+      hardTechnicalSkills,
+      requiredSkills,
+      fallback.hardTechnicalSkills,
+    ),
+    softSkills: uniqueList(softSkills, fallback.softSkills),
+    mustHave: uniqueList(mustHave, fallback.mustHave),
+    niceToHave: uniqueList(niceToHave, fallback.niceToHave),
+    qualifications: uniqueList(qualifications, fallback.qualifications),
+    responsibilities: uniqueList(responsibilities, fallback.responsibilities),
+    requiredSkills: uniqueList(
+      requiredSkills,
+      hardTechnicalSkills,
+      fallback.requiredSkills,
+    ),
+    yearsOfExperience: String(
+      parsed.yearsOfExperience ||
+        fallback.yearsOfExperience ||
+        "Not specified",
+    ).trim(),
+    educationRequirements: String(
+      parsed.educationRequirements ||
+        fallback.educationRequirements ||
+        "Not specified",
+    ).trim(),
+    benefits: uniqueList(asStringList(parsed.benefits), fallback.benefits),
+    locationRequirement: String(
+      parsed.locationRequirement ||
+        fallback.locationRequirement ||
+        "Not specified",
+    ).trim(),
+  };
+}
+
+async function callExtractLlm(
+  rawJd: string,
+  pageTitle: string,
+  jobUrl: string,
+  options: { useJsonObjectFormat: boolean },
+): Promise<string> {
+  const client = getLlmClient();
   const completion = await client.chat.completions.create({
     model: getLlmModel(),
     temperature: 0.2,
-    response_format: { type: "json_object" },
+    ...(options.useJsonObjectFormat
+      ? { response_format: { type: "json_object" as const } }
+      : {}),
     messages: [
       {
         role: "system",
@@ -80,19 +281,18 @@ Return ONLY valid JSON (no markdown) with keys:
 - workMode (exactly one of: "Remote", "Hybrid", "Onsite")
 - hardTechnicalSkills (string array of concrete required technologies/tools)
 - softSkills (string array)
-- mustHave (string array: mandatory requirements — skills, experience, certifications labeled as required/must have)
-- niceToHave (string array: preferred / bonus / nice-to-have items)
-- qualifications (string array: degrees, certifications, licenses, formal qualifications)
-- responsibilities (string array: key duties / what you will do)
-- requiredSkills (string array: all required skills mentioned, technical + domain)
-- yearsOfExperience (string; e.g. "5+ years" or "Not specified")
-- educationRequirements (string; e.g. "Bachelor's in CS or equivalent" or "Not specified")
-- benefits (string array; empty if none listed)
-- locationRequirement (string; city/country/relocation notes, or "Not specified")
+- mustHave (string array: mandatory requirements)
+- niceToHave (string array: preferred / bonus items)
+- qualifications (string array)
+- responsibilities (string array)
+- requiredSkills (string array)
+- yearsOfExperience (string)
+- educationRequirements (string)
+- benefits (string array)
+- locationRequirement (string)
 
-Be thorough: pull requirements from sections like Requirements, Qualifications, Must Have, Nice to Have, Preferred, Responsibilities, Benefits, and Compensation.
-Infer company from the page title or URL when missing. Prefer specific skill names.
-Use empty arrays when a section is absent. Escape quotes inside strings.`,
+Be thorough. Infer company from title/URL when missing. Prefer specific skill names.
+Use empty arrays when absent. Escape quotes inside strings.`,
       },
       {
         role: "user",
@@ -105,46 +305,45 @@ ${rawJd.slice(0, 20000)}`,
     ],
   });
 
-  const content = completion.choices[0]?.message?.content;
-  if (!content) {
-    throw new Error("Empty response while extracting job description.");
+  return String(completion.choices[0]?.message?.content || "").trim();
+}
+
+export async function extractJobDescription(
+  rawJd: string,
+  pageTitle: string,
+  jobUrl: string,
+): Promise<ExtractedJD> {
+  const fallback = extractJobDescriptionHeuristic(rawJd, pageTitle, jobUrl);
+
+  const attempts: Array<{ useJsonObjectFormat: boolean; label: string }> = [
+    { useJsonObjectFormat: true, label: "json_object" },
+    { useJsonObjectFormat: false, label: "plain" },
+    { useJsonObjectFormat: false, label: "plain_retry" },
+  ];
+
+  let lastError: Error | null = null;
+
+  for (const attempt of attempts) {
+    try {
+      const content = await callExtractLlm(rawJd, pageTitle, jobUrl, attempt);
+      if (!content) {
+        lastError = new Error(
+          `Empty response while extracting job description (${attempt.label}).`,
+        );
+        continue;
+      }
+      const parsed = parseModelJson<Record<string, unknown>>(content);
+      return normalizeExtracted(parsed, fallback);
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.error("JD extract attempt failed:", attempt.label, lastError);
+    }
   }
 
-  const parsed = parseModelJson<Record<string, unknown>>(content);
-
-  const mustHave = asStringList(parsed.mustHave);
-  const niceToHave = asStringList(parsed.niceToHave);
-  const qualifications = asStringList(parsed.qualifications);
-  const responsibilities = asStringList(parsed.responsibilities);
-  const requiredSkills = asStringList(parsed.requiredSkills);
-  const hardTechnicalSkills = asStringList(parsed.hardTechnicalSkills);
-  const softSkills = asStringList(parsed.softSkills);
-
-  return {
-    company: String(parsed.company || "Unknown Company").trim(),
-    jobTitle: String(parsed.jobTitle || "Software Engineer").trim(),
-    summary: String(parsed.summary || "").trim(),
-    type: normalizeType(String(parsed.type || "Software Engineer")),
-    salaryExpectation: String(
-      parsed.salaryExpectation || "Not specified",
-    ).trim(),
-    workMode: normalizeWorkMode(String(parsed.workMode || "Onsite")),
-    hardTechnicalSkills: uniqueList(hardTechnicalSkills, requiredSkills),
-    softSkills,
-    mustHave: uniqueList(mustHave),
-    niceToHave: uniqueList(niceToHave),
-    qualifications: uniqueList(qualifications),
-    responsibilities: uniqueList(responsibilities),
-    requiredSkills: uniqueList(requiredSkills, hardTechnicalSkills),
-    yearsOfExperience: String(
-      parsed.yearsOfExperience || "Not specified",
-    ).trim(),
-    educationRequirements: String(
-      parsed.educationRequirements || "Not specified",
-    ).trim(),
-    benefits: asStringList(parsed.benefits),
-    locationRequirement: String(
-      parsed.locationRequirement || "Not specified",
-    ).trim(),
-  };
+  // Never fail the whole job package on empty LLM extract — use local fallback
+  console.warn(
+    "JD extract falling back to heuristic:",
+    lastError?.message || "unknown",
+  );
+  return fallback;
 }
