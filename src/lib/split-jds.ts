@@ -1,4 +1,4 @@
-const MIN_JD_CHARS = 80;
+export const MIN_JD_CHARS = 80;
 
 /** Explicit user separators (still supported). */
 const EXPLICIT_SPLIT = /\n\s*---+\s*\n/;
@@ -238,23 +238,49 @@ export function splitJobDescriptions(raw: string): string[] {
   return text.length >= MIN_JD_CHARS ? [text] : [];
 }
 
-export function shouldRefineJdSplit(raw: string, _heuristicCount: number): boolean {
-  const text = String(raw || "").trim();
-  if (text.length < 1800) return false;
+/** Always use OpenRouter when pasted text looks like at least one JD. */
+export function shouldDetectJdsWithOpenRouter(raw: string): boolean {
+  return String(raw || "").trim().length >= MIN_JD_CHARS;
+}
 
-  // If we already found strict About-the-job headers, never LLM-refine
-  // (large batches were getting +1 fake JD from the model).
-  if (findJobHeaderStarts(text).length >= 2) {
-    return false;
+/**
+ * Soft-chunk a large paste so each OpenRouter call stays within context limits.
+ * Prefers cutting on known "About the job" headers.
+ */
+export function chunkPasteForLlm(raw: string, maxChars = 22000): string[] {
+  const text = String(raw || "").trim();
+  if (!text) return [];
+  if (text.length <= maxChars) return [text];
+
+  const starts = findJobHeaderStarts(text);
+  if (starts.length < 2) {
+    const chunks: string[] = [];
+    for (let i = 0; i < text.length; i += maxChars) {
+      chunks.push(text.slice(i, i + maxChars));
+    }
+    return chunks.map((c) => c.trim()).filter((c) => c.length >= MIN_JD_CHARS);
   }
 
-  const markerHits = countMatches(text, MARKER);
-  const wwwHits = new Set(
-    (text.match(/\bwww\.[a-z0-9.-]+\.[a-z]{2,}\b/gi) || []).map((s) =>
-      s.toLowerCase(),
-    ),
-  ).size;
-  return markerHits >= 2 || wwwHits >= 2 || text.length >= 4000;
+  const chunks: string[] = [];
+  let chunkStart = starts[0];
+  let prevBreak = starts[0];
+
+  for (let i = 0; i < starts.length; i++) {
+    const jobEnd = i + 1 < starts.length ? starts[i + 1] : text.length;
+    if (jobEnd - chunkStart > maxChars && prevBreak > chunkStart) {
+      chunks.push(text.slice(chunkStart, prevBreak));
+      chunkStart = prevBreak;
+    }
+    prevBreak = jobEnd;
+  }
+  chunks.push(text.slice(chunkStart));
+
+  return chunks.map((c) => c.trim()).filter((c) => c.length >= MIN_JD_CHARS);
+}
+
+/** @deprecated use shouldDetectJdsWithOpenRouter */
+export function shouldRefineJdSplit(raw: string, _heuristicCount = 0): boolean {
+  return shouldDetectJdsWithOpenRouter(raw);
 }
 
 function cleanLabel(value: string, maxLen = 80): string {
@@ -377,5 +403,3 @@ export function jdPreviewSnippet(jd: string, maxLen = 160): string {
   if (flat.length <= maxLen) return flat;
   return `${flat.slice(0, maxLen - 1)}…`;
 }
-
-export { MIN_JD_CHARS };

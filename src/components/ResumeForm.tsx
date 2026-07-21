@@ -24,7 +24,7 @@ import {
 import {
   splitJobDescriptionsDetailed,
   jdPreviewSnippet,
-  shouldRefineJdSplit,
+  shouldDetectJdsWithOpenRouter,
   countJobHeaders,
   type DetectedJd,
 } from "@/lib/split-jds";
@@ -423,7 +423,9 @@ export default function ResumeForm() {
     [pastedJd],
   );
 
-  const pastedJdJobs = jdOverrides ?? refinedJdJobs ?? heuristicJdJobs;
+  // Prefer OpenRouter results; heuristic is only a temporary preview while detecting
+  const pastedJdJobs =
+    jdOverrides ?? refinedJdJobs ?? (jdSplitStatus === "refining" ? [] : heuristicJdJobs);
   const jobHeaderCount = useMemo(() => countJobHeaders(pastedJd), [pastedJd]);
 
   useEffect(() => {
@@ -432,7 +434,7 @@ export default function ResumeForm() {
     setJdSplitStatus("idle");
 
     const text = pastedJd.trim();
-    if (!shouldRefineJdSplit(text, heuristicJdJobs.length)) {
+    if (!shouldDetectJdsWithOpenRouter(text)) {
       return;
     }
 
@@ -449,51 +451,63 @@ export default function ResumeForm() {
         if (cancelled) return;
         if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
           setJdSplitStatus("error");
+          setError(
+            data?.error ||
+              "OpenRouter could not detect job descriptions. Check OPENROUTER_API_KEY.",
+          );
           return;
         }
-        if (data.jobs.length >= 1) {
-          const normalized: DetectedJd[] = data.jobs
-            .map((item: unknown) => {
-              if (typeof item === "string") {
-                return splitJobDescriptionsDetailed(item)[0];
-              }
-              if (!item || typeof item !== "object") return null;
-              const row = item as Record<string, unknown>;
-              const jdText = String(row.text || "").trim();
-              if (jdText.length < 80) return null;
-              const fallback = splitJobDescriptionsDetailed(jdText)[0];
-              return {
-                text: jdText,
-                company:
-                  String(row.company || "").trim() ||
-                  fallback?.company ||
-                  "Unknown company",
-                role:
-                  String(row.role || "").trim() ||
-                  fallback?.role ||
-                  "Unknown role",
-              } satisfies DetectedJd;
-            })
-            .filter(Boolean);
-          if (normalized.length) setRefinedJdJobs(normalized);
-        }
+
+        const normalized: DetectedJd[] = data.jobs
+          .map((item: unknown) => {
+            if (typeof item === "string") {
+              return splitJobDescriptionsDetailed(item)[0] || null;
+            }
+            if (!item || typeof item !== "object") return null;
+            const row = item as Record<string, unknown>;
+            const jdText = String(row.text || "").trim();
+            if (jdText.length < 80) return null;
+            const fallback = splitJobDescriptionsDetailed(jdText)[0];
+            return {
+              text: jdText,
+              company:
+                String(row.company || "").trim() ||
+                fallback?.company ||
+                "Unknown company",
+              role:
+                String(row.role || row.position || "").trim() ||
+                fallback?.role ||
+                "Unknown role",
+            } satisfies DetectedJd;
+          })
+          .filter(Boolean);
+
+        setRefinedJdJobs(normalized);
         setJdSplitStatus("ready");
-      } catch {
-        if (!cancelled) setJdSplitStatus("error");
+      } catch (err) {
+        if (!cancelled) {
+          setJdSplitStatus("error");
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Failed to detect JDs with OpenRouter",
+          );
+        }
       }
-    }, 700);
+    }, 900);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [pastedJd, heuristicJdJobs.length]);
+  }, [pastedJd]);
 
   function removeDetectedJd(index: number) {
     setJdOverrides(pastedJdJobs.filter((_, i) => i !== index));
   }
 
   const canSubmit =
+    jdSplitStatus !== "refining" &&
     pastedJdJobs.length > 0 &&
     (inputMode === "profile_jd" || Boolean(resumePdfBase64));
 
@@ -893,9 +907,15 @@ export default function ResumeForm() {
       setError("Paste a job description.");
       return;
     }
+    if (jdSplitStatus === "refining") {
+      setError("Wait for OpenRouter to finish detecting jobs.");
+      return;
+    }
     if (!pastedJdJobs.length) {
       setError(
-        "Paste at least ~80 characters of JD text. Multiple JDs are auto-detected (or separate with ---).",
+        jdSplitStatus === "error"
+          ? "OpenRouter could not detect jobs. Check OPENROUTER_API_KEY, then paste again."
+          : "Paste at least ~80 characters of JD text. Multiple JDs are auto-detected (or separate with ---).",
       );
       return;
     }
@@ -1283,14 +1303,17 @@ export default function ResumeForm() {
             <div>
               <h2>Job description</h2>
               <p className="hint">
-                Paste one or more JDs. Multiple postings are auto-split when
-                possible; you can still use a --- line between jobs.
+                Paste one or more JDs. OpenRouter detects exact jobs, company,
+                and role/position automatically.
               </p>
             </div>
             <div className="link-count" aria-live="polite">
-              {pastedJdJobs.length} JD{pastedJdJobs.length === 1 ? "" : "s"}
-              {jobHeaderCount > 0 ? ` · ${jobHeaderCount} headers` : ""}
-              {jdSplitStatus === "refining" ? " · detecting…" : ""}
+              {jdSplitStatus === "refining"
+                ? "OpenRouter detecting…"
+                : `${pastedJdJobs.length} JD${pastedJdJobs.length === 1 ? "" : "s"}`}
+              {jobHeaderCount > 0 && jdSplitStatus !== "refining"
+                ? ` · ${jobHeaderCount} headers`
+                : ""}
             </div>
           </div>
 
@@ -1300,22 +1323,29 @@ export default function ResumeForm() {
             value={pastedJd}
             onChange={(e) => setPastedJd(e.target.value)}
             placeholder={
-              "Paste one or more job descriptions…\n\nMultiple JDs are detected automatically when possible.\nOptional: put --- on its own line between jobs."
+              "Paste one or more job descriptions…\n\nOpenRouter will detect each job, company, and role."
             }
             spellCheck={false}
           />
 
-          {pastedJdJobs.length > 0 && (
+          {jdSplitStatus === "refining" && (
+            <p className="hint" style={{ marginTop: "0.75rem" }}>
+              Detecting exact JDs with OpenRouter (company + role). Large pastes
+              may take a bit…
+            </p>
+          )}
+
+          {pastedJdJobs.length > 0 && jdSplitStatus !== "refining" && (
             <div className="jd-detect" aria-live="polite">
               <div className="jd-detect-head">
                 <h3>
                   Detected job{pastedJdJobs.length === 1 ? "" : "s"} (
                   {pastedJdJobs.length})
-                  {jdSplitStatus === "refining" ? " · refining…" : ""}
+                  {refinedJdJobs ? " · OpenRouter" : ""}
                 </h3>
                 <p className="hint">
-                  Each item becomes one tailored package. If one is wrong, remove
-                  it with × before generating.
+                  Company and role/position from OpenRouter. Remove a wrong card
+                  with × before generating.
                 </p>
               </div>
               <ol className="jd-detect-list">
