@@ -6,13 +6,14 @@ export async function proxy(request: NextRequest) {
 
   const isPublic =
     pathname === "/login" ||
-    pathname === "/signup" ||
-    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/auth/login") ||
+    pathname.startsWith("/api/auth/logout") ||
+    pathname.startsWith("/api/auth/me") ||
     pathname.startsWith("/_next/") ||
     pathname === "/favicon.ico";
 
   if (isPublic) {
-    if (pathname === "/login" || pathname === "/signup") {
+    if (pathname === "/login") {
       const token = request.cookies.get(SESSION_COOKIE)?.value;
       const session = await verifySessionToken(token);
       if (session) {

@@ -1,6 +1,6 @@
 import type { CandidateProfile } from "./types";
 
-/** Empty profile for new signups — filled in by the user and saved to DB. */
+/** Empty profile for new users — filled in by the user and saved to DB. */
 export const EMPTY_PROFILE: CandidateProfile = {
   personal: {
     name: "",

@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
 export default function LoginForm() {
@@ -78,10 +77,6 @@ export default function LoginForm() {
           <button type="submit" className="primary login-submit" disabled={loading}>
             {loading ? "Signing in…" : "Sign in"}
           </button>
-
-          <p className="auth-switch">
-            New here? <Link href="/signup">Create an account</Link>
-          </p>
         </form>
       </main>
     </div>
