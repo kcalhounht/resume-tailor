@@ -13,6 +13,8 @@ export async function processOneJob(options: {
   personal: PersonalInfo;
   /** Pasted JD text (required — scraping was removed) */
   manualJd?: string;
+  /** Raw text from an uploaded resume (resume_pdf mode) */
+  sourceResumeText?: string;
   onStep: (step: JobStep, message: string) => void;
 }): Promise<{
   index: number;
@@ -36,7 +38,15 @@ export async function processOneJob(options: {
     coverLetterDocxBase64: string;
   };
 }> {
-  const { index, jobUrl, profile, personal, manualJd, onStep } = options;
+  const {
+    index,
+    jobUrl,
+    profile,
+    personal,
+    manualJd,
+    sourceResumeText,
+    onStep,
+  } = options;
 
   onStep("scraping", "Loading pasted job description…");
   const pasted = manualJd?.trim() || "";
@@ -56,15 +66,24 @@ export async function processOneJob(options: {
   onStep("extracting", "Extracting structured JD…");
   const extracted = await extractJobDescription(rawText, pageTitle, jobUrl);
 
-  onStep("generating", "Generating resume and cover letter…");
-  let tailored = await generateTailoredPackage(profile, extracted, rawText);
+  onStep(
+    "generating",
+    sourceResumeText
+      ? "Tailoring uploaded resume to the JD…"
+      : "Generating resume and cover letter…",
+  );
+  let tailored = await generateTailoredPackage(profile, extracted, rawText, {
+    sourceResumeText,
+  });
 
   onStep("validating", "Validating resume format and content…");
   let validation = validateAndFixResume(tailored, profile, extracted);
 
   if (!validation.ok) {
     onStep("validating", "Fixing validation issues and regenerating…");
-    tailored = await generateTailoredPackage(profile, extracted, rawText);
+    tailored = await generateTailoredPackage(profile, extracted, rawText, {
+      sourceResumeText,
+    });
     validation = validateAndFixResume(tailored, profile, extracted);
   }
 

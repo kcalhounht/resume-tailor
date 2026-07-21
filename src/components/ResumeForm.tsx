@@ -352,6 +352,11 @@ export default function ResumeForm() {
     cloneProfile(EMPTY_PROFILE),
   );
   const [profileLoading, setProfileLoading] = useState(true);
+  const [inputMode, setInputMode] = useState<"profile_jd" | "resume_pdf">(
+    "profile_jd",
+  );
+  const [resumeFileName, setResumeFileName] = useState<string | null>(null);
+  const [resumePdfBase64, setResumePdfBase64] = useState<string | null>(null);
   const [pastedJd, setPastedJd] = useState("");
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
@@ -371,6 +376,7 @@ export default function ResumeForm() {
   const [folderBusy, setFolderBusy] = useState(false);
 
   const downloadFolderRef = useRef<DownloadFolderHandle | null>(null);
+  const resumeInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     downloadFolderRef.current = downloadFolder;
@@ -407,7 +413,39 @@ export default function ResumeForm() {
       .filter((block) => block.length >= 80);
   }, [pastedJd]);
 
-  const canSubmit = pastedJdJobs.length > 0;
+  const canSubmit =
+    pastedJdJobs.length > 0 &&
+    (inputMode === "profile_jd" || Boolean(resumePdfBase64));
+
+  async function onResumeFileChange(file: File | null) {
+    setError(null);
+    if (!file) {
+      setResumeFileName(null);
+      setResumePdfBase64(null);
+      return;
+    }
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      setError("Please upload a PDF resume.");
+      setResumeFileName(null);
+      setResumePdfBase64(null);
+      return;
+    }
+    if (file.size > 8 * 1024 * 1024) {
+      setError("PDF must be under 8 MB.");
+      setResumeFileName(null);
+      setResumePdfBase64(null);
+      return;
+    }
+
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    setResumeFileName(file.name);
+    setResumePdfBase64(btoa(binary));
+  }
 
   async function saveProfileToDb(): Promise<boolean> {
     try {
@@ -672,7 +710,10 @@ export default function ResumeForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          profile,
+          mode: inputMode,
+          profile: inputMode === "profile_jd" ? profile : undefined,
+          resumePdfBase64:
+            inputMode === "resume_pdf" ? resumePdfBase64 : undefined,
           jobUrls: targets.map((t) => t.url),
           indices: targets.map((t) => t.index),
           manualJds: targets.map((t) => t.manualJd || ""),
@@ -746,9 +787,14 @@ export default function ResumeForm() {
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
 
-    const profileError = validateProfile(profile);
-    if (profileError) {
-      setError(profileError);
+    if (inputMode === "profile_jd") {
+      const profileError = validateProfile(profile);
+      if (profileError) {
+        setError(profileError);
+        return;
+      }
+    } else if (!resumePdfBase64) {
+      setError("Upload your original resume PDF.");
       return;
     }
 
@@ -763,8 +809,10 @@ export default function ResumeForm() {
       return;
     }
 
-    const saved = await saveProfileToDb();
-    if (!saved) return;
+    if (inputMode === "profile_jd") {
+      const saved = await saveProfileToDb();
+      if (!saved) return;
+    }
 
     await runJobs(
       pastedJdJobs.map((jd, i) => ({
@@ -779,9 +827,14 @@ export default function ResumeForm() {
   async function onRetry(job: JobProgress) {
     if (isRetrying(job.index)) return;
 
-    const profileError = validateProfile(profile);
-    if (profileError) {
-      setError(profileError);
+    if (inputMode === "profile_jd") {
+      const profileError = validateProfile(profile);
+      if (profileError) {
+        setError(profileError);
+        return;
+      }
+    } else if (!resumePdfBase64) {
+      setError("Upload your original resume PDF before retrying.");
       return;
     }
 
@@ -811,6 +864,35 @@ export default function ResumeForm() {
   return (
     <div className="workspace">
       <form className="composer" onSubmit={onSubmit}>
+        <div
+          className="mode-toggle"
+          role="tablist"
+          aria-label="Tailor input mode"
+        >
+          <button
+            type="button"
+            role="tab"
+            className={`mode-btn${inputMode === "profile_jd" ? " active" : ""}`}
+            aria-selected={inputMode === "profile_jd"}
+            disabled={batchBusy}
+            onClick={() => setInputMode("profile_jd")}
+          >
+            Profile + JD
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`mode-btn${inputMode === "resume_pdf" ? " active" : ""}`}
+            aria-selected={inputMode === "resume_pdf"}
+            disabled={batchBusy}
+            onClick={() => setInputMode("resume_pdf")}
+          >
+            Resume PDF + JD
+          </button>
+        </div>
+
+        {inputMode === "profile_jd" ? (
+        <>
         <section className="profile-section">
           <div className="section-head">
             <div>
@@ -1063,6 +1145,47 @@ export default function ResumeForm() {
             ))}
           </div>
         </section>
+        </>
+        ) : (
+        <section className="profile-section">
+          <div className="section-head">
+            <div>
+              <h2>Original resume (PDF)</h2>
+              <p className="hint">
+                Upload your current resume. We rewrite it to fit the job
+                description below.
+              </p>
+            </div>
+          </div>
+
+          <div className="upload-row">
+            <input
+              ref={resumeInputRef}
+              type="file"
+              accept="application/pdf,.pdf"
+              className="file-input"
+              disabled={batchBusy}
+              onChange={(e) => {
+                const file = e.target.files?.[0] || null;
+                void onResumeFileChange(file);
+              }}
+            />
+            <button
+              type="button"
+              className="download-btn"
+              disabled={batchBusy}
+              onClick={() => resumeInputRef.current?.click()}
+            >
+              {resumeFileName ? "Change PDF" : "Choose PDF"}
+            </button>
+            <span className="upload-name">
+              {resumeFileName
+                ? resumeFileName
+                : "No file selected (PDF, max 8 MB)"}
+            </span>
+          </div>
+        </section>
+        )}
 
         <section className="profile-section">
           <div className="section-head">
@@ -1119,9 +1242,17 @@ export default function ResumeForm() {
         <div className="progress-details">
           {jobs.length === 0 ? (
             <div className="empty-board">
-              <p>Fill your profile, paste a JD, then generate.</p>
+              <p>
+                {inputMode === "resume_pdf"
+                  ? "Upload a resume PDF, paste a JD, then generate."
+                  : "Fill your profile, paste a JD, then generate."}
+              </p>
               <ol>
-                <li>Fill in your profile</li>
+                <li>
+                  {inputMode === "resume_pdf"
+                    ? "Upload original resume PDF"
+                    : "Fill in your profile"}
+                </li>
                 <li>Paste JD text</li>
                 <li>Write resume</li>
                 <li>Validate format and content</li>

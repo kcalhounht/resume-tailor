@@ -28,8 +28,9 @@ Hard rules:
 9. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
 10. Keep the candidate's company names, periods, locations, and education (school, degree, discipline, period, location) exactly as given. You may refine job titles slightly if plausible.
 11. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
-12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
-13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
+12. When sourceResumeText is provided: treat it as the candidate's real resume. Rewrite and reorganize that content to fit the JD. Prefer true skills/achievements from the source. Do not invent employers, degrees, or major claims absent from the source.
+13. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
+14. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
 
 JSON shape:
 {
@@ -47,6 +48,7 @@ export async function generateTailoredPackage(
   profile: CandidateProfile,
   extracted: ExtractedJD,
   rawJd: string,
+  options?: { sourceResumeText?: string },
 ): Promise<TailoredPackage> {
   const client = getLlmClient();
   const model = getLlmModel();
@@ -54,6 +56,12 @@ export async function generateTailoredPackage(
     candidate: profile,
     extractedJd: extracted,
     rawJobDescription: rawJd.slice(0, 12000),
+    sourceResumeText: options?.sourceResumeText
+      ? options.sourceResumeText.slice(0, 25000)
+      : undefined,
+    instructions: options?.sourceResumeText
+      ? "Tailor the uploaded resume to this JD. Keep factual employment history; rewrite bullets/summary/skills for ATS fit."
+      : "Generate a tailored resume from the candidate profile skeleton and JD.",
   });
 
   let content = await requestJson(client, model, [

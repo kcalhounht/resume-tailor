@@ -64,12 +64,17 @@ export const draftProfileSchema = z.object({
 
 export const tailorRequestSchema = z
   .object({
+    /** profile_jd = form profile + JD; resume_pdf = uploaded resume PDF + JD */
+    mode: z.enum(["profile_jd", "resume_pdf"]).default("profile_jd"),
     /** Placeholder ids such as manual://pasted-job-1 */
     jobUrls: z.array(z.string().trim().min(1)).min(1),
     indices: z.array(z.number().int().positive()).optional(),
     /** Pasted JD text per job (required, ≥ ~80 chars each) */
     manualJds: z.array(z.string()).min(1),
-    profile: candidateProfileSchema,
+    /** Required for profile_jd mode */
+    profile: candidateProfileSchema.optional(),
+    /** Base64 PDF (optionally data-URL prefixed). Required for resume_pdf mode */
+    resumePdfBase64: z.string().optional(),
   })
   .superRefine((value, ctx) => {
     if (value.indices && value.indices.length !== value.jobUrls.length) {
@@ -96,13 +101,37 @@ export const tailorRequestSchema = z
         });
       }
     });
+
+    if (value.mode === "profile_jd") {
+      if (!value.profile) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Profile is required for JD-only mode",
+          path: ["profile"],
+        });
+      }
+    }
+
+    if (value.mode === "resume_pdf") {
+      if (!value.resumePdfBase64?.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Upload a resume PDF for resume + JD mode",
+          path: ["resumePdfBase64"],
+        });
+      }
+    }
   });
 
-export function parseTailorRequest(body: unknown): {
+export type TailorRequest = {
+  mode: "profile_jd" | "resume_pdf";
   jobUrls: string[];
   indices?: number[];
   manualJds: string[];
-  profile: CandidateProfile;
-} {
-  return tailorRequestSchema.parse(body);
+  profile?: CandidateProfile;
+  resumePdfBase64?: string;
+};
+
+export function parseTailorRequest(body: unknown): TailorRequest {
+  return tailorRequestSchema.parse(body) as TailorRequest;
 }

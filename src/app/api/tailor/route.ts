@@ -1,7 +1,10 @@
 import { ZodError } from "zod";
+import { extractProfileFromResumeText } from "@/lib/extract-resume";
+import { decodePdfBase64, extractTextFromPdf } from "@/lib/parse-resume-pdf";
 import { processOneJob } from "@/lib/process-job";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
+import type { CandidateProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -13,7 +16,7 @@ function encodeSse(event: ProgressEvent): string {
 export async function POST(request: Request) {
   let payload;
   try {
-    const body = await request.json();  
+    const body = await request.json();
     payload = parseTailorRequest(body);
   } catch (err) {
     const message =
@@ -28,7 +31,6 @@ export async function POST(request: Request) {
     });
   }
 
-  const profile = payload.profile;
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -37,6 +39,42 @@ export async function POST(request: Request) {
       };
 
       try {
+        let profile: CandidateProfile;
+        let sourceResumeText: string | undefined;
+
+        if (payload.mode === "resume_pdf") {
+          send({
+            type: "step",
+            index: payload.indices?.[0] ?? 1,
+            jobUrl: payload.jobUrls[0],
+            step: "scraping",
+            message: "Reading uploaded resume PDF…",
+          });
+
+          const pdfBuffer = decodePdfBase64(payload.resumePdfBase64 || "");
+          sourceResumeText = await extractTextFromPdf(pdfBuffer);
+
+          send({
+            type: "step",
+            index: payload.indices?.[0] ?? 1,
+            jobUrl: payload.jobUrls[0],
+            step: "fetch_jd",
+            message: `Parsed resume (${sourceResumeText.length.toLocaleString()} chars)…`,
+          });
+
+          const parsed = await extractProfileFromResumeText(sourceResumeText);
+          profile = {
+            personal: parsed.personal,
+            experiences: parsed.experiences,
+            education: parsed.education,
+          };
+        } else {
+          if (!payload.profile) {
+            throw new Error("Profile is required for JD-only mode");
+          }
+          profile = payload.profile;
+        }
+
         const outcomes = await Promise.all(
           payload.jobUrls.map(async (jobUrl, i) => {
             const index = payload.indices?.[i] ?? i + 1;
@@ -49,6 +87,7 @@ export async function POST(request: Request) {
                 profile,
                 personal: profile.personal,
                 manualJd: payload.manualJds?.[i],
+                sourceResumeText,
                 onStep: (step, message) => {
                   currentStep = step;
                   send({
