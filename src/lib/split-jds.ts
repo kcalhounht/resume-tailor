@@ -314,6 +314,12 @@ export function extractJdMeta(jd: string): { company: string; role: string } {
     ) ||
     flat.match(
       /\bAbout the (?:job|role)\s+At\s+([A-Z][A-Za-z0-9&.'’\-\s]{1,60}?)(?:[,.]|\s+)/i,
+    ) ||
+    flat.match(
+      /\bWho are\s+([A-Z][A-Za-z0-9&.'’\-]{1,40})\b/i,
+    ) ||
+    flat.match(
+      /\b([A-Z][A-Za-z0-9&.'’\-]{1,40})\s+(?:API Management|is the leading|is hiring|is looking)\b/,
     );
   if (atCompany?.[1]) company = cleanLabel(atCompany[1]);
 

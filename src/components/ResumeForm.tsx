@@ -423,11 +423,11 @@ export default function ResumeForm() {
     [pastedJd],
   );
 
-  // Prefer OpenRouter results; never let an empty array hide heuristics
+  // Prefer OpenRouter labels; keep heuristics visible while detecting
   const pastedJdJobs =
     jdOverrides ??
     (refinedJdJobs && refinedJdJobs.length > 0 ? refinedJdJobs : null) ??
-    (jdSplitStatus === "refining" ? [] : heuristicJdJobs);
+    heuristicJdJobs;
   const jobHeaderCount = useMemo(() => countJobHeaders(pastedJd), [pastedJd]);
 
   useEffect(() => {
@@ -442,6 +442,7 @@ export default function ResumeForm() {
     }
 
     let cancelled = false;
+    const controller = new AbortController();
     const timer = window.setTimeout(async () => {
       setJdSplitStatus("refining");
       try {
@@ -449,15 +450,26 @@ export default function ResumeForm() {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ text }),
+          signal: controller.signal,
         });
         const data = await response.json().catch(() => null);
         if (cancelled) return;
+
+        // 504 / timeout: keep local split, do not block generate
+        if (response.status === 504 || response.status === 408) {
+          setJdSplitStatus("ready");
+          setError(
+            "OpenRouter timed out on this large paste. Using local JD detection — you can still generate.",
+          );
+          return;
+        }
+
         if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
-          setJdSplitStatus("error");
+          setJdSplitStatus("ready");
           setError(
             data?.error ||
               data?.notice ||
-              `JD detection failed (HTTP ${response.status}). Check OPENROUTER_API_KEY / OPENROUTER_MODEL in Vercel, then Redeploy.`,
+              `JD labeling failed (HTTP ${response.status}). Using local detection — you can still generate.`,
           );
           return;
         }
@@ -486,29 +498,33 @@ export default function ResumeForm() {
           })
           .filter(Boolean);
 
-        setRefinedJdJobs(normalized);
+        if (normalized.length) setRefinedJdJobs(normalized);
         setJdSplitStatus("ready");
         if (typeof data.notice === "string" && data.notice.trim()) {
           setError(data.notice);
-        } else if (Array.isArray(data.warnings) && data.warnings.length) {
-          setError(`OpenRouter warning: ${String(data.warnings[0])}`);
         } else {
           setError(null);
         }
       } catch (err) {
-        if (!cancelled) {
-          setJdSplitStatus("error");
+        if (cancelled) return;
+        setJdSplitStatus("ready");
+        if (err instanceof DOMException && err.name === "AbortError") {
           setError(
-            err instanceof Error
-              ? err.message
-              : "Failed to detect JDs with OpenRouter",
+            "JD labeling cancelled. Using local detection — you can still generate.",
           );
+          return;
         }
+        setError(
+          err instanceof Error
+            ? `${err.message} Using local JD detection — you can still generate.`
+            : "OpenRouter failed. Using local JD detection — you can still generate.",
+        );
       }
-    }, 900);
+    }, 500);
 
     return () => {
       cancelled = true;
+      controller.abort();
       window.clearTimeout(timer);
     };
   }, [pastedJd]);
@@ -518,7 +534,6 @@ export default function ResumeForm() {
   }
 
   const canSubmit =
-    jdSplitStatus !== "refining" &&
     pastedJdJobs.length > 0 &&
     (inputMode === "profile_jd" || Boolean(resumePdfBase64));
 
@@ -918,15 +933,9 @@ export default function ResumeForm() {
       setError("Paste a job description.");
       return;
     }
-    if (jdSplitStatus === "refining") {
-      setError("Wait for OpenRouter to finish detecting jobs.");
-      return;
-    }
     if (!pastedJdJobs.length) {
       setError(
-        jdSplitStatus === "error"
-          ? "JD detection failed. Confirm OPENROUTER_API_KEY and OPENROUTER_MODEL in Vercel, Redeploy, then paste again."
-          : "Paste at least ~80 characters of JD text. Multiple JDs are auto-detected (or separate with ---).",
+        "Paste at least ~80 characters of JD text. Multiple JDs are auto-detected (or separate with ---).",
       );
       return;
     }
@@ -1320,9 +1329,9 @@ export default function ResumeForm() {
             </div>
             <div className="link-count" aria-live="polite">
               {jdSplitStatus === "refining"
-                ? "OpenRouter detecting…"
+                ? `${pastedJdJobs.length} JD${pastedJdJobs.length === 1 ? "" : "s"} · labeling…`
                 : `${pastedJdJobs.length} JD${pastedJdJobs.length === 1 ? "" : "s"}`}
-              {jobHeaderCount > 0 && jdSplitStatus !== "refining"
+              {jobHeaderCount > 0
                 ? ` · ${jobHeaderCount} headers`
                 : ""}
             </div>
@@ -1341,22 +1350,23 @@ export default function ResumeForm() {
 
           {jdSplitStatus === "refining" && (
             <p className="hint" style={{ marginTop: "0.75rem" }}>
-              Detecting exact JDs with OpenRouter (company + role). Large pastes
-              may take a bit…
+              Labeling company + role with OpenRouter. You can generate with the
+              detected list below anytime.
             </p>
           )}
 
-          {pastedJdJobs.length > 0 && jdSplitStatus !== "refining" && (
+          {pastedJdJobs.length > 0 && (
             <div className="jd-detect" aria-live="polite">
               <div className="jd-detect-head">
                 <h3>
                   Detected job{pastedJdJobs.length === 1 ? "" : "s"} (
                   {pastedJdJobs.length})
                   {refinedJdJobs ? " · OpenRouter" : ""}
+                  {jdSplitStatus === "refining" ? " · labeling…" : ""}
                 </h3>
                 <p className="hint">
-                  Company and role/position from OpenRouter. Remove a wrong card
-                  with × before generating.
+                  Company and role/position. Remove a wrong card with × before
+                  generating if needed.
                 </p>
               </div>
               <ol className="jd-detect-list">
