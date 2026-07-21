@@ -1,6 +1,4 @@
 import { ZodError } from "zod";
-import { extractProfileFromResumeText } from "@/lib/extract-resume";
-import { decodePdfBase64, extractTextFromPdf } from "@/lib/parse-resume-pdf";
 import { processOneJob } from "@/lib/process-job";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
@@ -43,6 +41,14 @@ export async function POST(request: Request) {
         let sourceResumeText: string | undefined;
 
         if (payload.mode === "resume_pdf") {
+          // Lazy-load PDF tools so Profile+JD mode is not blocked by pdf-parse
+          const { decodePdfBase64, extractTextFromPdf } = await import(
+            "@/lib/parse-resume-pdf"
+          );
+          const { extractProfileFromResumeText } = await import(
+            "@/lib/extract-resume"
+          );
+
           send({
             type: "step",
             index: payload.indices?.[0] ?? 1,

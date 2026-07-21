@@ -721,8 +721,19 @@ export default function ResumeForm() {
       });
 
       if (!response.ok || !response.body) {
-        const data = await response.json().catch(() => null);
-        throw new Error(data?.error || "Failed to start processing.");
+        const raw = await response.text().catch(() => "");
+        let message = "Failed to start processing.";
+        try {
+          const data = JSON.parse(raw) as { error?: string };
+          if (data?.error) message = data.error;
+        } catch {
+          if (raw.trim()) {
+            message = `Failed to start processing (${response.status}): ${raw.slice(0, 200)}`;
+          } else {
+            message = `Failed to start processing (HTTP ${response.status}).`;
+          }
+        }
+        throw new Error(message);
       }
 
       const reader = response.body.getReader();
