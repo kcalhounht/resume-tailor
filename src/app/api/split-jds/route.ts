@@ -44,10 +44,11 @@ Return ONLY valid JSON:
 
 Rules:
 1. One label per preview index. Never skip an index.
-2. company = employer. role = job title/position.
-3. Prefer names in the preview (e.g. "Who are Tyk" → Tyk).
-4. If unclear: "Unknown company" / "Unknown role".
-5. Do NOT drop or merge jobs — labeling only.`;
+2. company = employer / company name. role = job title / position.
+3. Prefer names clearly stated in the preview (e.g. "Who are Tyk" → Tyk).
+4. If hintCompany / hintRole are provided and match the preview, you may use them.
+5. If unclear: "Unknown company" / "Unknown role".
+6. Do NOT drop or merge jobs — labeling only.`;
 
 function formatLlmError(err: unknown): string {
   if (!(err instanceof Error)) return "OpenRouter request failed";
@@ -194,9 +195,19 @@ export async function POST(request: Request) {
           const index = Number.isInteger(Number(row.index))
             ? Number(row.index)
             : i;
-          return { index, preview: preview.slice(0, 700) };
+          return {
+            index,
+            preview: preview.slice(0, 700),
+            hintCompany: String(row.hintCompany || "").trim() || undefined,
+            hintRole: String(row.hintRole || "").trim() || undefined,
+          };
         })
-        .filter(Boolean) as Array<{ index: number; preview: string }>;
+        .filter(Boolean) as Array<{
+        index: number;
+        preview: string;
+        hintCompany?: string;
+        hintRole?: string;
+      }>;
 
       if (!normalized.length) {
         return NextResponse.json({ ok: true, labels: [], source: "empty" });

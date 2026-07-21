@@ -461,35 +461,35 @@ export default function ResumeForm() {
     [pastedJd],
   );
 
-  // Prefer OpenRouter / structured results; show local only while waiting
+  // Prefer OpenRouter-labeled results; always keep split cards visible for instant count
   const pastedJdJobs =
     jdOverrides ??
     (refinedJdJobs && refinedJdJobs.length > 0
       ? refinedJdJobs
-      : jdSplitStatus === "refining"
-        ? heuristicJdJobs
-        : refinedJdJobs ?? heuristicJdJobs);
+      : heuristicJdJobs);
   const jobHeaderCount = useMemo(() => countJobHeaders(pastedJd), [pastedJd]);
+  const instantJdCount = pastedJdJobs.length;
 
   useEffect(() => {
-    setRefinedJdJobs(null);
     setJdOverrides(null);
-    setJdSplitStatus("idle");
     setJdDetectProgress(null);
     setError(null);
 
     const text = pastedJd.trim();
     if (!shouldDetectJdsWithOpenRouter(text)) {
+      setRefinedJdJobs(null);
+      setJdSplitStatus("idle");
       return;
     }
 
-    // Structured Company + URL + JD lists: exact, no OpenRouter split needed
-    const structured = parseStructuredJdList(text);
-    if (structured.length) {
-      setRefinedJdJobs(structured);
-      setJdSplitStatus("ready");
-      setError(null);
-      return;
+    // Instant structured count/cards (before OpenRouter labeling)
+    const structuredNow = parseStructuredJdList(text);
+    if (structuredNow.length) {
+      setRefinedJdJobs(structuredNow);
+      setJdSplitStatus("refining");
+    } else {
+      setRefinedJdJobs(null);
+      setJdSplitStatus("idle");
     }
 
     let cancelled = false;
@@ -543,6 +543,8 @@ export default function ResumeForm() {
               previews: slice.map((job, i) => ({
                 index: offset + i,
                 preview: job.text.replace(/\s+/g, " ").trim().slice(0, 700),
+                hintCompany: job.company,
+                hintRole: job.role,
               })),
             }),
             signal: controller.signal,
@@ -570,8 +572,15 @@ export default function ResumeForm() {
           if (!Number.isInteger(index) || index < 0 || index >= labeled.length) {
             continue;
           }
-          if (row.company?.trim()) labeled[index].company = row.company.trim();
-          if (row.role?.trim()) labeled[index].role = row.role.trim();
+          const company = row.company?.trim();
+          const role = row.role?.trim();
+          // Prefer OpenRouter labels when present and not unknown
+          if (company && !/^unknown company$/i.test(company)) {
+            labeled[index].company = company;
+          }
+          if (role && !/^unknown role$/i.test(role)) {
+            labeled[index].role = role;
+          }
         }
       }
 
@@ -606,8 +615,21 @@ export default function ResumeForm() {
     }
 
     const timer = window.setTimeout(async () => {
-      setJdSplitStatus("refining");
       try {
+        // Structured lists: cards/count already shown; OpenRouter labels company + role
+        const structured = parseStructuredJdList(text);
+        if (structured.length) {
+          setJdSplitStatus("refining");
+          const labeled = await labelJobsFast(structured);
+          if (cancelled) return;
+          setRefinedJdJobs(labeled);
+          setJdSplitStatus("ready");
+          setJdDetectProgress(null);
+          setError(null);
+          return;
+        }
+
+        setJdSplitStatus("refining");
         const headers = countJobHeaders(text);
         let jobs: DetectedJd[] = [];
 
@@ -643,7 +665,7 @@ export default function ResumeForm() {
             : "OpenRouter JD detection failed",
         );
       }
-    }, 350);
+    }, 200);
 
     return () => {
       cancelled = true;
@@ -1459,14 +1481,20 @@ export default function ResumeForm() {
               </p>
             </div>
             <div className="link-count" aria-live="polite">
-              {jdSplitStatus === "refining" && jdDetectProgress
-                ? `OpenRouter ${jdDetectProgress.current}/${jdDetectProgress.total}…`
-                : `${pastedJdJobs.length} JD${pastedJdJobs.length === 1 ? "" : "s"}`}
-              {isStructuredPaste
-                ? " · structured"
-                : jobHeaderCount > 0 && jdSplitStatus !== "refining"
-                  ? ` · ${jobHeaderCount} headers`
+              {instantJdCount} JD{instantJdCount === 1 ? "" : "s"}
+              {isStructuredPaste ? " · structured" : ""}
+              {jdSplitStatus === "refining"
+                ? jdDetectProgress
+                  ? ` · OpenRouter ${jdDetectProgress.current}/${jdDetectProgress.total}`
+                  : " · labeling…"
+                : jdSplitStatus === "ready"
+                  ? " · ready"
                   : ""}
+              {!isStructuredPaste &&
+              jobHeaderCount > 0 &&
+              jdSplitStatus !== "refining"
+                ? ` · ${jobHeaderCount} headers`
+                : ""}
             </div>
           </div>
 
@@ -1481,10 +1509,15 @@ export default function ResumeForm() {
             spellCheck={false}
           />
 
-          {isStructuredPaste && pastedJdJobs.length > 0 && (
+          {isStructuredPaste && instantJdCount > 0 && (
             <p className="hint" style={{ marginTop: "0.75rem" }}>
-              Structured list detected — each block is exactly one JD (no
-              guessing).
+              {instantJdCount} structured JD
+              {instantJdCount === 1 ? "" : "s"} detected immediately.
+              {jdSplitStatus === "refining"
+                ? " OpenRouter is labeling company + role/position on each card…"
+                : jdSplitStatus === "ready"
+                  ? " Company + role/position labeled with OpenRouter."
+                  : ""}
             </p>
           )}
 
@@ -1506,17 +1539,17 @@ export default function ResumeForm() {
                 <h3>
                   Detected job{pastedJdJobs.length === 1 ? "" : "s"} (
                   {pastedJdJobs.length})
-                  {isStructuredPaste
-                    ? " · structured"
-                    : refinedJdJobs
+                  {isStructuredPaste ? " · structured" : ""}
+                  {jdSplitStatus === "refining"
+                    ? " · labeling company/role…"
+                    : jdSplitStatus === "ready"
                       ? " · OpenRouter"
                       : ""}
-                  {jdSplitStatus === "refining" ? " · detecting…" : ""}
                 </h3>
                 <p className="hint">
                   {isStructuredPaste
-                    ? "Exact count from your Company / URL / JD blocks."
-                    : "Exact jobs, company, and role from OpenRouter when possible."}
+                    ? "Count is exact from your Company / URL / JD blocks. Each card’s company and role/position come from OpenRouter."
+                    : "Exact jobs when possible; company and role/position from OpenRouter."}
                 </p>
               </div>
               <ol className="jd-detect-list">
