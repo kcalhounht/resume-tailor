@@ -60,6 +60,11 @@ export default function AdminPanel() {
   const [profile, setProfile] = useState<CandidateProfile>(emptyProfile);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newUsername, setNewUsername] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [newIsAdmin, setNewIsAdmin] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [forbidden, setForbidden] = useState(false);
@@ -193,13 +198,50 @@ export default function AdminPanel() {
     }
   }
 
+  async function onCreateAccount(event: FormEvent) {
+    event.preventDefault();
+    setCreating(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const response = await fetch("/api/admin/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username: newUsername.trim(),
+          password: newPassword,
+          isAdmin: newIsAdmin,
+        }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok) {
+        throw new Error(data?.error || "Failed to create account");
+      }
+      setNewUsername("");
+      setNewPassword("");
+      setNewIsAdmin(false);
+      setShowCreate(false);
+      setMessage(`Account “${data.user.username}” created.`);
+      const list = await loadUsers();
+      if (data.user?.id) {
+        await loadUser(data.user.id);
+      } else if (list.length) {
+        await loadUser(list[list.length - 1].id);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create account");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   if (forbidden) {
     return (
       <div className="admin-panel">
         <p className="error">Admin access required.</p>
         <p className="hint">
-          The first signed-up user is an admin. You can also set{" "}
-          <code>ADMIN_USERNAMES</code> in <code>.env.local</code>.
+          Only administrators can manage accounts. Ask an admin to create your
+          login, or set <code>ADMIN_USERNAMES</code> in env if needed.
         </p>
         <Link href="/" className="ghost-btn">
           Back to home
@@ -220,6 +262,14 @@ export default function AdminPanel() {
 
   return (
     <div className="admin-panel">
+      {error && !selected ? <p className="error">{error}</p> : null}
+      {message && !selected ? (
+        <p className="profile-save-msg">{message}</p>
+      ) : null}
+      {error && showCreate ? <p className="error">{error}</p> : null}
+      {message && showCreate ? (
+        <p className="profile-save-msg">{message}</p>
+      ) : null}
       <div className="admin-layout">
         <aside className="admin-sidebar">
           <div className="section-head">
@@ -227,7 +277,65 @@ export default function AdminPanel() {
               <h2>Users</h2>
               <p className="hint">{users.length} account(s)</p>
             </div>
+            <button
+              type="button"
+              className="ghost-btn"
+              onClick={() => {
+                setShowCreate((v) => !v);
+                setError(null);
+                setMessage(null);
+              }}
+              disabled={creating || saving}
+            >
+              {showCreate ? "Cancel" : "Create account"}
+            </button>
           </div>
+
+          {showCreate && (
+            <form
+              className="admin-create-form"
+              onSubmit={(e) => void onCreateAccount(e)}
+            >
+              <p className="hint">Create a new login (admin only).</p>
+              <label className="field">
+                <span>Username</span>
+                <input
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  required
+                  minLength={3}
+                  maxLength={80}
+                  autoComplete="off"
+                />
+              </label>
+              <label className="field">
+                <span>Password</span>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                />
+              </label>
+              <label className="admin-check">
+                <input
+                  type="checkbox"
+                  checked={newIsAdmin}
+                  onChange={(e) => setNewIsAdmin(e.target.checked)}
+                />
+                <span>Make admin</span>
+              </label>
+              <button
+                type="submit"
+                className="primary"
+                disabled={creating || saving}
+              >
+                {creating ? "Creating…" : "Create account"}
+              </button>
+            </form>
+          )}
 
           <ul className="admin-user-list">
             {users.map((user) => (
