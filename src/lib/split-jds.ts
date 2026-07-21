@@ -84,13 +84,12 @@ function pickBestSplit(
 ): string[] {
   const markerTarget = countMatches(text, ABOUT_JOB);
   const normalized = candidates
-    .map((parts) => sanitizeParts(cleanBlocks(parts)))
+    .map((parts) => mergeTinyJobFragments(sanitizeParts(cleanBlocks(parts))))
     .filter((parts) => parts.length >= 2);
 
   if (!normalized.length) return [];
 
   if (markerTarget >= 2) {
-    // Closest to marker count wins; ties prefer fewer extras
     normalized.sort((a, b) => {
       const da = Math.abs(a.length - markerTarget);
       const db = Math.abs(b.length - markerTarget);
@@ -100,9 +99,7 @@ function pickBestSplit(
     return normalized[0];
   }
 
-  // No reliable marker count: prefer moderate splits (not max fragmentation)
   normalized.sort((a, b) => {
-    // Prefer 2-8 jobs, then more content coverage
     const score = (parts: string[]) => {
       const lenPenalty = parts.length > 8 ? parts.length - 8 : 0;
       const tooFew = parts.length < 2 ? 10 : 0;
@@ -117,6 +114,54 @@ function pickBestSplit(
 }
 
 /**
+ * Slice text at each real job-marker index so we never create an N+1
+ * preamble chunk. Skips mid-word / mid-sentence false positives.
+ */
+function splitByMarkerIndices(text: string, markerSource: string): string[] {
+  const re = new RegExp(markerSource, "gi");
+  const indices: number[] = [];
+  let match: RegExpExecArray | null;
+  while ((match = re.exec(text)) !== null) {
+    const idx = match.index;
+    const before = idx === 0 ? "\n" : text[idx - 1];
+    // Must start at beginning or after whitespace/newline/punctuation
+    if (idx > 0 && !/[\s\n\r\"'([]/.test(before)) continue;
+    indices.push(idx);
+  }
+  if (indices.length < 2) return [];
+
+  const parts: string[] = [];
+  for (let i = 0; i < indices.length; i++) {
+    const start = indices[i];
+    const end = i + 1 < indices.length ? indices[i + 1] : text.length;
+    const slice = text.slice(start, end).trim();
+    if (slice) parts.push(slice);
+  }
+  return mergeTinyJobFragments(parts.filter((p) => p.length >= MIN_JD_CHARS));
+}
+
+/**
+ * If a false "About the job" mid-body creates a tiny extra JD, fold it back.
+ */
+function mergeTinyJobFragments(parts: string[]): string[] {
+  if (parts.length <= 1) return parts;
+
+  const lengths = [...parts.map((p) => p.length)].sort((a, b) => a - b);
+  const median = lengths[Math.floor(lengths.length / 2)] || 0;
+  const threshold = Math.max(280, Math.floor(median * 0.18));
+
+  const out: string[] = [];
+  for (const part of parts) {
+    if (out.length > 0 && part.length < threshold) {
+      out[out.length - 1] = `${out[out.length - 1]}\n\n${part}`;
+      continue;
+    }
+    out.push(part);
+  }
+  return out;
+}
+
+/**
  * Fast local split for pasted JD text.
  * Handles LinkedIn-style dumps where "About the job" is inline, not alone on a line.
  */
@@ -125,35 +170,31 @@ export function splitJobDescriptions(raw: string): string[] {
   if (!text) return [];
 
   if (EXPLICIT_SPLIT.test(text)) {
-    const explicit = sanitizeParts(cleanBlocks(text.split(EXPLICIT_SPLIT)));
+    const explicit = mergeTinyJobFragments(
+      sanitizeParts(cleanBlocks(text.split(EXPLICIT_SPLIT))),
+    );
     if (explicit.length >= 1) return explicit;
   }
 
   const aboutCount = countMatches(text, ABOUT_JOB);
   const markerCount = countMatches(text, MARKER);
 
-  // Primary: split on About the job (most common LinkedIn paste)
+  // Primary: exact index slices on "About the job" (never N+1 from preamble)
   if (aboutCount >= 2) {
-    let parts = text.split(/(?=About the job\b)/i).map((p) => p.trim());
-    // Leading text before first "About the job" is usually not its own JD
-    if (parts.length >= 2 && !/About the job\b/i.test(parts[0])) {
-      parts = parts.slice(1);
-    }
-    const cleaned = sanitizeParts(cleanBlocks(parts));
-    if (cleaned.length >= 2) return cleaned;
+    const byIndex = splitByMarkerIndices(text, String.raw`About the job\b`);
+    if (byIndex.length >= 2) return byIndex;
+  }
+
+  // Secondary: other section markers via index slicing
+  if (markerCount >= 2) {
+    const byAnyMarker = splitByMarkerIndices(
+      text,
+      String.raw`(?:About the job|About the role|About this job|Job description|Role description|Position description)\b`,
+    );
+    if (byAnyMarker.length >= 2) return byAnyMarker;
   }
 
   const candidates: string[][] = [];
-
-  if (markerCount >= 2) {
-    candidates.push(
-      text.split(
-        /(?=(?:About the job|About the role|About this job|Job description|Role description|Position description)\b)/i,
-      ),
-    );
-    candidates.push(text.split(/(?=About the role\b)/i));
-    candidates.push(text.split(/(?=Job description\b)/i));
-  }
 
   // Only use weaker signals when markers are missing
   if (markerCount < 2) {
@@ -186,14 +227,14 @@ export function shouldRefineJdSplit(raw: string, heuristicCount: number): boolea
   if (text.length < 1800) return false;
 
   const aboutCount = countMatches(text, ABOUT_JOB);
-  // If About-the-job count already matches detected jobs, trust it
-  if (aboutCount >= 2 && heuristicCount === aboutCount) {
+  // For LinkedIn-style dumps, trust local About-the-job slicing completely.
+  // LLM refine on 50+ JDs is slow and often invents an extra job.
+  if (aboutCount >= 2) {
     return false;
   }
 
   if (heuristicCount >= 2) {
-    // Only refine when clearly under-split on a huge paste
-    return text.length >= 12000 && heuristicCount < aboutCount;
+    return false;
   }
 
   const markerHits = countMatches(text, MARKER);
