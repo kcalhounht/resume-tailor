@@ -14,24 +14,26 @@ export const maxDuration = 60;
 const MAX_CHUNK_CHARS = 14000;
 
 const SPLIT_PROMPT = `You are an expert job-posting parser.
-Split this pasted hiring text into exact individual job descriptions and label each one.
+Split this pasted hiring text into EXACT individual job descriptions.
 
 Return ONLY valid JSON:
 {
   "jobs": [
-    { "company": string, "role": string, "text": string }
+    { "company": string, "role": string, "text": string, "url": string }
   ]
 }
 
 Hard rules:
-1. Count EXACTLY the real job postings. Do not invent, merge, or over-split.
-2. "text" must be the original wording for that posting only (no paraphrasing).
-3. "company" = employer name. "role" = job title / position.
-4. If unclear: "Unknown company" / "Unknown role".
-5. Ignore LinkedIn chrome. Footers belong to the same job.
-6. One "About the job" section = one job.
-7. "Who are X" usually means company X.
-8. Keep original order.`;
+1. Count EXACTLY the real job postings in this chunk. Do not invent jobs. Do not merge two jobs. Do not split one job into two.
+2. "text" = original wording for that posting only (no paraphrasing). Include the full posting body from this chunk.
+3. "company" = employer/organization name. "role" = job title / position.
+4. "url" = job URL if present in the chunk, else "".
+5. If this chunk is clearly ONE structured job (Company/URL/JD fields), return exactly one job.
+6. If this chunk is one LinkedIn "About the job" section, return exactly one job.
+7. Ignore LinkedIn chrome (People also viewed, ads). Footers belong to the same job.
+8. "Who are X" / "X is the leading…" usually means company X.
+9. Keep original order.
+10. If unclear company/role: "Unknown company" / "Unknown role".`;
 
 const LABEL_PROMPT = `You label already-split job postings from short previews.
 
@@ -96,7 +98,13 @@ function normalizeDetected(jobs: unknown): DetectedJd[] {
       const role =
         String(row.role || row.jobTitle || row.title || row.position || "").trim() ||
         fallback.role;
-      return { text, company, role } satisfies DetectedJd;
+      const urlRaw = String(row.url || row.jobUrl || row.link || "").trim();
+      return {
+        text,
+        company,
+        role,
+        ...(urlRaw ? { url: urlRaw } : {}),
+      } satisfies DetectedJd;
     })
     .filter((j): j is DetectedJd => Boolean(j));
 }

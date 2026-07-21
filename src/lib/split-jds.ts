@@ -310,9 +310,49 @@ export function chunkPasteByJobHeaders(raw: string, maxJobsPerChunk = 4): string
   return chunks.filter((c) => c.length >= MIN_JD_CHARS);
 }
 
-/** @deprecated use shouldDetectJdsWithOpenRouter */
-export function shouldRefineJdSplit(raw: string, _heuristicCount = 0): boolean {
-  return shouldDetectJdsWithOpenRouter(raw);
+/** Build small OpenRouter request units for exact splitting (not final JD logic). */
+export function buildOpenRouterSplitChunks(raw: string): string[] {
+  const text = String(raw || "").trim();
+  if (!text) return [];
+
+  // Hard user boundaries first
+  if (EXPLICIT_SPLIT.test(text)) {
+    const parts = text
+      .split(EXPLICIT_SPLIT)
+      .map((b) => b.trim())
+      .filter((b) => b.length >= MIN_JD_CHARS);
+    const out: string[] = [];
+    for (const part of parts) {
+      if (part.length <= 10000) out.push(part);
+      else out.push(...chunkPasteForLlm(part, 8000));
+    }
+    return out;
+  }
+
+  // Structured Company: blocks — one block per request when possible
+  if (looksLikeStructuredJdPaste(text)) {
+    const parts = text.split(
+      /\n(?=(?:company|employer|organization|org)\s*:)/i,
+    );
+    const blocks = parts.map((b) => b.trim()).filter((b) => b.length >= 40);
+    if (blocks.length >= 1) {
+      const out: string[] = [];
+      for (const block of blocks) {
+        if (block.length <= 10000) out.push(block);
+        else out.push(...chunkPasteForLlm(block, 8000));
+      }
+      return out;
+    }
+  }
+
+  // LinkedIn-style: one "About the job" section per request (most exact)
+  const headers = findJobHeaderStarts(text);
+  if (headers.length >= 2) {
+    return chunkPasteByJobHeaders(text, 1);
+  }
+
+  // Messy freeform: soft size chunks only to avoid Vercel 504
+  return chunkPasteForLlm(text, 8000);
 }
 
 function cleanLabel(value: string, maxLen = 80): string {

@@ -25,37 +25,13 @@ import {
   splitJobDescriptionsDetailed,
   jdPreviewSnippet,
   shouldDetectJdsWithOpenRouter,
-  chunkPasteByJobHeaders,
+  buildOpenRouterSplitChunks,
   countJobHeaders,
   looksLikeStructuredJdPaste,
   parseStructuredJdList,
   type DetectedJd,
 } from "@/lib/split-jds";
 
-async function mapPool<T, R>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<R>,
-  onProgress?: (done: number, total: number) => void,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-  let done = 0;
-  const runners = Array.from(
-    { length: Math.min(concurrency, items.length) },
-    async () => {
-      while (true) {
-        const i = next++;
-        if (i >= items.length) return;
-        results[i] = await worker(items[i], i);
-        done += 1;
-        onProgress?.(done, items.length);
-      }
-    },
-  );
-  await Promise.all(runners);
-  return results;
-}
 import ResumePreview from "@/components/ResumePreview";
 
 type StepStatus = "pending" | "active" | "done" | "error";
@@ -482,10 +458,13 @@ export default function ResumeForm() {
       return;
     }
 
-    // Instant structured count/cards (before OpenRouter labeling)
-    const structuredNow = parseStructuredJdList(text);
-    if (structuredNow.length) {
-      setRefinedJdJobs(structuredNow);
+    // Provisional count only — final jobs always come from OpenRouter split
+    const provisional =
+      parseStructuredJdList(text).length > 0
+        ? parseStructuredJdList(text)
+        : splitJobDescriptionsDetailed(text);
+    if (provisional.length) {
+      setRefinedJdJobs(provisional);
       setJdSplitStatus("refining");
     } else {
       setRefinedJdJobs(null);
@@ -523,134 +502,59 @@ export default function ResumeForm() {
         .filter(Boolean) as DetectedJd[];
     }
 
-    async function labelJobsFast(base: DetectedJd[]): Promise<DetectedJd[]> {
-      const BATCH = 12;
-      const batches: Array<{ offset: number; slice: DetectedJd[] }> = [];
-      for (let i = 0; i < base.length; i += BATCH) {
-        batches.push({ offset: i, slice: base.slice(i, i + BATCH) });
-      }
-
-      const labeled = base.map((j) => ({ ...j }));
-      const batchResults = await mapPool(
-        batches,
-        4,
-        async ({ offset, slice }) => {
-          const response = await fetch("/api/split-jds", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              mode: "label",
-              previews: slice.map((job, i) => ({
-                index: offset + i,
-                preview: job.text.replace(/\s+/g, " ").trim().slice(0, 700),
-                hintCompany: job.company,
-                hintRole: job.role,
-              })),
-            }),
-            signal: controller.signal,
-          });
-          const data = await response.json().catch(() => null);
-          if (!response.ok || !data?.ok || !Array.isArray(data.labels)) {
-            throw new Error(
-              data?.error || `Label batch failed (HTTP ${response.status})`,
-            );
-          }
-          return data.labels as Array<{
-            index: number;
-            company?: string;
-            role?: string;
-          }>;
-        },
-        (done, total) => {
-          if (!cancelled) setJdDetectProgress({ current: done, total });
-        },
-      );
-
-      for (const labels of batchResults) {
-        for (const row of labels) {
-          const index = Number(row.index);
-          if (!Number.isInteger(index) || index < 0 || index >= labeled.length) {
-            continue;
-          }
-          const company = row.company?.trim();
-          const role = row.role?.trim();
-          // Prefer OpenRouter labels when present and not unknown
-          if (company && !/^unknown company$/i.test(company)) {
-            labeled[index].company = company;
-          }
-          if (role && !/^unknown role$/i.test(role)) {
-            labeled[index].role = role;
-          }
-        }
-      }
-
-      return labeled;
-    }
-
-    async function splitJobsExact(chunks: string[]): Promise<DetectedJd[]> {
-      const parts = await mapPool(
-        chunks,
-        3,
-        async (chunk, index) => {
-          const response = await fetch("/api/split-jds", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ mode: "split", text: chunk }),
-            signal: controller.signal,
-          });
-          const data = await response.json().catch(() => null);
-          if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
-            throw new Error(
-              data?.error ||
-                `Split chunk ${index + 1}/${chunks.length} failed (HTTP ${response.status})`,
-            );
-          }
-          return normalizeJobs(data.jobs);
-        },
-        (done, total) => {
-          if (!cancelled) setJdDetectProgress({ current: done, total });
-        },
-      );
-      return parts.flat();
-    }
-
     const timer = window.setTimeout(async () => {
       try {
-        // Structured lists: cards/count already shown; OpenRouter labels company + role
-        const structured = parseStructuredJdList(text);
-        if (structured.length) {
-          setJdSplitStatus("refining");
-          const labeled = await labelJobsFast(structured);
-          if (cancelled) return;
-          setRefinedJdJobs(labeled);
-          setJdSplitStatus("ready");
-          setJdDetectProgress(null);
-          setError(null);
+        setJdSplitStatus("refining");
+        // OpenRouter is the source of truth for exact split + company/role
+        const chunks = buildOpenRouterSplitChunks(text);
+        if (!chunks.length) {
+          setJdSplitStatus("error");
+          setError("Nothing to split. Paste full JD text.");
           return;
         }
 
-        setJdSplitStatus("refining");
-        const headers = countJobHeaders(text);
-        let jobs: DetectedJd[] = [];
-
-        if (headers >= 2) {
-          const base = splitJobDescriptionsDetailed(text);
-          if (!cancelled) setRefinedJdJobs(base);
-          jobs = await labelJobsFast(base);
-        } else {
-          const chunks = chunkPasteByJobHeaders(text, 2);
-          jobs = await splitJobsExact(chunks);
+        const collected: DetectedJd[] = [];
+        const CONCURRENCY = 3;
+        for (let i = 0; i < chunks.length; i += CONCURRENCY) {
+          if (cancelled) return;
+          const wave = chunks.slice(i, i + CONCURRENCY);
+          setJdDetectProgress({
+            current: Math.min(i + wave.length, chunks.length),
+            total: chunks.length,
+          });
+          const waveJobs = await Promise.all(
+            wave.map(async (chunk, wi) => {
+              const response = await fetch("/api/split-jds", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ mode: "split", text: chunk }),
+                signal: controller.signal,
+              });
+              const data = await response.json().catch(() => null);
+              if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
+                throw new Error(
+                  data?.error ||
+                    `OpenRouter split failed (chunk ${i + wi + 1}/${chunks.length}, HTTP ${response.status})`,
+                );
+              }
+              return normalizeJobs(data.jobs);
+            }),
+          );
+          for (const part of waveJobs) collected.push(...part);
+          if (!cancelled && collected.length) {
+            setRefinedJdJobs([...collected]);
+          }
         }
 
         if (cancelled) return;
-        if (!jobs.length) {
+        if (!collected.length) {
           setJdSplitStatus("error");
           setJdDetectProgress(null);
           setError("OpenRouter returned no jobs. Try pasting again.");
           return;
         }
 
-        setRefinedJdJobs(jobs);
+        setRefinedJdJobs(collected);
         setJdSplitStatus("ready");
         setJdDetectProgress(null);
         setError(null);
@@ -1485,10 +1389,10 @@ export default function ResumeForm() {
               {isStructuredPaste ? " · structured" : ""}
               {jdSplitStatus === "refining"
                 ? jdDetectProgress
-                  ? ` · OpenRouter ${jdDetectProgress.current}/${jdDetectProgress.total}`
-                  : " · labeling…"
+                  ? ` · OpenRouter split ${jdDetectProgress.current}/${jdDetectProgress.total}`
+                  : " · OpenRouter splitting…"
                 : jdSplitStatus === "ready"
-                  ? " · ready"
+                  ? " · OpenRouter ready"
                   : ""}
               {!isStructuredPaste &&
               jobHeaderCount > 0 &&
@@ -1509,27 +1413,13 @@ export default function ResumeForm() {
             spellCheck={false}
           />
 
-          {isStructuredPaste && instantJdCount > 0 && (
+          {instantJdCount > 0 && (
             <p className="hint" style={{ marginTop: "0.75rem" }}>
-              {instantJdCount} structured JD
-              {instantJdCount === 1 ? "" : "s"} detected immediately.
               {jdSplitStatus === "refining"
-                ? " OpenRouter is labeling company + role/position on each card…"
+                ? `Provisional ${instantJdCount} JD${instantJdCount === 1 ? "" : "s"} shown. OpenRouter is splitting exactly (company + role on each card)…`
                 : jdSplitStatus === "ready"
-                  ? " Company + role/position labeled with OpenRouter."
-                  : ""}
-            </p>
-          )}
-
-          {jdSplitStatus === "refining" && !isStructuredPaste && (
-            <p className="hint" style={{ marginTop: "0.75rem" }}>
-              OpenRouter detecting
-              {jdDetectProgress
-                ? ` (${jdDetectProgress.current}/${jdDetectProgress.total})`
-                : ""}
-              {jobHeaderCount >= 2
-                ? " — exact LinkedIn sections + company/role labels (fast)."
-                : " — full split on small parallel chunks (exact)."}
+                  ? `Exact split from OpenRouter: ${instantJdCount} JD${instantJdCount === 1 ? "" : "s"} with company + role/position.`
+                  : `${instantJdCount} JD${instantJdCount === 1 ? "" : "s"} detected.`}
             </p>
           )}
 
@@ -1539,17 +1429,15 @@ export default function ResumeForm() {
                 <h3>
                   Detected job{pastedJdJobs.length === 1 ? "" : "s"} (
                   {pastedJdJobs.length})
-                  {isStructuredPaste ? " · structured" : ""}
                   {jdSplitStatus === "refining"
-                    ? " · labeling company/role…"
+                    ? " · OpenRouter splitting…"
                     : jdSplitStatus === "ready"
                       ? " · OpenRouter"
                       : ""}
                 </h3>
                 <p className="hint">
-                  {isStructuredPaste
-                    ? "Count is exact from your Company / URL / JD blocks. Each card’s company and role/position come from OpenRouter."
-                    : "Exact jobs when possible; company and role/position from OpenRouter."}
+                  Final job count, company, and role/position come from
+                  OpenRouter. Local parsing is only a temporary preview.
                 </p>
               </div>
               <ol className="jd-detect-list">
