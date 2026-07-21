@@ -60,8 +60,8 @@ export async function generateTailoredPackage(
       ? options.sourceResumeText.slice(0, 25000)
       : undefined,
     instructions: options?.sourceResumeText
-      ? "Tailor the uploaded resume to this JD. Keep factual employment history; rewrite bullets/summary/skills for ATS fit."
-      : "Generate a tailored resume from the candidate profile skeleton and JD.",
+      ? "Tailor the uploaded resume to this JD. Keep factual employment history; rewrite bullets/summary/skills for ATS fit. summary and coverLetter MUST be non-empty strings."
+      : "Generate a tailored resume from the candidate profile skeleton and JD. summary and coverLetter MUST be non-empty strings.",
   });
 
   let content = await requestJson(client, model, [
@@ -69,9 +69,9 @@ export async function generateTailoredPackage(
     { role: "user", content: userPayload },
   ]);
 
-  let parsed: TailoredPackage;
+  let parsedRaw: unknown;
   try {
-    parsed = parseModelJson<TailoredPackage>(content);
+    parsedRaw = parseModelJson(content);
   } catch (firstError) {
     content = await requestJson(client, model, [
       { role: "system", content: SYSTEM_PROMPT },
@@ -80,11 +80,11 @@ export async function generateTailoredPackage(
       {
         role: "user",
         content:
-          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. No markdown, no commentary.",
+          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Include non-empty resume.summary and coverLetter. No markdown, no commentary.",
       },
     ]);
     try {
-      parsed = parseModelJson<TailoredPackage>(content);
+      parsedRaw = parseModelJson(content);
     } catch {
       throw firstError instanceof Error
         ? firstError
@@ -92,19 +92,132 @@ export async function generateTailoredPackage(
     }
   }
 
-  const resume = normalizeResume(parsed.resume, profile, extracted);
-  const coverLetter = String(
-    (parsed as TailoredPackage).coverLetter || "",
-  ).trim();
+  let packageDraft = coerceTailoredPackage(parsedRaw);
+  let resume = normalizeResume(packageDraft.resume, profile, extracted);
+  let coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
+
+  // One repair pass if the model omitted summary/cover letter
+  if (!resume.summary || !coverLetter) {
+    content = await requestJson(client, model, [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userPayload },
+      {
+        role: "user",
+        content:
+          "Return the full JSON again. resume.summary MUST be 40-80 words tailored to the JD. coverLetter MUST be 3 short paragraphs. Do not leave either empty.",
+      },
+    ]);
+    try {
+      packageDraft = coerceTailoredPackage(parseModelJson(content));
+      resume = normalizeResume(packageDraft.resume, profile, extracted);
+      coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
+    } catch {
+      // fall through to deterministic fallbacks
+    }
+  }
 
   if (!resume.summary) {
-    throw new Error("Resume summary generation failed.");
+    resume = {
+      ...resume,
+      summary: buildFallbackSummary(profile, extracted),
+    };
   }
   if (!coverLetter) {
-    throw new Error("Cover letter generation failed.");
+    coverLetter = buildFallbackCoverLetter(profile, extracted);
   }
 
   return { resume, coverLetter };
+}
+
+function coerceTailoredPackage(raw: unknown): TailoredPackage {
+  const obj = (raw && typeof raw === "object" ? raw : {}) as Record<
+    string,
+    unknown
+  >;
+
+  // Some models nest under data / result / output
+  const root =
+    (obj.resume && typeof obj.resume === "object"
+      ? obj
+      : (obj.data as Record<string, unknown>) ||
+        (obj.result as Record<string, unknown>) ||
+        (obj.output as Record<string, unknown>) ||
+        obj) || {};
+
+  const resumeObj = (root.resume && typeof root.resume === "object"
+    ? root.resume
+    : root) as Record<string, unknown>;
+
+  const summary = pickString(
+    resumeObj.summary,
+    resumeObj.professionalSummary,
+    resumeObj.professional_summary,
+    resumeObj.profileSummary,
+    resumeObj.about,
+    obj.summary,
+  );
+
+  const coverLetter = pickString(
+    root.coverLetter,
+    root.cover_letter,
+    root.coverletter,
+    obj.coverLetter,
+    obj.cover_letter,
+  );
+
+  return {
+    resume: {
+      summary,
+      skills: (resumeObj.skills as TailoredResume["skills"]) || [],
+      experiences:
+        (resumeObj.experiences as TailoredResume["experiences"]) || [],
+      education: (resumeObj.education as TailoredResume["education"]) || [],
+      keywords: (resumeObj.keywords as string[]) || [],
+    },
+    coverLetter,
+  };
+}
+
+function pickString(...values: unknown[]): string {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (Array.isArray(value)) {
+      const joined = value.map(String).join(" ").trim();
+      if (joined) return joined;
+    }
+  }
+  return "";
+}
+
+function buildFallbackSummary(
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): string {
+  const title = extracted.jobTitle || extracted.type || "Software Engineer";
+  const skills = extracted.hardTechnicalSkills.slice(0, 5).join(", ");
+  const latest = profile.experiences[0];
+  const roleBit = latest
+    ? `${latest.title} at ${latest.company}`
+    : "professional experience across product and engineering teams";
+  const skillBit = skills
+    ? ` Core strengths include ${skills}.`
+    : " Strong delivery focus across modern software stacks.";
+  return `${profile.personal.name || "Candidate"} is a ${title} with ${roleBit}.${skillBit} Proven ability to ship reliable solutions, collaborate cross-functionally, and align technical work to business outcomes for ${extracted.company || "target employers"}.`;
+}
+
+function buildFallbackCoverLetter(
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): string {
+  const name = profile.personal.name || "Candidate";
+  const company = extracted.company || "your team";
+  const title = extracted.jobTitle || "the open role";
+  const skills = extracted.hardTechnicalSkills.slice(0, 4).join(", ");
+  return [
+    `Dear Hiring Manager,\n\nI am writing to apply for the ${title} role at ${company}. My background aligns closely with the position and I am excited about the opportunity to contribute.`,
+    `In recent roles I have delivered production systems and collaborated with cross-functional partners${skills ? `, including work involving ${skills}` : ""}. I focus on clear communication, reliable delivery, and measurable impact.`,
+    `I would welcome the chance to discuss how my experience can support ${company}. Thank you for your time and consideration.\n\nSincerely,\n${name}`,
+  ].join("\n\n");
 }
 
 async function requestJson(
@@ -244,7 +357,9 @@ function normalizeResume(
   });
 
   return {
-    summary: sanitizePlainText(String(safe.summary || "")),
+    summary:
+      sanitizePlainText(String(safe.summary || "")) ||
+      buildFallbackSummary(profile, extracted),
     skills: skillGroups,
     experiences,
     education:
