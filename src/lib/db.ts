@@ -386,7 +386,7 @@ const globalForDb = globalThis as unknown as {
 export const db =
   globalForDb.postgresPool ??
   new Pool({
-    connectionString: process.env.DATABASE_URL,
+    connectionString: process.env.CUSTOM_DATABASE_URL,
     ssl:
       process.env.NODE_ENV === "production"
         ? { rejectUnauthorized: false }
