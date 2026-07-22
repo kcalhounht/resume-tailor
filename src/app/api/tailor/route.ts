@@ -121,7 +121,8 @@ export async function POST(request: Request) {
               },
             });
 
-            // Slim extracted payload — full JD extract is unused by the UI.
+            // Mark success first without file bytes — large base64 used to kill
+            // the stream at Zip and leave the card as "Connection closed".
             send({
               type: "job_done",
               index,
@@ -150,8 +151,20 @@ export async function POST(request: Request) {
               resume: result.resume,
               coverLetter: result.coverLetter,
               personal: result.personal,
-              downloads: result.downloads,
             });
+
+            if (result.downloads) {
+              send({
+                type: "job_files",
+                index,
+                jobUrl,
+                zipName: result.zipName,
+                resumeDocxName: result.resumeDocxName,
+                resumePdfName: result.resumePdfName,
+                coverLetterDocxName: result.coverLetterDocxName,
+                downloads: result.downloads,
+              });
+            }
 
             outcomes.push({ ok: true });
           } catch (err) {

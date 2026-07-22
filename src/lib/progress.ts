@@ -72,6 +72,22 @@ export type ProgressEvent =
       };
     }
   | {
+      /** File bytes sent after job_done so a large payload can't kill the success event. */
+      type: "job_files";
+      index: number;
+      jobUrl: string;
+      resumeDocxName: string;
+      resumePdfName: string;
+      coverLetterDocxName: string;
+      zipName: string;
+      downloads: {
+        zipBase64?: string;
+        resumeDocxBase64: string;
+        resumePdfBase64: string;
+        coverLetterDocxBase64: string;
+      };
+    }
+  | {
       type: "job_error";
       index: number;
       jobUrl: string;

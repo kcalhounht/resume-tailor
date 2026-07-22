@@ -938,53 +938,88 @@ export default function ResumeForm() {
     [jobs, previewJobIndex],
   );
 
+  async function fetchPackageDownloads(job: {
+    index: number;
+    company?: string;
+    jobTitle?: string;
+    resume?: TailoredResume;
+    personal?: PersonalInfo;
+    coverLetter?: string;
+    resumeDocxName?: string;
+    resumePdfName?: string;
+    coverLetterDocxName?: string;
+  }): Promise<{
+    downloadUrls: NonNullable<JobProgress["downloadUrls"]>;
+    meta: {
+      company?: string;
+      zipName?: string;
+      folderName?: string;
+      resumeDocxName?: string;
+      resumePdfName?: string;
+      coverLetterDocxName?: string;
+    };
+  } | null> {
+    if (!job.resume || !job.personal || !job.coverLetter) return null;
+    const response = await fetch("/api/repackage", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        index: job.index,
+        company: job.company || "Company",
+        jobTitle: job.jobTitle || "Role",
+        personal: job.personal,
+        resume: job.resume,
+        coverLetter: job.coverLetter,
+      }),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok || !data?.ok || !data.downloads) {
+      throw new Error(data?.error || "Failed to update downloads");
+    }
+    return {
+      downloadUrls: buildDownloadUrls(data.downloads, {
+        resumeDocxName:
+          data.resumeDocxName || job.resumeDocxName || "resume.docx",
+        resumePdfName: data.resumePdfName || job.resumePdfName || "resume.pdf",
+        coverLetterDocxName:
+          data.coverLetterDocxName ||
+          job.coverLetterDocxName ||
+          "cover-letter.docx",
+      }),
+      meta: {
+        company: data.company,
+        zipName: data.zipName,
+        folderName: data.folderName,
+        resumeDocxName: data.resumeDocxName,
+        resumePdfName: data.resumePdfName,
+        coverLetterDocxName: data.coverLetterDocxName,
+      },
+    };
+  }
+
   async function updateDownloadsFromPreview(job: JobProgress) {
     if (!job.resume || !job.personal || !job.coverLetter) return;
     setRepackaging(true);
     setRepackageMessage(null);
     setError(null);
     try {
-      const response = await fetch("/api/repackage", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          index: job.index,
-          company: job.company || "Company",
-          jobTitle: job.jobTitle || "Role",
-          personal: job.personal,
-          resume: job.resume,
-          coverLetter: job.coverLetter,
-        }),
-      });
-      const data = await response.json().catch(() => null);
-      if (!response.ok || !data?.ok) {
-        throw new Error(data?.error || "Failed to update downloads");
-      }
-
-      const downloadUrls = data.downloads
-        ? buildDownloadUrls(data.downloads, {
-            resumeDocxName: data.resumeDocxName || job.resumeDocxName || "resume.docx",
-            resumePdfName: data.resumePdfName || job.resumePdfName || "resume.pdf",
-            coverLetterDocxName:
-              data.coverLetterDocxName ||
-              job.coverLetterDocxName ||
-              "cover-letter.docx",
-          })
-        : undefined;
+      const packed = await fetchPackageDownloads(job);
+      if (!packed) throw new Error("Failed to update downloads");
 
       setJobs((prev) =>
         prev.map((item) =>
           item.index === job.index
             ? {
                 ...item,
-                company: data.company || item.company,
-                zipName: data.zipName || item.zipName,
-                folderName: data.folderName || item.folderName,
-                resumeDocxName: data.resumeDocxName || item.resumeDocxName,
-                resumePdfName: data.resumePdfName || item.resumePdfName,
+                company: packed.meta.company || item.company,
+                zipName: packed.meta.zipName || item.zipName,
+                folderName: packed.meta.folderName || item.folderName,
+                resumeDocxName:
+                  packed.meta.resumeDocxName || item.resumeDocxName,
+                resumePdfName: packed.meta.resumePdfName || item.resumePdfName,
                 coverLetterDocxName:
-                  data.coverLetterDocxName || item.coverLetterDocxName,
-                downloadUrls: downloadUrls ?? item.downloadUrls,
+                  packed.meta.coverLetterDocxName || item.coverLetterDocxName,
+                downloadUrls: packed.downloadUrls,
               }
             : item,
         ),
@@ -1187,6 +1222,8 @@ export default function ResumeForm() {
     let buffer = "";
     let sawTerminal = false;
     let ok = false;
+    let doneEvent: Extract<ProgressEvent, { type: "job_done" }> | null = null;
+    let gotFiles = false;
 
     while (true) {
       const { done, value } = await reader.read();
@@ -1214,13 +1251,29 @@ export default function ResumeForm() {
         } else if (event.type === "job_done") {
           sawTerminal = true;
           ok = true;
+          doneEvent = event;
           patchJob(event.index, (job) => markJobDone(job, event));
+        } else if (event.type === "job_files") {
+          gotFiles = true;
+          patchJob(event.index, (job) => ({
+            ...job,
+            zipName: event.zipName || job.zipName,
+            resumeDocxName: event.resumeDocxName || job.resumeDocxName,
+            resumePdfName: event.resumePdfName || job.resumePdfName,
+            coverLetterDocxName:
+              event.coverLetterDocxName || job.coverLetterDocxName,
+            downloadUrls: buildDownloadUrls(event.downloads, {
+              resumeDocxName: event.resumeDocxName,
+              resumePdfName: event.resumePdfName,
+              coverLetterDocxName: event.coverLetterDocxName,
+            }),
+          }));
         } else if (event.type === "job_error") {
           sawTerminal = true;
           ok = false;
           patchJob(event.index, (job) => markJobError(job, event));
         } else if (event.type === "done") {
-          // per-job done is informational; terminal state comes from job_* 
+          // per-job done is informational; terminal state comes from job_*
         } else if (event.type === "fatal") {
           sawTerminal = true;
           ok = false;
@@ -1236,6 +1289,52 @@ export default function ResumeForm() {
           );
         }
       }
+    }
+
+    // Success was recorded but file bytes never arrived — rebuild via repackage.
+    if (ok && doneEvent && !gotFiles && !doneEvent.downloads) {
+      try {
+        const packed = await fetchPackageDownloads({
+          index: doneEvent.index,
+          company: doneEvent.company,
+          jobTitle: doneEvent.extracted.jobTitle,
+          resume: doneEvent.resume,
+          personal: doneEvent.personal,
+          coverLetter: doneEvent.coverLetter,
+          resumeDocxName: doneEvent.resumeDocxName,
+          resumePdfName: doneEvent.resumePdfName,
+          coverLetterDocxName: doneEvent.coverLetterDocxName,
+        });
+        if (packed) {
+          patchJob(doneEvent.index, (job) => ({
+            ...job,
+            company: packed.meta.company || job.company,
+            zipName: packed.meta.zipName || job.zipName,
+            folderName: packed.meta.folderName || job.folderName,
+            resumeDocxName: packed.meta.resumeDocxName || job.resumeDocxName,
+            resumePdfName: packed.meta.resumePdfName || job.resumePdfName,
+            coverLetterDocxName:
+              packed.meta.coverLetterDocxName || job.coverLetterDocxName,
+            downloadUrls: packed.downloadUrls,
+          }));
+        }
+      } catch (err) {
+        console.warn("Auto-repackage after missing job_files failed:", err);
+      }
+    } else if (ok && doneEvent?.downloads && !gotFiles) {
+      // Legacy payload: downloads embedded in job_done
+      patchJob(doneEvent.index, (job) =>
+        job.downloadUrls
+          ? job
+          : {
+              ...job,
+              downloadUrls: buildDownloadUrls(doneEvent!.downloads!, {
+                resumeDocxName: doneEvent!.resumeDocxName,
+                resumePdfName: doneEvent!.resumePdfName,
+                coverLetterDocxName: doneEvent!.coverLetterDocxName,
+              }),
+            },
+      );
     }
 
     if (!sawTerminal) {
