@@ -1094,8 +1094,8 @@ export default function ResumeForm() {
   ) {
     setError(null);
 
-    /** Separate HTTP requests per JD — safe to run a few in parallel. */
-    const BATCH_CONCURRENCY = 3;
+    /** Separate HTTP requests per JD — 2 keeps quality retries inside budget. */
+    const BATCH_CONCURRENCY = 2;
 
     if (mode === "batch") {
       setJobs(

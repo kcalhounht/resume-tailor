@@ -16,6 +16,8 @@ import { sanitizePlainText } from "./validate-resume";
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
 Create a tailored resume and cover letter that maximize ATS keyword match for the target role.
 
+Accuracy is the top priority — every bullet must be specific and distinct.
+
 Hard rules:
 1. Resume sections: Summary, Skills, Experience, Education.
 2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
@@ -24,17 +26,16 @@ Hard rules:
 3. Each experience MUST include:
    - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
    - exactly 7 bullet points of accomplishments.
-4. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
+4. Each bullet must be professional, specific (~25-40 words), and UNIQUE. Never repeat the same sentence or near-duplicate wording across bullets.
 5. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
-6. Include slightly MORE relevant experience breadth than the JD strictly requires.
+6. Ground bullets in the candidate's real employers/titles and the JD. Prefer concrete stack, systems, and responsibilities over vague "partnered with stakeholders" filler.
 7. Mirror JD terminology and hard skills heavily for ATS scoring.
 8. keywords: array of important JD keywords/phrases that should be bolded.
 9. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
 10. Keep the candidate's company names, periods, locations, and education (school, degree, discipline, period, location) exactly as given. You may refine job titles slightly if plausible.
-11. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
-12. When sourceResumeText is provided: treat it as the candidate's real resume. Rewrite and reorganize that content to fit the JD. Prefer true skills/achievements from the source. Do not invent employers, degrees, or major claims absent from the source.
-13. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
-14. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
+11. Do not invent employers or schools. When sourceResumeText is provided, prefer true achievements from it; do not invent major claims absent from the source or profile.
+12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
+13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
 
 JSON shape:
 {
@@ -48,8 +49,8 @@ JSON shape:
   "coverLetter": string
 }`;
 
-/** Keep each attempt short so Generate falls back instead of killing the SSE stream. */
-const GENERATE_TIMEOUT_MS = 35_000;
+/** Abort hung calls, but allow enough time for a real quality completion. */
+const GENERATE_TIMEOUT_MS = 60_000;
 
 function buildFallbackPackage(
   profile: CandidateProfile,
@@ -61,56 +62,139 @@ function buildFallbackPackage(
   };
 }
 
+function countUniqueBullets(bullets: unknown): number {
+  if (!Array.isArray(bullets)) return 0;
+  const seen = new Set<string>();
+  for (const raw of bullets) {
+    const key = String(raw || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 80);
+    if (key.length >= 24) seen.add(key);
+  }
+  return seen.size;
+}
+
+/** True when the model returned thin/duplicate experience content. */
+function isWeakModelPackage(
+  draft: TailoredPackage,
+  profile: CandidateProfile,
+): boolean {
+  const summary = String(draft.resume?.summary || "").trim();
+  if (summary.length < 80) return true;
+  if (!String(draft.coverLetter || "").trim()) return true;
+
+  for (let i = 0; i < profile.experiences.length; i++) {
+    const exp = draft.resume?.experiences?.[i];
+    const unique = countUniqueBullets(exp?.bullets);
+    if (unique < 5) return true;
+    const overview = String(exp?.overview || "").trim();
+    if (overview.length < 40) return true;
+  }
+  return false;
+}
+
+function finalizePackage(
+  draft: TailoredPackage,
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): TailoredPackage {
+  let resume = normalizeResume(draft.resume, profile, extracted);
+  let coverLetter = sanitizePlainText(draft.coverLetter || "");
+
+  if (!resume.summary) {
+    resume = {
+      ...resume,
+      summary: buildFallbackSummary(profile, extracted),
+    };
+  }
+  if (!coverLetter) {
+    coverLetter = buildFallbackCoverLetter(profile, extracted);
+  }
+  return { resume, coverLetter };
+}
+
 export async function generateTailoredPackage(
   profile: CandidateProfile,
   extracted: ExtractedJD,
   rawJd: string,
   options?: { sourceResumeText?: string },
 ): Promise<TailoredPackage> {
-  try {
-    const client = getLlmClient();
-    const model = getLlmModel();
-    const userPayload = JSON.stringify({
-      candidate: profile,
-      extractedJd: extracted,
-      // Smaller prompt → faster OpenRouter completions.
-      rawJobDescription: rawJd.slice(0, 8000),
-      sourceResumeText: options?.sourceResumeText
-        ? options.sourceResumeText.slice(0, 12000)
-        : undefined,
-      instructions: options?.sourceResumeText
-        ? "Tailor the uploaded resume to this JD. Keep factual employment history; rewrite bullets/summary/skills for ATS fit. summary and coverLetter MUST be non-empty strings."
-        : "Generate a tailored resume from the candidate profile skeleton and JD. summary and coverLetter MUST be non-empty strings.",
-    });
+  const client = getLlmClient();
+  const model = getLlmModel();
+  const userPayload = JSON.stringify({
+    candidate: profile,
+    extractedJd: extracted,
+    rawJobDescription: rawJd.slice(0, 12000),
+    sourceResumeText: options?.sourceResumeText
+      ? options.sourceResumeText.slice(0, 20000)
+      : undefined,
+    instructions: options?.sourceResumeText
+      ? "ACCURACY FIRST: Tailor the uploaded resume to this JD. Keep factual employment history. Rewrite bullets/summary/skills for ATS fit with DISTINCT, specific bullets (no repeated filler). summary and coverLetter MUST be non-empty."
+      : "ACCURACY FIRST: Generate a tailored resume from the candidate profile and JD. Each experience needs 7 UNIQUE specific bullets grounded in that company/role and the JD. No repeated sentences. summary and coverLetter MUST be non-empty.",
+  });
 
-    const content = await requestJson(client, model, [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPayload },
-    ]);
+  const baseMessages: Array<{
+    role: "system" | "user" | "assistant";
+    content: string;
+  }> = [
+    { role: "system", content: SYSTEM_PROMPT },
+    { role: "user", content: userPayload },
+  ];
 
-    let parsedRaw: unknown;
+  async function runOnce(
+    messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  ): Promise<TailoredPackage | null> {
     try {
-      parsedRaw = parseModelJson(content);
-    } catch {
-      // Skip a second slow repair round-trip — ship a local package instead.
+      let content = await requestJson(client, model, messages);
+      let parsedRaw: unknown;
+      try {
+        parsedRaw = parseModelJson(content);
+      } catch {
+        content = await requestJson(client, model, [
+          ...messages,
+          { role: "assistant", content },
+          {
+            role: "user",
+            content:
+              "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Each experience needs exactly 7 DISTINCT bullets. Include non-empty resume.summary and coverLetter. No markdown, no commentary.",
+          },
+        ]);
+        parsedRaw = parseModelJson(content);
+      }
+      return coerceTailoredPackage(parsedRaw);
+    } catch (err) {
+      console.warn(
+        "Generate attempt failed:",
+        err instanceof Error ? err.message : err,
+      );
+      return null;
+    }
+  }
+
+  try {
+    let draft = await runOnce(baseMessages);
+
+    // Quality retry when the first pass is thin or repetitive.
+    if (!draft || isWeakModelPackage(draft, profile)) {
+      draft =
+        (await runOnce([
+          ...baseMessages,
+          {
+            role: "user",
+            content:
+              "Previous output was too generic or had too few unique bullets. Rewrite the FULL JSON with higher specificity: distinct accomplishment bullets per role (no near-duplicates), JD-aligned skills, strong summary, and a real cover letter.",
+          },
+        ])) || draft;
+    }
+
+    if (!draft) {
+      console.warn("Generate exhausted LLM attempts; using local fallback package.");
       return buildFallbackPackage(profile, extracted);
     }
 
-    const packageDraft = coerceTailoredPackage(parsedRaw);
-    let resume = normalizeResume(packageDraft.resume, profile, extracted);
-    let coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
-
-    if (!resume.summary) {
-      resume = {
-        ...resume,
-        summary: buildFallbackSummary(profile, extracted),
-      };
-    }
-    if (!coverLetter) {
-      coverLetter = buildFallbackCoverLetter(profile, extracted);
-    }
-
-    return { resume, coverLetter };
+    return finalizePackage(draft, profile, extracted);
   } catch (err) {
     console.warn(
       "Generate falling back to deterministic package:",
@@ -239,6 +323,7 @@ async function requestJson(
 ): Promise<string> {
   const attempts: Array<{ useJsonObjectFormat: boolean; label: string }> = [
     { useJsonObjectFormat: true, label: "json_object" },
+    { useJsonObjectFormat: false, label: "plain" },
   ];
 
   let lastError: Error | null = null;
@@ -248,7 +333,7 @@ async function requestJson(
         client.chat.completions.create(
           {
             model,
-            temperature: 0.3,
+            temperature: 0.35,
             ...(attempt.useJsonObjectFormat
               ? { response_format: { type: "json_object" as const } }
               : {}),

@@ -69,8 +69,8 @@ export async function processOneJob(options: {
   onStep(
     "generating",
     sourceResumeText
-      ? "Tailoring uploaded resume to the JD…"
-      : "Generating resume and cover letter…",
+      ? "Tailoring uploaded resume to the JD (accuracy pass)…"
+      : "Generating resume and cover letter (accuracy pass)…",
   );
   let tailored = await generateTailoredPackage(profile, extracted, rawText, {
     sourceResumeText,
@@ -80,14 +80,11 @@ export async function processOneJob(options: {
   const validation = validateAndFixResume(tailored, profile, extracted);
   tailored = validation.package;
 
-  // Never re-run Generate here — a second OpenRouter pass often blows the
-  // serverless budget and leaves Zip with a closed connection.
   if (!validation.ok) {
     const critical = validation.issues
       .filter((i) => i.level === "error")
       .map((i) => i.message)
       .join("; ");
-    // Prefer shipping a fixed package over failing the whole job.
     if (!tailored.resume.summary || !tailored.coverLetter) {
       throw new Error(
         critical || "Resume failed validation after formatting fixes.",
