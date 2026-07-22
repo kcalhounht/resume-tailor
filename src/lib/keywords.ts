@@ -1,23 +1,47 @@
 /** Split text into segments, bolding keyword matches (case-insensitive, longer first). */
+
+function stripMarkdownArtifacts(text: string): string {
+  return String(text || "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/__([^_]+)__/g, "$1")
+    .replace(/\*([^*\n]+)\*/g, "$1")
+    .replace(/_([^_\n]+)_/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\*\*/g, "")
+    .replace(/__/g, "")
+    .replace(/`/g, "");
+}
+
+/** Dedupe keywords (case-insensitive) and drop tiny/noisy tokens. */
+export function sanitizeKeywords(keywords: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of keywords) {
+    const k = stripMarkdownArtifacts(String(raw || "")).trim();
+    if (k.length < 2 || k.length > 48) continue;
+    // Skip generic single words that create noisy bolding in every sentence.
+    if (
+      /^(and|or|the|a|an|to|of|in|for|with|on|at|by|from|as|is|are|be|this|that|remote|hybrid|onsite|company|engineer)$/i.test(
+        k,
+      )
+    ) {
+      continue;
+    }
+    const key = k.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(k);
+  }
+  return out.sort((a, b) => b.length - a.length);
+}
+
 export function segmentWithKeywords(
   text: string,
   keywords: string[],
 ): Array<{ text: string; bold: boolean }> {
   // Safety net: never render markdown bold markers in the final document
-  const cleaned = String(text || "")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/__([^_]+)__/g, "$1")
-    .replace(/\*\*/g, "")
-    .replace(/__/g, "");
-
-  const unique = Array.from(
-    new Set(
-      keywords
-        .map((k) => k.trim())
-        .filter((k) => k.length >= 2)
-        .sort((a, b) => b.length - a.length),
-    ),
-  );
+  const cleaned = stripMarkdownArtifacts(text);
+  const unique = sanitizeKeywords(keywords);
 
   if (!unique.length || !cleaned) {
     return [{ text: cleaned, bold: false }];

@@ -41,12 +41,36 @@ Rules:
 3. Keep company names, dates/periods, and school names faithful to the source.
 4. Prefer 1-8 experiences, most recent first.
 5. LinkedIn may be a full URL or handle; keep as found when possible.
-6. No markdown. Plain text only. Keep the JSON compact.`;
+6. personal.name must be the candidate's real full name from the header (never "Candidate").
+7. personal.email / phone / location must be exact contact fields — never mix in job titles.
+8. No markdown. Plain text only. Keep the JSON compact.`;
 
 export type ParsedResumeProfile = CandidateProfile & {
   skills: string[];
   summary: string;
 };
+
+function isPlaceholderCompany(company: string): boolean {
+  return /^(company|previous employer|employer|unknown)$/i.test(company.trim());
+}
+
+function isPlaceholderName(name: string): boolean {
+  return !name.trim() || /^(candidate|name|your name)$/i.test(name.trim());
+}
+
+function nameFromEmail(email: string): string {
+  const local = email.split("@")[0] || "";
+  const parts = local
+    .replace(/[0-9._-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter((p) => p.length >= 2);
+  if (parts.length < 2) return "";
+  return parts
+    .slice(0, 3)
+    .map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase())
+    .join(" ");
+}
 
 function normalizeParsed(parsed: {
   personal?: Partial<CandidateProfile["personal"]>;
@@ -63,6 +87,10 @@ function normalizeParsed(parsed: {
     location: String(parsed.personal?.location || "").trim(),
   };
 
+  if (isPlaceholderName(personal.name) && personal.email) {
+    personal.name = nameFromEmail(personal.email) || personal.name;
+  }
+
   const experiences = Array.isArray(parsed.experiences)
     ? parsed.experiences
         .map((exp) => ({
@@ -71,8 +99,34 @@ function normalizeParsed(parsed: {
           period: String(exp?.period || "").trim(),
           location: String(exp?.location || "").trim() || "Remote",
         }))
-        .filter((exp) => exp.company && exp.title)
+        .filter(
+          (exp) =>
+            exp.company &&
+            exp.title &&
+            !isPlaceholderCompany(exp.company) &&
+            !/^(title|role|position)$/i.test(exp.title),
+        )
     : [];
+
+  // Keep weaker rows only if we have nothing better
+  const looseExperiences =
+    experiences.length > 0
+      ? experiences
+      : Array.isArray(parsed.experiences)
+        ? parsed.experiences
+            .map((exp) => ({
+              company: String(exp?.company || "").trim(),
+              title: String(exp?.title || "").trim(),
+              period: String(exp?.period || "").trim(),
+              location: String(exp?.location || "").trim() || "Remote",
+            }))
+            .filter(
+              (exp) =>
+                exp.company &&
+                exp.title &&
+                !isPlaceholderCompany(exp.company),
+            )
+        : [];
 
   const education = Array.isArray(parsed.education)
     ? parsed.education
@@ -86,12 +140,12 @@ function normalizeParsed(parsed: {
         .filter((edu) => edu.school)
     : [];
 
-  if (!personal.name) {
+  if (isPlaceholderName(personal.name)) {
     throw new Error(
       "Could not find a name on the uploaded resume. Check the PDF and try again.",
     );
   }
-  if (!experiences.length) {
+  if (!looseExperiences.length) {
     throw new Error(
       "Could not find work experience on the uploaded resume. Check the PDF and try again.",
     );
@@ -103,12 +157,19 @@ function normalizeParsed(parsed: {
   if (!personal.location) personal.location = "Remote";
 
   const skills = Array.isArray(parsed.skills)
-    ? parsed.skills.map(String).map((s) => s.trim()).filter(Boolean)
+    ? Array.from(
+        new Set(
+          parsed.skills
+            .map(String)
+            .map((s) => s.trim())
+            .filter(Boolean),
+        ),
+      )
     : [];
 
   return {
     personal,
-    experiences,
+    experiences: looseExperiences,
     education: education.length
       ? education
       : structuredClone(EMPTY_PROFILE.education),
@@ -137,19 +198,36 @@ export function extractProfileFromResumeTextHeuristic(
     /(?:https?:\/\/)?(?:www\.)?linkedin\.com\/in\/[A-Za-z0-9_-]+\/?/i,
   );
 
+  const nameCandidate = lines.find(
+    (l) =>
+      l.length >= 3 &&
+      l.length <= 70 &&
+      !/@/.test(l) &&
+      !/\d{3}/.test(l) &&
+      !/linkedin|experience|education|skills|summary|phone|email|http/i.test(
+        l,
+      ) &&
+      /^[\p{L}][\p{L}\s.'’-]+$/u.test(l) &&
+      l.split(/\s+/).length >= 2 &&
+      l.split(/\s+/).length <= 5,
+  );
+
+  const email = emailMatch?.[0] || "";
   const name =
+    nameCandidate ||
+    nameFromEmail(email) ||
     lines.find(
       (l) =>
         l.length >= 3 &&
-        l.length <= 60 &&
+        l.length <= 50 &&
         !/@/.test(l) &&
-        !/linkedin|experience|education|skills|summary|phone|email/i.test(l) &&
-        /^[A-Za-zÀ-ž][A-Za-zÀ-ž\s.'-]+$/.test(l),
-    ) || "Candidate";
+        /^[\p{L}][\p{L}\s.'’-]+$/u.test(l),
+    ) ||
+    "";
 
   const locationLine =
     lines.find((l) =>
-      /\b(remote|warsaw|krakow|kraków|poland|germany|berlin|london|new york|usa|uk)\b/i.test(
+      /\b(remote|warsaw|krakow|kraków|poland|germany|berlin|london|new york|usa|uk|mexico|méxico|zumpango|cdmx|ciudad de méxico|guadalajara|monterrey)\b/i.test(
         l,
       ),
     ) || "";
@@ -166,56 +244,58 @@ export function extractProfileFromResumeTextHeuristic(
     const nearby = [lines[i - 1], lines[i - 2], lines[i + 1], line]
       .filter(Boolean)
       .join(" | ");
-    const titleGuess =
-      lines[i - 1] && !periodRe.test(lines[i - 1])
-        ? lines[i - 1]
-        : lines[i - 2] || "Engineer";
-    const companyGuess =
-      lines[i - 2] && lines[i - 2] !== titleGuess
-        ? lines[i - 2]
-        : lines[i + 1] && !periodRe.test(lines[i + 1])
-          ? lines[i + 1]
-          : "Company";
+
+    let titleGuess = "";
+    let companyGuess = "";
+
+    // Common patterns: "Title — Company" or Company on prior line, title above period
+    const titled = (lines[i - 1] || "").match(
+      /^(.{3,60}?)\s+[|–—-]\s+(.{2,60})$/,
+    );
+    if (titled) {
+      titleGuess = titled[1].trim();
+      companyGuess = titled[2].trim();
+    } else {
+      titleGuess =
+        lines[i - 1] && !periodRe.test(lines[i - 1]) ? lines[i - 1] : "";
+      companyGuess =
+        lines[i - 2] && lines[i - 2] !== titleGuess
+          ? lines[i - 2]
+          : lines[i + 1] && !periodRe.test(lines[i + 1])
+            ? lines[i + 1]
+            : "";
+    }
+
+    if (
+      !companyGuess ||
+      isPlaceholderCompany(companyGuess) ||
+      /^(engineer|software engineer)$/i.test(companyGuess)
+    ) {
+      continue;
+    }
+    if (!titleGuess) titleGuess = "Software Engineer";
 
     experiences.push({
       company: companyGuess.slice(0, 80),
       title: titleGuess.slice(0, 80),
       period: period[0].replace(/\s+/g, " ").trim(),
-      location: /remote/i.test(nearby) ? "Remote" : locationLine.slice(0, 60) || "Remote",
+      location: /remote/i.test(nearby)
+        ? "Remote"
+        : locationLine.slice(0, 60) || "Remote",
     });
   }
-
-  if (!experiences.length) {
-    experiences.push({
-      company: "Previous Employer",
-      title: "Software Engineer",
-      period: "2022 — Present",
-      location: "Remote",
-    });
-  }
-
-  const skillsSection = text.match(
-    /skills[:\n]+([\s\S]{0,1200}?)(?:\n\s*(?:experience|education|projects|summary)\b|$)/i,
-  );
-  const skills = skillsSection
-    ? skillsSection[1]
-        .split(/[,|•\n]/)
-        .map((s) => s.trim())
-        .filter((s) => s.length >= 2 && s.length <= 40)
-        .slice(0, 30)
-    : [];
 
   return normalizeParsed({
     personal: {
       name,
-      email: emailMatch?.[0] || "",
+      email,
       phone: phoneMatch?.[0] || "",
       linkedin: linkedinMatch?.[0] || "",
       location: locationLine.slice(0, 80),
     },
     experiences,
     education: [],
-    skills,
+    skills: [],
     summary: "",
   });
 }
@@ -240,6 +320,7 @@ export async function extractProfileFromResumeText(
           role: "user",
           content: JSON.stringify({
             resumeText: sliced,
+            task: "Extract ONLY the candidate profile fields. Do not write a tailored resume.",
           }),
         },
       ],
@@ -258,13 +339,24 @@ export async function extractProfileFromResumeText(
       summary?: unknown;
     }>(content);
 
+    // If the model wrongly returned a tailored resume shape, reject and use heuristic.
+    const asAny = parsed as Record<string, unknown>;
+    if (asAny.resume && typeof asAny.resume === "object" && !parsed.personal) {
+      throw new Error("Model returned tailored resume instead of profile.");
+    }
+
     return normalizeParsed(parsed);
   } catch (err) {
     console.warn(
       "Resume LLM extract failed; using local heuristic:",
       formatOpenRouterError(err),
     );
-    // Never block the pipeline on OpenRouter failures — local parse keeps Generate going.
-    return extractProfileFromResumeTextHeuristic(resumeText);
+    try {
+      return extractProfileFromResumeTextHeuristic(resumeText);
+    } catch (fallbackErr) {
+      throw fallbackErr instanceof Error
+        ? fallbackErr
+        : new Error("Failed to parse uploaded resume.");
+    }
   }
 }

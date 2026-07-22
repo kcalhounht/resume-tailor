@@ -113,42 +113,44 @@ function plainContactRun(text: string) {
 }
 
 function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
-  const contactChildren: Array<TextRun | ExternalHyperlink> = [];
-
-  const pushSep = () => {
-    if (contactChildren.length) contactChildren.push(contactSeparator());
-  };
-
-  if (personal.phone) {
-    pushSep();
-    contactChildren.push(
-      hyperlinkRun(personal.phone, phoneHref(personal.phone)),
-    );
+  const items: Array<{ label: string; href?: string }> = [];
+  if (personal.phone && !/^n\/?a$/i.test(personal.phone)) {
+    items.push({ label: personal.phone, href: phoneHref(personal.phone) });
   }
-  if (personal.email) {
-    pushSep();
-    contactChildren.push(
-      hyperlinkRun(personal.email, emailHref(personal.email)),
-    );
+  if (personal.email && !/candidate@example\.com/i.test(personal.email)) {
+    items.push({ label: personal.email, href: emailHref(personal.email) });
   }
-  if (personal.linkedin) {
-    pushSep();
-    contactChildren.push(
-      hyperlinkRun(
-        linkedInDisplay(personal.linkedin),
-        linkedInHref(personal.linkedin),
-      ),
-    );
+  if (
+    personal.linkedin &&
+    !/^linkedin\.com\/?$/i.test(personal.linkedin.trim())
+  ) {
+    items.push({
+      label: linkedInDisplay(personal.linkedin),
+      href: linkedInHref(personal.linkedin),
+    });
   }
   if (personal.location) {
-    pushSep();
-    contactChildren.push(plainContactRun(personal.location));
+    items.push({ label: personal.location });
   }
+
+  // Two short centered lines max — avoids DOCX overflow collisions.
+  const line1 = items.slice(0, 2);
+  const line2 = items.slice(2);
+
+  const toChildren = (row: typeof items) => {
+    const children: Array<TextRun | ExternalHyperlink> = [];
+    for (const item of row) {
+      if (children.length) children.push(contactSeparator());
+      if (item.href) children.push(hyperlinkRun(item.label, item.href));
+      else children.push(plainContactRun(item.label));
+    }
+    return children;
+  };
 
   return [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 100 },
+      spacing: { after: 80 },
       children: [
         new TextRun({
           text: personal.name.toUpperCase(),
@@ -161,17 +163,36 @@ function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 160 },
-      border: {
-        bottom: {
-          style: BorderStyle.SINGLE,
-          size: 12,
-          color: "1F4E79",
-          space: 10,
-        },
-      },
-      children: contactChildren,
+      spacing: { after: line2.length ? 40 : 160 },
+      border: line2.length
+        ? undefined
+        : {
+            bottom: {
+              style: BorderStyle.SINGLE,
+              size: 12,
+              color: "1F4E79",
+              space: 10,
+            },
+          },
+      children: toChildren(line1),
     }),
+    ...(line2.length
+      ? [
+          new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { after: 160 },
+            border: {
+              bottom: {
+                style: BorderStyle.SINGLE,
+                size: 12,
+                color: "1F4E79",
+                space: 10,
+              },
+            },
+            children: toChildren(line2),
+          }),
+        ]
+      : []),
   ];
 }
 
@@ -379,8 +400,8 @@ function drawPdfContactLine(
   const usableWidth =
     doc.page.width - doc.page.margins.left - doc.page.margins.right;
   let y = Number.isFinite(doc.y) ? doc.y : doc.page.margins.top + 40;
-  const sep = " | ";
-  const lineHeight = 12;
+  const sep = "  ·  ";
+  const lineHeight = 13;
 
   doc.font(PDF_FONT).fontSize(9);
 
@@ -390,19 +411,15 @@ function drawPdfContactLine(
     return;
   }
 
+  // Never truncate emails/phones — wrap to the next line instead of overlapping.
   const sepWidth = doc.widthOfString(sep);
-  const measured = parts.map((part) => {
-    const rawWidth = doc.widthOfString(part.label);
-    if (rawWidth <= usableWidth) {
-      return { ...part, width: rawWidth };
-    }
-    const label = truncateToWidth(doc, part.label, usableWidth);
-    return { ...part, label, width: doc.widthOfString(label) };
-  });
+  const measured = parts.map((part) => ({
+    ...part,
+    width: doc.widthOfString(part.label),
+  }));
 
-  // Pack contact items onto centered lines that fit the page width.
   const lines: Array<typeof measured> = [[]];
-  let lineWidths = [0];
+  const lineWidths = [0];
 
   for (const part of measured) {
     const lineIndex = lines.length - 1;
@@ -410,7 +427,11 @@ function drawPdfContactLine(
     const used = lineWidths[lineIndex];
     const extra = (current.length ? sepWidth : 0) + part.width;
 
-    if (current.length && used + extra > usableWidth) {
+    // Prefer at most 2 contact items per line for readability.
+    if (
+      current.length &&
+      (current.length >= 2 || used + extra > usableWidth)
+    ) {
       lines.push([part]);
       lineWidths.push(part.width);
     } else {
@@ -435,7 +456,7 @@ function drawPdfContactLine(
 
       doc
         .fillColor(part.href ? "#1F4E79" : "#555555")
-        .text(part.label, x, y, { lineBreak: false });
+        .text(part.label, x, y, { lineBreak: false, width });
 
       if (part.href && Number.isFinite(x) && Number.isFinite(width)) {
         doc.link(x, y - 1, width, 12, part.href);
@@ -448,25 +469,7 @@ function drawPdfContactLine(
   }
 
   doc.x = left;
-  doc.y = y + 2;
-}
-
-function truncateToWidth(
-  doc: PDFKit.PDFDocument,
-  text: string,
-  maxWidth: number,
-): string {
-  if (doc.widthOfString(text) <= maxWidth) return text;
-  const ellipsis = "…";
-  let low = 0;
-  let high = text.length;
-  while (low < high) {
-    const mid = Math.ceil((low + high) / 2);
-    const candidate = `${text.slice(0, mid)}${ellipsis}`;
-    if (doc.widthOfString(candidate) <= maxWidth) low = mid;
-    else high = mid - 1;
-  }
-  return low > 0 ? `${text.slice(0, low)}${ellipsis}` : ellipsis;
+  doc.y = y + 4;
 }
 
 export async function buildResumePdf(
@@ -502,19 +505,22 @@ export async function buildResumePdf(
     doc.moveDown(0.3);
 
     const contactParts: Array<{ label: string; href?: string }> = [];
-    if (personal.phone) {
+    if (personal.phone && !/^n\/?a$/i.test(personal.phone)) {
       contactParts.push({
         label: personal.phone,
         href: phoneHref(personal.phone),
       });
     }
-    if (personal.email) {
+    if (personal.email && !/candidate@example\.com/i.test(personal.email)) {
       contactParts.push({
         label: personal.email,
         href: emailHref(personal.email),
       });
     }
-    if (personal.linkedin) {
+    if (
+      personal.linkedin &&
+      !/^linkedin\.com\/?$/i.test(personal.linkedin.trim())
+    ) {
       contactParts.push({
         label: linkedInDisplay(personal.linkedin),
         href: linkedInHref(personal.linkedin),

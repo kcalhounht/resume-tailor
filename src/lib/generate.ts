@@ -12,6 +12,7 @@ import {
   buildVariedExperienceBullets,
 } from "./resume-fallbacks";
 import { sanitizePlainText } from "./validate-resume";
+import { sanitizeKeywords } from "./keywords";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
 Create a tailored resume that maximize ATS keyword match for the target role.
@@ -169,6 +170,16 @@ function finalizePackage(
 ): TailoredPackage {
   let resume = normalizeResume(draft.resume, profile, extracted);
   let coverLetter = sanitizePlainText(draft.coverLetter || "");
+
+  resume = {
+    ...resume,
+    summary: sanitizePlainText(resume.summary),
+    experiences: resume.experiences.map((exp) => ({
+      ...exp,
+      overview: sanitizePlainText(exp.overview || ""),
+      bullets: exp.bullets.map((b) => sanitizePlainText(b)),
+    })),
+  };
 
   if (!resume.summary || resume.summary.length < 120) {
     resume = {
@@ -418,20 +429,29 @@ function buildFallbackSummary(
   extracted: ExtractedJD,
 ): string {
   const title = extracted.jobTitle || extracted.type || "Software Engineer";
-  const skills = [
-    ...extracted.hardTechnicalSkills,
-    ...extracted.requiredSkills,
-  ]
-    .filter(Boolean)
-    .slice(0, 8);
+  const skills = Array.from(
+    new Set(
+      [...extracted.hardTechnicalSkills, ...extracted.requiredSkills]
+        .map((s) => String(s).trim())
+        .filter(Boolean),
+    ),
+  ).slice(0, 8);
   const skillBit = skills.length
     ? skills.join(", ")
     : "modern cloud-native software and data stacks";
   const latest = profile.experiences[0];
-  const roleBit = latest
-    ? `${latest.title} at ${latest.company}`
-    : "shipping production systems across product engineering teams";
-  const company = extracted.company || "high-growth employers";
+  const badCompany =
+    !latest?.company ||
+    /^(company|previous employer|employer|unknown)$/i.test(latest.company);
+  const roleBit =
+    latest && !badCompany
+      ? `${latest.title} at ${latest.company}`
+      : "shipping production systems across product engineering teams";
+  const company =
+    extracted.company &&
+    !/^(unknown company|company|unknown)$/i.test(extracted.company)
+      ? extracted.company
+      : "high-growth employers";
   return `${title} with hands-on depth across ${skillBit}. Recent work as ${roleBit} focused on measurable delivery — reliability, performance, and product velocity. Brings end-to-end ownership from design through production for ${extracted.workMode || "hybrid"} teams, with a track record of shipping systems that scale for ${company}.`;
 }
 
@@ -824,19 +844,20 @@ function normalizeResume(
 
   const skillGroups = normalizeSkills(safe.skills, extracted);
 
-  const keywords = Array.from(
-    new Set(
-      [
-        ...(safe.keywords || []),
-        ...skillGroups.flatMap((g) => g.items),
-        ...extracted.hardTechnicalSkills,
-        ...extracted.softSkills,
-        extracted.jobTitle,
-        extracted.type,
-        extracted.workMode,
-      ]
-        .map((k) => String(k).trim())
-        .filter(Boolean),
+  const keywords = sanitizeKeywords(
+    Array.from(
+      new Set(
+        [
+          ...(safe.keywords || []),
+          ...skillGroups.flatMap((g) => g.items),
+          ...extracted.hardTechnicalSkills,
+          ...extracted.requiredSkills,
+          extracted.jobTitle,
+          extracted.type,
+        ]
+          .map((k) => String(k).trim())
+          .filter(Boolean),
+      ),
     ),
   );
 
