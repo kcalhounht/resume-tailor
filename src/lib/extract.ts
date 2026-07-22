@@ -261,7 +261,7 @@ async function callExtractLlm(
   jobUrl: string,
   options: { useJsonObjectFormat: boolean },
 ): Promise<string> {
-  const EXTRACT_TIMEOUT_MS = 30_000;
+  const EXTRACT_TIMEOUT_MS = 20_000;
   const client = getLlmClient();
   const completion = await client.chat.completions.create(
     {
@@ -321,7 +321,6 @@ export async function extractJobDescription(
 
   const attempts: Array<{ useJsonObjectFormat: boolean; label: string }> = [
     { useJsonObjectFormat: true, label: "json_object" },
-    { useJsonObjectFormat: false, label: "plain" },
   ];
 
   let lastError: Error | null = null;

@@ -1094,6 +1094,9 @@ export default function ResumeForm() {
   ) {
     setError(null);
 
+    /** Separate HTTP requests per JD — safe to run a few in parallel. */
+    const BATCH_CONCURRENCY = 3;
+
     if (mode === "batch") {
       setJobs(
         targets.map((t) => createJobProgress(t.index, t.url, t.manualJd)),
@@ -1102,7 +1105,9 @@ export default function ResumeForm() {
       setRetryingIndices([]);
       setLoading(true);
       setStatus(
-        `Running ${targets.length} job${targets.length > 1 ? "s" : ""} one at a time`,
+        targets.length > 1
+          ? `Running ${targets.length} jobs · up to ${BATCH_CONCURRENCY} at a time`
+          : `Running 1 job…`,
       );
     } else {
       const target = targets[0];
@@ -1117,22 +1122,37 @@ export default function ResumeForm() {
 
     let succeeded = 0;
     let failed = 0;
+    let finished = 0;
 
     try {
-      // One HTTP request per job so each package gets a full server time budget.
-      // Multi-job streams were closing mid-Generate with "Connection closed…".
-      for (let i = 0; i < targets.length; i++) {
-        const target = targets[i];
-        if (mode === "batch" && targets.length > 1) {
-          setStatus(
-            `Running job ${target.index} (${i + 1}/${targets.length})…`,
-          );
-        }
-
-        const outcome = await streamOneTailorJob(target);
-        if (outcome === "ok") succeeded += 1;
-        else failed += 1;
-      }
+      // Each job still gets its own /api/tailor stream (avoids the old
+      // multi-job-in-one-SSE failures). Run a few in parallel for speed.
+      let next = 0;
+      const workers = Array.from(
+        {
+          length: Math.min(
+            mode === "retry" ? 1 : BATCH_CONCURRENCY,
+            targets.length || 1,
+          ),
+        },
+        async () => {
+          while (next < targets.length) {
+            const i = next;
+            next += 1;
+            const target = targets[i];
+            const outcome = await streamOneTailorJob(target);
+            finished += 1;
+            if (outcome === "ok") succeeded += 1;
+            else failed += 1;
+            if (mode === "batch" && targets.length > 1) {
+              setStatus(
+                `Tailoring… ${finished}/${targets.length} finished · ${succeeded} ok · ${failed} failed`,
+              );
+            }
+          }
+        },
+      );
+      await Promise.all(workers);
 
       setStatus(
         mode === "retry"

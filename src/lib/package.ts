@@ -71,51 +71,60 @@ export async function saveJobPackage(options: {
   };
 }> {
   const { index, extracted, personal, tailored } = options;
+  const ephemeral = isEphemeralFilesystem();
   const outputRoot = getOutputRoot();
-  await mkdir(outputRoot, { recursive: true });
-
   const baseName = sanitizeCompanyFolderName(extracted.company);
   const folderName = `${baseName}_${index}`;
   const folderPath = path.join(outputRoot, folderName);
-  await mkdir(folderPath, { recursive: true });
-
   const files = buildDocumentFileNames(personal.name);
-  const resumeDocx = await buildResumeDocx(personal, tailored.resume);
-  const resumePdf = await buildResumePdf(personal, tailored.resume);
-  const coverDocx = await buildCoverLetterDocx(
-    personal,
-    extracted.company,
-    extracted.jobTitle,
-    tailored.coverLetter,
-    tailored.resume.keywords,
-  );
 
-  await writeFile(path.join(folderPath, files.resumeDocx), resumeDocx);
-  await writeFile(path.join(folderPath, files.resumePdf), resumePdf);
-  await writeFile(path.join(folderPath, files.coverLetterDocx), coverDocx);
-  await writeFile(
-    path.join(folderPath, files.coverLetterTxt),
-    tailored.coverLetter,
-    "utf8",
-  );
+  // Build documents in parallel — biggest packaging speedup after the LLM.
+  const [resumeDocx, resumePdf, coverDocx] = await Promise.all([
+    buildResumeDocx(personal, tailored.resume),
+    buildResumePdf(personal, tailored.resume),
+    buildCoverLetterDocx(
+      personal,
+      extracted.company,
+      extracted.jobTitle,
+      tailored.coverLetter,
+      tailored.resume.keywords,
+    ),
+  ]);
 
   const zipName = buildZipFileName(extracted.company, extracted.jobTitle);
   const zipPath = path.join(outputRoot, zipName);
 
-  // On Vercel, skip building/base64-encoding a zip in the SSE payload — that
-  // multi-MB event regularly kills the stream at the Zip step. The client
-  // builds the package zip from the individual files instead.
-  if (!isEphemeralFilesystem()) {
-    await zipDirectory(folderPath, zipPath);
-  }
-
-  const downloads = isEphemeralFilesystem()
-    ? {
+  if (ephemeral) {
+    // No disk I/O on Vercel — stream base64 only. Client builds the zip.
+    return {
+      folderPath,
+      zipPath,
+      zipName,
+      folderName,
+      company: extracted.company,
+      resumeDocxName: files.resumeDocx,
+      resumePdfName: files.resumePdf,
+      coverLetterDocxName: files.coverLetterDocx,
+      downloads: {
         resumeDocxBase64: resumeDocx.toString("base64"),
         resumePdfBase64: resumePdf.toString("base64"),
         coverLetterDocxBase64: coverDocx.toString("base64"),
-      }
-    : undefined;
+      },
+    };
+  }
+
+  await mkdir(folderPath, { recursive: true });
+  await Promise.all([
+    writeFile(path.join(folderPath, files.resumeDocx), resumeDocx),
+    writeFile(path.join(folderPath, files.resumePdf), resumePdf),
+    writeFile(path.join(folderPath, files.coverLetterDocx), coverDocx),
+    writeFile(
+      path.join(folderPath, files.coverLetterTxt),
+      tailored.coverLetter,
+      "utf8",
+    ),
+  ]);
+  await zipDirectory(folderPath, zipPath);
 
   return {
     folderPath,
@@ -126,6 +135,5 @@ export async function saveJobPackage(options: {
     resumeDocxName: files.resumeDocx,
     resumePdfName: files.resumePdf,
     coverLetterDocxName: files.coverLetterDocx,
-    downloads,
   };
 }

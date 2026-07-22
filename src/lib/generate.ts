@@ -45,7 +45,7 @@ JSON shape:
 }`;
 
 /** Keep each attempt short so Generate falls back instead of killing the SSE stream. */
-const GENERATE_TIMEOUT_MS = 45_000;
+const GENERATE_TIMEOUT_MS = 35_000;
 
 function buildFallbackPackage(
   profile: CandidateProfile,
@@ -69,16 +69,17 @@ export async function generateTailoredPackage(
     const userPayload = JSON.stringify({
       candidate: profile,
       extractedJd: extracted,
-      rawJobDescription: rawJd.slice(0, 12000),
+      // Smaller prompt → faster OpenRouter completions.
+      rawJobDescription: rawJd.slice(0, 8000),
       sourceResumeText: options?.sourceResumeText
-        ? options.sourceResumeText.slice(0, 25000)
+        ? options.sourceResumeText.slice(0, 12000)
         : undefined,
       instructions: options?.sourceResumeText
         ? "Tailor the uploaded resume to this JD. Keep factual employment history; rewrite bullets/summary/skills for ATS fit. summary and coverLetter MUST be non-empty strings."
         : "Generate a tailored resume from the candidate profile skeleton and JD. summary and coverLetter MUST be non-empty strings.",
     });
 
-    let content = await requestJson(client, model, [
+    const content = await requestJson(client, model, [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPayload },
     ]);
@@ -86,31 +87,15 @@ export async function generateTailoredPackage(
     let parsedRaw: unknown;
     try {
       parsedRaw = parseModelJson(content);
-    } catch (firstError) {
-      content = await requestJson(client, model, [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPayload },
-        { role: "assistant", content },
-        {
-          role: "user",
-          content:
-            "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Include non-empty resume.summary and coverLetter. No markdown, no commentary.",
-        },
-      ]);
-      try {
-        parsedRaw = parseModelJson(content);
-      } catch {
-        throw firstError instanceof Error
-          ? firstError
-          : new Error("Failed to parse generated resume JSON.");
-      }
+    } catch {
+      // Skip a second slow repair round-trip — ship a local package instead.
+      return buildFallbackPackage(profile, extracted);
     }
 
-    let packageDraft = coerceTailoredPackage(parsedRaw);
+    const packageDraft = coerceTailoredPackage(parsedRaw);
     let resume = normalizeResume(packageDraft.resume, profile, extracted);
     let coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
 
-    // Prefer local fill-ins over another slow LLM round-trip.
     if (!resume.summary) {
       resume = {
         ...resume,
@@ -250,7 +235,6 @@ async function requestJson(
 ): Promise<string> {
   const attempts: Array<{ useJsonObjectFormat: boolean; label: string }> = [
     { useJsonObjectFormat: true, label: "json_object" },
-    { useJsonObjectFormat: false, label: "plain" },
   ];
 
   let lastError: Error | null = null;
