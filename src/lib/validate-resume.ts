@@ -5,6 +5,10 @@ import type {
   TailoredPackage,
   TailoredResume,
 } from "./types";
+import {
+  buildExperienceOverview,
+  buildVariedExperienceBullets,
+} from "./resume-fallbacks";
 
 export interface ValidationIssue {
   level: "error" | "warning" | "fixed";
@@ -185,19 +189,25 @@ export function validateAndFixResume(
         level: "fixed",
         message: `Added company/responsibility overview for ${exp.company}.`,
       });
-      overview = `${exp.company} delivers software products for its customers in a ${exp.location.toLowerCase()} environment; as ${title}, owned feature delivery and technical execution across core product workflows.`;
+      overview = buildExperienceOverview(
+        { company: exp.company, title, location: exp.location },
+        extracted,
+        index,
+      );
     }
 
-    if (bullets.length < 7) {
+    const beforeBullets = bullets.length;
+    bullets = buildVariedExperienceBullets(
+      { company: exp.company, title: title || exp.title, location: exp.location },
+      extracted,
+      bullets,
+      7,
+    );
+    if (bullets.length > beforeBullets) {
       issues.push({
         level: "fixed",
-        message: `Added missing bullets for ${exp.company} (need 7–8).`,
+        message: `Added varied bullets for ${exp.company} (need 7–8, no duplicates).`,
       });
-      while (bullets.length < 7) {
-        bullets.push(
-          `Collaborated with cross-functional partners to deliver ${extracted.hardTechnicalSkills.slice(0, 2).join(" and ") || "production software"} improvements that strengthened reliability and delivery outcomes for ${exp.company} customers.`,
-        );
-      }
     }
 
     if (bullets.length > 8) {

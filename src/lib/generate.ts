@@ -7,6 +7,10 @@ import type {
 } from "./types";
 import { getLlmClient, getLlmModel } from "./llm";
 import { parseModelJson } from "./parse-json";
+import {
+  buildExperienceOverview,
+  buildVariedExperienceBullets,
+} from "./resume-fallbacks";
 import { sanitizePlainText } from "./validate-resume";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
@@ -359,17 +363,17 @@ function normalizeResume(
 
   const experiences = profile.experiences.map((exp, index) => {
     const generated = safe.experiences?.[index];
-    let bullets = (generated?.bullets || [])
+    const incoming = (generated?.bullets || [])
       .map(String)
       .map((b) => sanitizePlainText(b))
       .filter(Boolean);
 
-    while (bullets.length < 7) {
-      bullets.push(
-        `Partnered with cross-functional stakeholders to deliver production-ready solutions involving ${extracted.hardTechnicalSkills.slice(0, 3).join(", ") || "core platform technologies"}, improving reliability and delivery speed for business-critical workflows.`,
-      );
-    }
-    bullets = bullets.slice(0, 8);
+    const bullets = buildVariedExperienceBullets(
+      exp,
+      extracted,
+      incoming,
+      7,
+    );
 
     const overview = sanitizePlainText(
       String(
@@ -385,8 +389,7 @@ function normalizeResume(
       period: exp.period,
       location: exp.location,
       overview:
-        overview ||
-        `${exp.company} team delivering software products in a ${exp.location.toLowerCase()} setting; served as ${exp.title} owning delivery of key features and technical outcomes aligned to business needs.`,
+        overview || buildExperienceOverview(exp, extracted, index),
       bullets,
     };
   });
