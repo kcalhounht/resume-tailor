@@ -67,6 +67,16 @@ function emailHref(email: string): string {
   return `mailto:${email}`;
 }
 
+function educationMetaLine(edu: {
+  school: string;
+  location?: string;
+  period: string;
+}): string {
+  return [edu.school, edu.location?.trim(), edu.period]
+    .filter(Boolean)
+    .join("  |  ");
+}
+
 function contactSeparator() {
   return new TextRun({
     text: "  ·  ",
@@ -306,7 +316,7 @@ export async function buildResumeDocx(
         spacing: { after: 100 },
         children: [
           new TextRun({
-            text: `${edu.school}  |  ${edu.location}  |  ${edu.period}`,
+            text: educationMetaLine(edu),
             italics: true,
             size: 20,
             font: "Calibri",
@@ -601,7 +611,7 @@ export async function buildResumePdf(
       doc
         .font(PDF_FONT_ITALIC)
         .fontSize(10)
-        .text(`${edu.school}  |  ${edu.location}  |  ${edu.period}`);
+        .text(educationMetaLine(edu));
     }
 
     doc.end();

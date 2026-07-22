@@ -21,7 +21,7 @@ const educationSchema = z.object({
   degree: z.string().trim().min(1, "Degree is required"),
   discipline: z.string().trim().min(1, "Discipline is required"),
   period: z.string().trim().min(1, "Education period is required"),
-  location: z.string().trim().min(1, "Education location is required"),
+  location: z.string().trim().optional().default(""),
 });
 
 export const candidateProfileSchema = z.object({

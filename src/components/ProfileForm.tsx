@@ -294,7 +294,7 @@ export default function ProfileForm() {
         <div className="section-head">
           <div>
             <h2>Education</h2>
-            <p className="hint">School, degree, discipline, period, and location.</p>
+            <p className="hint">School, degree, discipline, and period. Location is optional.</p>
           </div>
           <button
             type="button"
@@ -374,13 +374,14 @@ export default function ProfileForm() {
                   />
                 </label>
                 <label className="field">
-                  <span>Location</span>
+                  <span>Location (optional)</span>
                   <input
                     type="text"
                     value={edu.location}
                     onChange={(e) =>
                       updateEducation(index, "location", e.target.value)
                     }
+                    placeholder="City, Country"
                   />
                 </label>
               </div>

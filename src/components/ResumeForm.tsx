@@ -91,10 +91,9 @@ function validateProfile(profile: CandidateProfile): string | null {
       !edu.school.trim() ||
       !edu.degree.trim() ||
       !edu.discipline.trim() ||
-      !edu.period.trim() ||
-      !edu.location.trim()
+      !edu.period.trim()
     ) {
-      return `Fill in all fields for education #${i + 1}.`;
+      return `Fill in school, degree, discipline, and period for education #${i + 1}.`;
     }
   }
   return null;
@@ -1813,14 +1812,14 @@ export default function ResumeForm() {
                     />
                   </label>
                   <label className="field">
-                    <span>Location</span>
+                    <span>Location (optional)</span>
                     <input
                       type="text"
                       value={edu.location}
                       onChange={(e) =>
                         updateEducation(index, "location", e.target.value)
                       }
-                      required
+                      placeholder="City, Country"
                     />
                   </label>
                 </div>

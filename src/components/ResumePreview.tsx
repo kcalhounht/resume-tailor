@@ -397,7 +397,7 @@ export default function ResumePreview({
                 />
               </label>
               <label>
-                <span>Location</span>
+                <span>Location (optional)</span>
                 <input
                   value={edu.location}
                   onChange={(e) =>
@@ -408,6 +408,7 @@ export default function ResumePreview({
                       }),
                     })
                   }
+                  placeholder="City, Country"
                 />
               </label>
               <label>
