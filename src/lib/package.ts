@@ -1,6 +1,6 @@
 import { ZipArchive } from "archiver";
 import { createWriteStream } from "fs";
-import { mkdir, readFile, writeFile } from "fs/promises";
+import { mkdir, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import type { ExtractedJD, PersonalInfo, TailoredPackage } from "./types";
@@ -35,7 +35,7 @@ async function zipDirectory(
 ): Promise<void> {
   await new Promise<void>((resolve, reject) => {
     const output = createWriteStream(zipPath);
-    const archive = new ZipArchive({ zlib: { level: 9 } });
+    const archive = new ZipArchive({ zlib: { level: 1 } });
 
     output.on("close", () => resolve());
     output.on("error", reject);
@@ -63,7 +63,8 @@ export async function saveJobPackage(options: {
   coverLetterDocxName: string;
   /** Present on serverless so the client can download without shared disk. */
   downloads?: {
-    zipBase64: string;
+    /** Optional — omitted on Vercel to keep SSE payloads small. */
+    zipBase64?: string;
     resumeDocxBase64: string;
     resumePdfBase64: string;
     coverLetterDocxBase64: string;
@@ -100,11 +101,16 @@ export async function saveJobPackage(options: {
 
   const zipName = buildZipFileName(extracted.company, extracted.jobTitle);
   const zipPath = path.join(outputRoot, zipName);
-  await zipDirectory(folderPath, zipPath);
+
+  // On Vercel, skip building/base64-encoding a zip in the SSE payload — that
+  // multi-MB event regularly kills the stream at the Zip step. The client
+  // builds the package zip from the individual files instead.
+  if (!isEphemeralFilesystem()) {
+    await zipDirectory(folderPath, zipPath);
+  }
 
   const downloads = isEphemeralFilesystem()
     ? {
-        zipBase64: (await readFile(zipPath)).toString("base64"),
         resumeDocxBase64: resumeDocx.toString("base64"),
         resumePdfBase64: resumePdf.toString("base64"),
         coverLetterDocxBase64: coverDocx.toString("base64"),

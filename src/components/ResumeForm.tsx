@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { zipSync } from "fflate";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
@@ -192,6 +193,60 @@ function base64ToObjectUrl(base64: string, mime: string): string {
   return URL.createObjectURL(new Blob([bytes], { type: mime }));
 }
 
+function base64ToBytes(base64: string): Uint8Array {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+function buildClientZipObjectUrl(files: Record<string, string>): string {
+  const entries: Record<string, Uint8Array> = {};
+  for (const [name, base64] of Object.entries(files)) {
+    entries[name] = base64ToBytes(base64);
+  }
+  const zipped = zipSync(entries, { level: 1 });
+  return URL.createObjectURL(
+    new Blob([Uint8Array.from(zipped)], { type: "application/zip" }),
+  );
+}
+
+function buildDownloadUrls(
+  downloads: {
+    zipBase64?: string;
+    resumeDocxBase64: string;
+    resumePdfBase64: string;
+    coverLetterDocxBase64: string;
+  },
+  names: {
+    resumeDocxName: string;
+    resumePdfName: string;
+    coverLetterDocxName: string;
+  },
+) {
+  const DOCX =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  const resumeDocx = base64ToObjectUrl(downloads.resumeDocxBase64, DOCX);
+  const resumePdf = base64ToObjectUrl(
+    downloads.resumePdfBase64,
+    "application/pdf",
+  );
+  const coverLetterDocx = base64ToObjectUrl(
+    downloads.coverLetterDocxBase64,
+    DOCX,
+  );
+  const zip = downloads.zipBase64
+    ? base64ToObjectUrl(downloads.zipBase64, "application/zip")
+    : buildClientZipObjectUrl({
+        [names.resumeDocxName || "resume.docx"]: downloads.resumeDocxBase64,
+        [names.resumePdfName || "resume.pdf"]: downloads.resumePdfBase64,
+        [names.coverLetterDocxName || "cover-letter.docx"]:
+          downloads.coverLetterDocxBase64,
+      });
+
+  return { zip, resumeDocx, resumePdf, coverLetterDocx };
+}
+
 function FolderIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -240,21 +295,12 @@ function markJobDone(
   const stepStatuses = { ...job.stepStatuses };
   for (const step of JOB_STEPS) stepStatuses[step] = "done";
 
-  const DOCX =
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
   const downloadUrls = data.downloads
-    ? {
-        zip: base64ToObjectUrl(data.downloads.zipBase64, "application/zip"),
-        resumeDocx: base64ToObjectUrl(data.downloads.resumeDocxBase64, DOCX),
-        resumePdf: base64ToObjectUrl(
-          data.downloads.resumePdfBase64,
-          "application/pdf",
-        ),
-        coverLetterDocx: base64ToObjectUrl(
-          data.downloads.coverLetterDocxBase64,
-          DOCX,
-        ),
-      }
+    ? buildDownloadUrls(data.downloads, {
+        resumeDocxName: data.resumeDocxName,
+        resumePdfName: data.resumePdfName,
+        coverLetterDocxName: data.coverLetterDocxName,
+      })
     : undefined;
 
   return {
@@ -915,24 +961,15 @@ export default function ResumeForm() {
         throw new Error(data?.error || "Failed to update downloads");
       }
 
-      const DOCX =
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
       const downloadUrls = data.downloads
-        ? {
-            zip: base64ToObjectUrl(data.downloads.zipBase64, "application/zip"),
-            resumeDocx: base64ToObjectUrl(
-              data.downloads.resumeDocxBase64,
-              DOCX,
-            ),
-            resumePdf: base64ToObjectUrl(
-              data.downloads.resumePdfBase64,
-              "application/pdf",
-            ),
-            coverLetterDocx: base64ToObjectUrl(
-              data.downloads.coverLetterDocxBase64,
-              DOCX,
-            ),
-          }
+        ? buildDownloadUrls(data.downloads, {
+            resumeDocxName: data.resumeDocxName || job.resumeDocxName || "resume.docx",
+            resumePdfName: data.resumePdfName || job.resumePdfName || "resume.pdf",
+            coverLetterDocxName:
+              data.coverLetterDocxName ||
+              job.coverLetterDocxName ||
+              "cover-letter.docx",
+          })
         : undefined;
 
       setJobs((prev) =>

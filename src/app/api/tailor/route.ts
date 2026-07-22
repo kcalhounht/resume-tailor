@@ -8,32 +8,10 @@ export const runtime = "nodejs";
 export const maxDuration = 300;
 
 /** One job at a time keeps each package inside Vercel/proxy limits. */
-const JOB_TIMEOUT_MS = 240_000;
 const KEEPALIVE_MS = 10_000;
 
 function encodeSse(event: ProgressEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
-}
-
-async function withTimeout<T>(
-  promise: Promise<T>,
-  ms: number,
-  label: string,
-): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`${label} timed out after ${ms / 1000}s`)),
-          ms,
-        );
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
 }
 
 export async function POST(request: Request) {
@@ -124,29 +102,26 @@ export async function POST(request: Request) {
           let currentStep: JobStep = JOB_STEPS[0];
 
           try {
-            const result = await withTimeout(
-              processOneJob({
-                index,
-                jobUrl,
-                profile,
-                personal: profile.personal,
-                manualJd: payload.manualJds?.[i],
-                sourceResumeText,
-                onStep: (step, message) => {
-                  currentStep = step;
-                  send({
-                    type: "step",
-                    index,
-                    jobUrl,
-                    step,
-                    message,
-                  });
-                },
-              }),
-              JOB_TIMEOUT_MS,
-              `Job ${index}`,
-            );
+            const result = await processOneJob({
+              index,
+              jobUrl,
+              profile,
+              personal: profile.personal,
+              manualJd: payload.manualJds?.[i],
+              sourceResumeText,
+              onStep: (step, message) => {
+                currentStep = step;
+                send({
+                  type: "step",
+                  index,
+                  jobUrl,
+                  step,
+                  message,
+                });
+              },
+            });
 
+            // Slim extracted payload — full JD extract is unused by the UI.
             send({
               type: "job_done",
               index,
@@ -159,7 +134,19 @@ export async function POST(request: Request) {
               coverLetterDocxName: result.coverLetterDocxName,
               atsScore: result.atsScore,
               atsSummary: result.atsSummary,
-              extracted: result.extracted,
+              extracted: {
+                ...result.extracted,
+                summary: result.extracted.summary.slice(0, 400),
+                mustHave: result.extracted.mustHave.slice(0, 12),
+                niceToHave: result.extracted.niceToHave.slice(0, 12),
+                qualifications: result.extracted.qualifications.slice(0, 12),
+                responsibilities: result.extracted.responsibilities.slice(0, 12),
+                requiredSkills: result.extracted.requiredSkills.slice(0, 20),
+                hardTechnicalSkills:
+                  result.extracted.hardTechnicalSkills.slice(0, 20),
+                softSkills: result.extracted.softSkills.slice(0, 12),
+                benefits: result.extracted.benefits.slice(0, 12),
+              },
               resume: result.resume,
               coverLetter: result.coverLetter,
               personal: result.personal,

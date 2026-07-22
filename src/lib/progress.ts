@@ -65,7 +65,7 @@ export type ProgressEvent =
       personal: PersonalInfo;
       /** Inline file bytes when the server filesystem is ephemeral (e.g. Vercel). */
       downloads?: {
-        zipBase64: string;
+        zipBase64?: string;
         resumeDocxBase64: string;
         resumePdfBase64: string;
         coverLetterDocxBase64: string;

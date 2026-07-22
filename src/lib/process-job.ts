@@ -32,7 +32,7 @@ export async function processOneJob(options: {
   coverLetter: string;
   personal: PersonalInfo;
   downloads?: {
-    zipBase64: string;
+    zipBase64?: string;
     resumeDocxBase64: string;
     resumePdfBase64: string;
     coverLetterDocxBase64: string;
@@ -77,26 +77,22 @@ export async function processOneJob(options: {
   });
 
   onStep("validating", "Validating resume format and content…");
-  let validation = validateAndFixResume(tailored, profile, extracted);
-
-  if (!validation.ok) {
-    onStep("validating", "Fixing validation issues and regenerating…");
-    tailored = await generateTailoredPackage(profile, extracted, rawText, {
-      sourceResumeText,
-    });
-    validation = validateAndFixResume(tailored, profile, extracted);
-  }
-
+  const validation = validateAndFixResume(tailored, profile, extracted);
   tailored = validation.package;
 
+  // Never re-run Generate here — a second OpenRouter pass often blows the
+  // serverless budget and leaves Zip with a closed connection.
   if (!validation.ok) {
     const critical = validation.issues
       .filter((i) => i.level === "error")
       .map((i) => i.message)
       .join("; ");
-    throw new Error(
-      critical || "Resume failed validation after formatting fixes.",
-    );
+    // Prefer shipping a fixed package over failing the whole job.
+    if (!tailored.resume.summary || !tailored.coverLetter) {
+      throw new Error(
+        critical || "Resume failed validation after formatting fixes.",
+      );
+    }
   }
 
   const fixedCount = validation.issues.filter((i) => i.level === "fixed").length;
