@@ -26,10 +26,10 @@ Hard rules:
    - exactly 7 UNIQUE accomplishment bullets (never clone the same bullet across roles).
 5. QUANTIFIED IMPACT: ≥6 of 7 bullets per role include a concrete metric (users, QPS/RPS, latency ms, uptime, $ cost/revenue, dataset size, model accuracy/F1 only if ML role, services count, PRs, tickets, team size, % under 40, time saved). Strong verbs: Built, Led, Designed, Reduced, Scaled, Automated, Migrated, Fine-tuned, Shipped, Optimized.
 6. Each bullet 28-45 words: stack + action + outcome. Ban empty filler as the whole point: "partnered with stakeholders", "cross-functional collaboration", "improved reliability" with no number.
-7. keywords: 15-25 JD phrases for ATS. Cover letter: 3-4 short paragraphs in ONE string with \\n\\n between paragraphs; tie 2-3 quantified wins to the target company/role.
+7. keywords: 15-25 JD phrases for ATS.
 8. Keep company names, periods, locations, education exact. Slight title refinement OK if plausible.
 9. If sourceResumeText exists: prefer its real achievements/skills; do not invent major claims absent from source/profile.
-10. Return ONLY valid compact JSON. Escape quotes. No markdown. NEVER use **bold**, *italic*, backticks, or headings in any string.
+10. Return ONLY valid compact JSON for the RESUME. Do NOT include a cover letter in this response. Escape quotes. No markdown.
 
 Good bullet example: "Fine-tuned LLM inference pipelines with PyTorch and vLLM on GPU clusters, cutting p95 latency from 1.8s to 420ms while serving 50k+ daily requests for production NLP features."
 Bad bullet example: "Collaborated with cross-functional teams to improve AI systems and deliver value."
@@ -42,9 +42,12 @@ JSON shape:
     "experiences": [{ "company": string, "title": string, "period": string, "location": string, "overview": string, "bullets": string[] }],
     "education": [{ "school": string, "degree": string, "discipline": string, "period": string, "location": string }],
     "keywords": string[]
-  },
-  "coverLetter": string
+  }
 }`;
+
+const COVER_LETTER_PROMPT = `Write a professional cover letter for the candidate and job.
+Return ONLY JSON: { "coverLetter": string }
+Rules: 3-4 short paragraphs in ONE string with \\n\\n between paragraphs. No markdown. Tie 2-3 concrete achievements to the target company/role. No icons/emojis.`;
 
 /** Abort hung calls, but allow enough time for a real quality completion. */
 const GENERATE_TIMEOUT_MS = 90_000;
@@ -114,10 +117,6 @@ function isWeakModelPackage(
   const summary = String(draft.resume?.summary || "").trim();
   const summaryWords = summary.split(/\s+/).filter(Boolean).length;
   if (summaryWords < 55 || summary.length < 280) return true;
-  if (!String(draft.coverLetter || "").trim()) return true;
-  if (String(draft.coverLetter || "").trim().split(/\s+/).filter(Boolean).length < 90) {
-    return true;
-  }
 
   const { groups, items } = countSkillItems(draft.resume?.skills);
   if (groups < 5 || items < 28) return true;
@@ -185,9 +184,9 @@ export async function generateTailoredPackage(
   const userPayload = JSON.stringify({
     candidate: profile,
     extractedJd: extracted,
-    rawJobDescription: rawJd.slice(0, 14000),
+    rawJobDescription: rawJd.slice(0, 10_000),
     sourceResumeText: options?.sourceResumeText
-      ? options.sourceResumeText.slice(0, 22000)
+      ? options.sourceResumeText.slice(0, 12_000)
       : undefined,
     mustIncludeSkills: [
       ...extracted.hardTechnicalSkills,
@@ -196,10 +195,10 @@ export async function generateTailoredPackage(
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
     qualityBar:
-      "This must beat generic AI resumes: denser skills, longer JD-aligned summary, 7 metric-heavy UNIQUE bullets per role, strong cover letter.",
+      "Beat generic AI resumes: denser skills, JD-aligned summary, 7 metric-heavy UNIQUE bullets per role.",
     instructions: options?.sourceResumeText
-      ? "STRENGTH FIRST from uploaded resume: HIGH-IMPACT package. 5-6 skill groups × 6-10 items. Summary 60-95 words with target title + JD stack. Exactly 7 UNIQUE bullets/role with metrics in ≥6. No vague filler."
-      : "STRENGTH FIRST: HIGH-IMPACT tailored resume. 5-6 skill groups × 6-10 items. Summary 60-95 words with target title + stack + impact. Exactly 7 UNIQUE bullets/role; ≥6 with concrete metrics. Mirror JD language heavily.",
+      ? "STRENGTH FIRST from uploaded resume: HIGH-IMPACT resume JSON only (no cover letter). 5-6 skill groups × 6-10 items. Summary 60-95 words. Exactly 7 UNIQUE bullets/role with metrics in ≥6."
+      : "STRENGTH FIRST: HIGH-IMPACT resume JSON only (no cover letter). 5-6 skill groups × 6-10 items. Summary 60-95 words. Exactly 7 UNIQUE bullets/role; ≥6 with concrete metrics.",
   });
 
   const baseMessages: Array<{
@@ -213,9 +212,16 @@ export async function generateTailoredPackage(
   async function runOnce(
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
     temperature = 0.5,
+    maxTokens = LLM_MAX_TOKENS.generate,
   ): Promise<TailoredPackage | null> {
     try {
-      let content = await requestJson(client, model, messages, temperature);
+      let content = await requestJson(
+        client,
+        model,
+        messages,
+        temperature,
+        maxTokens,
+      );
       let parsedRaw: unknown;
       try {
         parsedRaw = parseModelJson(content);
@@ -229,10 +235,11 @@ export async function generateTailoredPackage(
             {
               role: "user",
               content:
-                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid JSON. Requirements: 60-95 word summary opening with target title, 5-6 skill groups with 6-10 items each, 7 DISTINCT metric-heavy bullets per role, non-empty coverLetter (3-4 paragraphs). No markdown.",
+                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid JSON for the resume (no coverLetter). Requirements: 60-95 word summary opening with target title, 5-6 skill groups with 6-10 items each, 7 DISTINCT metric-heavy bullets per role. No markdown.",
             },
           ],
           Math.min(temperature, 0.35),
+          maxTokens,
         );
         parsedRaw = parseModelJson(content);
       }
@@ -246,22 +253,55 @@ export async function generateTailoredPackage(
     }
   }
 
-  const rewritePrompt = `REWRITE the FULL JSON. Previous draft failed the quality bar for a competitive ${extracted.jobTitle || extracted.type} application at ${extracted.company || "the employer"}.
+  async function generateCoverLetter(
+    resume: TailoredResume,
+  ): Promise<string> {
+    try {
+      const content = await requestJson(
+        client,
+        model,
+        [
+          { role: "system", content: COVER_LETTER_PROMPT },
+          {
+            role: "user",
+            content: JSON.stringify({
+              candidateName: profile.personal.name,
+              targetCompany: extracted.company,
+              targetRole: extracted.jobTitle || extracted.type,
+              resumeSummary: resume.summary,
+              topSkills: resume.skills.flatMap((g) => g.items).slice(0, 12),
+              recentBullets: resume.experiences[0]?.bullets?.slice(0, 3) || [],
+            }),
+          },
+        ],
+        0.45,
+        LLM_MAX_TOKENS.coverLetter,
+      );
+      const parsed = parseModelJson<{ coverLetter?: string }>(content);
+      return String(parsed.coverLetter || "").trim();
+    } catch (err) {
+      console.warn(
+        "Cover letter generation failed:",
+        err instanceof Error ? err.message : err,
+      );
+      return "";
+    }
+  }
+
+  const rewritePrompt = `REWRITE the FULL resume JSON (no coverLetter). Previous draft failed the quality bar for a competitive ${extracted.jobTitle || extracted.type} application at ${extracted.company || "the employer"}.
 Mandatory upgrades:
 - Summary: 60-95 words, START with "${extracted.jobTitle || extracted.type}", weave in: ${[...extracted.hardTechnicalSkills, ...extracted.requiredSkills].slice(0, 10).join(", ") || "JD hard skills"}.
-- Skills: 5-6 categories, 6-10 items EACH, maximize overlap with JD hard/required skills; add adjacent tools.
-- Experience: exactly 7 UNIQUE bullets per role; ≥6 bullets MUST include concrete numbers (latency ms, users, cost, throughput, team size, dataset size, model metrics if ML, services, etc.).
+- Skills: 5-6 categories, 6-10 items EACH, maximize overlap with JD hard/required skills.
+- Experience: exactly 7 UNIQUE bullets per role; ≥6 bullets MUST include concrete numbers.
 - Overviews: 35-55 words, company + ownership + JD stack.
-- Ban vague "partnered with stakeholders" filler without an outcome metric.
-- Cover letter: 3-4 paragraphs tied to ${extracted.company || "the employer"} with 2-3 quantified wins.
-Return complete JSON only.`;
+- Ban vague filler without an outcome metric.
+Return complete resume JSON only.`;
 
   try {
     let draft = await runOnce(baseMessages, 0.5);
 
-    // Up to two quality rewrites when summary/skills/metrics are weak.
-    for (let pass = 0; pass < 2; pass++) {
-      if (draft && !isWeakModelPackage(draft, profile, extracted)) break;
+    // One quality rewrite when summary/skills/metrics are weak (keeps credit use low).
+    if (!draft || isWeakModelPackage(draft, profile, extracted)) {
       draft =
         (await runOnce(
           [
@@ -271,7 +311,7 @@ Return complete JSON only.`;
               content: rewritePrompt,
             },
           ],
-          0.55 + pass * 0.05,
+          0.55,
         )) || draft;
     }
 
@@ -280,7 +320,15 @@ Return complete JSON only.`;
       return buildFallbackPackage(profile, extracted);
     }
 
-    return finalizePackage(draft, profile, extracted);
+    const coverLetter =
+      (await generateCoverLetter(draft.resume)) ||
+      buildFallbackCoverLetter(profile, extracted);
+
+    return finalizePackage(
+      { resume: draft.resume, coverLetter },
+      profile,
+      extracted,
+    );
   } catch (err) {
     console.warn(
       "Generate falling back to deterministic package:",
@@ -423,6 +471,7 @@ async function requestJson(
   model: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
   temperature = 0.5,
+  maxTokens = LLM_MAX_TOKENS.generate,
 ): Promise<string> {
   const attempts: Array<{ useJsonObjectFormat: boolean; label: string }> = [
     { useJsonObjectFormat: true, label: "json_object" },
@@ -437,7 +486,7 @@ async function requestJson(
           {
             model,
             temperature,
-            max_tokens: LLM_MAX_TOKENS.generate,
+            max_tokens: maxTokens,
             ...(attempt.useJsonObjectFormat
               ? { response_format: { type: "json_object" as const } }
               : {}),

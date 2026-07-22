@@ -81,6 +81,14 @@ export async function POST(request: Request) {
             message: `Parsed resume (${sourceResumeText.length.toLocaleString()} chars)…`,
           });
 
+          send({
+            type: "step",
+            index: payload.indices?.[0] ?? 1,
+            jobUrl: payload.jobUrls[0],
+            step: "extracting",
+            message: "Extracting profile from resume…",
+          });
+
           const parsed = await extractProfileFromResumeText(sourceResumeText);
           profile = {
             personal: parsed.personal,
