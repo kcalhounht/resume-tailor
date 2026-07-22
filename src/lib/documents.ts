@@ -31,13 +31,22 @@ function registerPdfFonts(doc: PDFKit.PDFDocument) {
   doc.registerFont(PDF_FONT_ITALIC, fontPath("NotoSans-Italic.ttf"));
 }
 
+function safeDecodeUri(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
 function linkedInDisplay(url: string): string {
   try {
     const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
-    const path = parsed.pathname.replace(/\/+$/, "");
-    return `linkedin.com${path}`;
+    // Decode %C5%82 → ł so the contact line stays readable and shorter.
+    const pathName = safeDecodeUri(parsed.pathname).replace(/\/+$/, "");
+    return `linkedin.com${pathName}`;
   } catch {
-    return url
+    return safeDecodeUri(url)
       .replace(/^https?:\/\//i, "")
       .replace(/^www\./i, "")
       .replace(/\/+$/, "");
@@ -359,54 +368,95 @@ function drawPdfContactLine(
   const left = doc.page.margins.left;
   const usableWidth =
     doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const y = Number.isFinite(doc.y) ? doc.y : doc.page.margins.top + 40;
+  let y = Number.isFinite(doc.y) ? doc.y : doc.page.margins.top + 40;
   const sep = " | ";
+  const lineHeight = 12;
 
   doc.font(PDF_FONT).fontSize(9);
-  const full = parts.map((p) => p.label).join(sep);
-  let fullWidth = 0;
-  try {
-    fullWidth = doc.widthOfString(full);
-  } catch {
-    fullWidth = 0;
-  }
-  if (!Number.isFinite(fullWidth)) fullWidth = 0;
 
-  let x = left + Math.max(0, (usableWidth - fullWidth) / 2);
-
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !parts.length) {
+  if (!parts.length) {
     doc.x = left;
-    doc.y = Number.isFinite(y) ? y : 80;
-    doc.fillColor("#555555").text(full || " ", {
-      width: usableWidth,
-      align: "center",
-    });
+    doc.y = y;
     return;
   }
 
-  for (let i = 0; i < parts.length; i++) {
-    if (i > 0) {
-      const sepWidth = doc.widthOfString(sep);
-      doc.fillColor("#555555").text(sep, x, y, { lineBreak: false });
-      x += sepWidth;
+  const sepWidth = doc.widthOfString(sep);
+  const measured = parts.map((part) => {
+    const rawWidth = doc.widthOfString(part.label);
+    if (rawWidth <= usableWidth) {
+      return { ...part, width: rawWidth };
+    }
+    const label = truncateToWidth(doc, part.label, usableWidth);
+    return { ...part, label, width: doc.widthOfString(label) };
+  });
+
+  // Pack contact items onto centered lines that fit the page width.
+  const lines: Array<typeof measured> = [[]];
+  let lineWidths = [0];
+
+  for (const part of measured) {
+    const lineIndex = lines.length - 1;
+    const current = lines[lineIndex];
+    const used = lineWidths[lineIndex];
+    const extra = (current.length ? sepWidth : 0) + part.width;
+
+    if (current.length && used + extra > usableWidth) {
+      lines.push([part]);
+      lineWidths.push(part.width);
+    } else {
+      current.push(part);
+      lineWidths[lineIndex] = used + extra;
+    }
+  }
+
+  for (let li = 0; li < lines.length; li++) {
+    const line = lines[li];
+    const totalWidth = lineWidths[li];
+    let x = left + Math.max(0, (usableWidth - totalWidth) / 2);
+
+    for (let i = 0; i < line.length; i++) {
+      if (i > 0) {
+        doc.fillColor("#555555").text(sep, x, y, { lineBreak: false });
+        x += sepWidth;
+      }
+
+      const part = line[i];
+      const width = part.width;
+
+      doc
+        .fillColor(part.href ? "#1F4E79" : "#555555")
+        .text(part.label, x, y, { lineBreak: false });
+
+      if (part.href && Number.isFinite(x) && Number.isFinite(width)) {
+        doc.link(x, y - 1, width, 12, part.href);
+      }
+
+      x += width;
     }
 
-    const part = parts[i];
-    const width = doc.widthOfString(part.label);
-    doc
-      .fillColor(part.href ? "#1F4E79" : "#555555")
-      .text(part.label, x, y, { lineBreak: false });
-
-    // Annotation only — no underline (Word Hyperlink style can force one; PDF drawn line removed)
-    if (part.href && Number.isFinite(x) && Number.isFinite(width)) {
-      doc.link(x, y - 1, width, 12, part.href);
-    }
-
-    x += width;
+    y += lineHeight;
   }
 
   doc.x = left;
-  doc.y = y + 14;
+  doc.y = y + 2;
+}
+
+function truncateToWidth(
+  doc: PDFKit.PDFDocument,
+  text: string,
+  maxWidth: number,
+): string {
+  if (doc.widthOfString(text) <= maxWidth) return text;
+  const ellipsis = "…";
+  let low = 0;
+  let high = text.length;
+  while (low < high) {
+    const mid = Math.ceil((low + high) / 2);
+    const candidate = `${text.slice(0, mid)}${ellipsis}`;
+    if (doc.widthOfString(candidate) <= maxWidth) low = mid;
+    else high = mid - 1;
+  }
+  return low > 0 ? `${text.slice(0, low)}${ellipsis}` : ellipsis;
 }
 
 export async function buildResumePdf(
