@@ -1118,9 +1118,40 @@ export default function ResumeForm() {
           }
         }
       }
+
+      // Stream ended without job_done/job_error (e.g. platform timeout) —
+      // don't leave cards stuck on RUNNING forever.
+      for (const target of targets) {
+        patchJob(target.index, (job) => {
+          if (job.status !== "running" && job.status !== "queued") return job;
+          return markJobError(job, {
+            type: "job_error",
+            index: target.index,
+            jobUrl: target.url,
+            step: job.currentStep || "generating",
+            error:
+              "Connection closed before this job finished. Retry this job.",
+          });
+        });
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error");
       setStatus(null);
+      for (const target of targets) {
+        patchJob(target.index, (job) => {
+          if (job.status !== "running" && job.status !== "queued") return job;
+          return markJobError(job, {
+            type: "job_error",
+            index: target.index,
+            jobUrl: target.url,
+            step: job.currentStep || "generating",
+            error:
+              err instanceof Error
+                ? err.message
+                : "Unexpected error while processing this job.",
+          });
+        });
+      }
     } finally {
       if (mode === "batch") {
         setLoading(false);

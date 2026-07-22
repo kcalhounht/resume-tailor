@@ -44,89 +44,109 @@ JSON shape:
   "coverLetter": string
 }`;
 
+const GENERATE_TIMEOUT_MS = 90_000;
+
+function buildFallbackPackage(
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): TailoredPackage {
+  return {
+    resume: normalizeResume(undefined, profile, extracted),
+    coverLetter: buildFallbackCoverLetter(profile, extracted),
+  };
+}
+
 export async function generateTailoredPackage(
   profile: CandidateProfile,
   extracted: ExtractedJD,
   rawJd: string,
   options?: { sourceResumeText?: string },
 ): Promise<TailoredPackage> {
-  const client = getLlmClient();
-  const model = getLlmModel();
-  const userPayload = JSON.stringify({
-    candidate: profile,
-    extractedJd: extracted,
-    rawJobDescription: rawJd.slice(0, 12000),
-    sourceResumeText: options?.sourceResumeText
-      ? options.sourceResumeText.slice(0, 25000)
-      : undefined,
-    instructions: options?.sourceResumeText
-      ? "Tailor the uploaded resume to this JD. Keep factual employment history; rewrite bullets/summary/skills for ATS fit. summary and coverLetter MUST be non-empty strings."
-      : "Generate a tailored resume from the candidate profile skeleton and JD. summary and coverLetter MUST be non-empty strings.",
-  });
-
-  let content = await requestJson(client, model, [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: userPayload },
-  ]);
-
-  let parsedRaw: unknown;
   try {
-    parsedRaw = parseModelJson(content);
-  } catch (firstError) {
-    content = await requestJson(client, model, [
+    const client = getLlmClient();
+    const model = getLlmModel();
+    const userPayload = JSON.stringify({
+      candidate: profile,
+      extractedJd: extracted,
+      rawJobDescription: rawJd.slice(0, 12000),
+      sourceResumeText: options?.sourceResumeText
+        ? options.sourceResumeText.slice(0, 25000)
+        : undefined,
+      instructions: options?.sourceResumeText
+        ? "Tailor the uploaded resume to this JD. Keep factual employment history; rewrite bullets/summary/skills for ATS fit. summary and coverLetter MUST be non-empty strings."
+        : "Generate a tailored resume from the candidate profile skeleton and JD. summary and coverLetter MUST be non-empty strings.",
+    });
+
+    let content = await requestJson(client, model, [
       { role: "system", content: SYSTEM_PROMPT },
       { role: "user", content: userPayload },
-      { role: "assistant", content },
-      {
-        role: "user",
-        content:
-          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Include non-empty resume.summary and coverLetter. No markdown, no commentary.",
-      },
     ]);
+
+    let parsedRaw: unknown;
     try {
       parsedRaw = parseModelJson(content);
-    } catch {
-      throw firstError instanceof Error
-        ? firstError
-        : new Error("Failed to parse generated resume JSON.");
+    } catch (firstError) {
+      content = await requestJson(client, model, [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPayload },
+        { role: "assistant", content },
+        {
+          role: "user",
+          content:
+            "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Include non-empty resume.summary and coverLetter. No markdown, no commentary.",
+        },
+      ]);
+      try {
+        parsedRaw = parseModelJson(content);
+      } catch {
+        throw firstError instanceof Error
+          ? firstError
+          : new Error("Failed to parse generated resume JSON.");
+      }
     }
-  }
 
-  let packageDraft = coerceTailoredPackage(parsedRaw);
-  let resume = normalizeResume(packageDraft.resume, profile, extracted);
-  let coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
+    let packageDraft = coerceTailoredPackage(parsedRaw);
+    let resume = normalizeResume(packageDraft.resume, profile, extracted);
+    let coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
 
-  // One repair pass if the model omitted summary/cover letter
-  if (!resume.summary || !coverLetter) {
-    content = await requestJson(client, model, [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPayload },
-      {
-        role: "user",
-        content:
-          "Return the full JSON again. resume.summary MUST be 40-80 words tailored to the JD. coverLetter MUST be 3 short paragraphs. Do not leave either empty.",
-      },
-    ]);
-    try {
-      packageDraft = coerceTailoredPackage(parseModelJson(content));
-      resume = normalizeResume(packageDraft.resume, profile, extracted);
-      coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
-    } catch {
-      // fall through to deterministic fallbacks
+    // One repair pass if the model omitted summary/cover letter
+    if (!resume.summary || !coverLetter) {
+      try {
+        content = await requestJson(client, model, [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userPayload },
+          {
+            role: "user",
+            content:
+              "Return the full JSON again. resume.summary MUST be 40-80 words tailored to the JD. coverLetter MUST be 3 short paragraphs. Do not leave either empty.",
+          },
+        ]);
+        packageDraft = coerceTailoredPackage(parseModelJson(content));
+        resume = normalizeResume(packageDraft.resume, profile, extracted);
+        coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
+      } catch {
+        // fall through to deterministic fallbacks
+      }
     }
-  }
 
-  if (!resume.summary) {
-    resume = {
-      ...resume,
-      summary: buildFallbackSummary(profile, extracted),
-    };
-  }
-  if (!coverLetter) {
-    coverLetter = buildFallbackCoverLetter(profile, extracted);
-  }
+    if (!resume.summary) {
+      resume = {
+        ...resume,
+        summary: buildFallbackSummary(profile, extracted),
+      };
+    }
+    if (!coverLetter) {
+      coverLetter = buildFallbackCoverLetter(profile, extracted);
+    }
 
-  return { resume, coverLetter };
+    return { resume, coverLetter };
+  } catch (err) {
+    console.warn(
+      "Generate falling back to deterministic package:",
+      err instanceof Error ? err.message : err,
+    );
+    return buildFallbackPackage(profile, extracted);
+  }
 }
 
 function coerceTailoredPackage(raw: unknown): TailoredPackage {
@@ -220,23 +240,70 @@ function buildFallbackCoverLetter(
   ].join("\n\n");
 }
 
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} timed out after ${ms / 1000}s`)),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 async function requestJson(
   client: ReturnType<typeof getLlmClient>,
   model: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
 ): Promise<string> {
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.3,
-    response_format: { type: "json_object" },
-    messages,
-  });
+  const attempts: Array<{ useJsonObjectFormat: boolean; label: string }> = [
+    { useJsonObjectFormat: true, label: "json_object" },
+    { useJsonObjectFormat: false, label: "plain" },
+    { useJsonObjectFormat: false, label: "plain_retry" },
+  ];
 
-  const content = completion.choices[0]?.message?.content;
-  if (!content?.trim()) {
-    throw new Error("Empty response while generating tailored resume.");
+  let lastError: Error | null = null;
+  for (const attempt of attempts) {
+    try {
+      const completion = await withTimeout(
+        client.chat.completions.create({
+          model,
+          temperature: 0.3,
+          ...(attempt.useJsonObjectFormat
+            ? { response_format: { type: "json_object" as const } }
+            : {}),
+          messages,
+        }),
+        GENERATE_TIMEOUT_MS,
+        `Generate (${attempt.label})`,
+      );
+
+      const content = completion.choices[0]?.message?.content;
+      if (!content?.trim()) {
+        throw new Error(
+          `Empty response while generating tailored resume (${attempt.label}).`,
+        );
+      }
+      return content;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      console.error("Generate attempt failed:", attempt.label, lastError);
+    }
   }
-  return content;
+
+  throw (
+    lastError || new Error("Empty response while generating tailored resume.")
+  );
 }
 
 function normalizeSkills(

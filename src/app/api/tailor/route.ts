@@ -7,8 +7,56 @@ import type { CandidateProfile } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
+/** Keep OpenRouter load sane — unbounded Promise.all often hangs one job on Generate. */
+const JOB_CONCURRENCY = 2;
+const JOB_TIMEOUT_MS = 150_000;
+
 function encodeSse(event: ProgressEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
+}
+
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+
+  async function runWorker() {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await worker(items[index], index);
+    }
+  }
+
+  const poolSize = Math.min(Math.max(1, concurrency), items.length || 1);
+  await Promise.all(
+    Array.from({ length: poolSize }, () => runWorker()),
+  );
+  return results;
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error(`${label} timed out after ${ms / 1000}s`)),
+          ms,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 export async function POST(request: Request) {
@@ -81,30 +129,36 @@ export async function POST(request: Request) {
           profile = payload.profile;
         }
 
-        const outcomes = await Promise.all(
-          payload.jobUrls.map(async (jobUrl, i) => {
+        const outcomes = await mapPool(
+          payload.jobUrls,
+          JOB_CONCURRENCY,
+          async (jobUrl, i) => {
             const index = payload.indices?.[i] ?? i + 1;
             let currentStep: JobStep = JOB_STEPS[0];
 
             try {
-              const result = await processOneJob({
-                index,
-                jobUrl,
-                profile,
-                personal: profile.personal,
-                manualJd: payload.manualJds?.[i],
-                sourceResumeText,
-                onStep: (step, message) => {
-                  currentStep = step;
-                  send({
-                    type: "step",
-                    index,
-                    jobUrl,
-                    step,
-                    message,
-                  });
-                },
-              });
+              const result = await withTimeout(
+                processOneJob({
+                  index,
+                  jobUrl,
+                  profile,
+                  personal: profile.personal,
+                  manualJd: payload.manualJds?.[i],
+                  sourceResumeText,
+                  onStep: (step, message) => {
+                    currentStep = step;
+                    send({
+                      type: "step",
+                      index,
+                      jobUrl,
+                      step,
+                      message,
+                    });
+                  },
+                }),
+                JOB_TIMEOUT_MS,
+                `Job ${index}`,
+              );
 
               send({
                 type: "job_done",
@@ -140,7 +194,7 @@ export async function POST(request: Request) {
               });
               return { ok: false as const };
             }
-          }),
+          },
         );
 
         const succeeded = outcomes.filter((o) => o.ok).length;
