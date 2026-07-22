@@ -1,5 +1,5 @@
 import type { CandidateProfile } from "./types";
-import { getLlmClient, getLlmModel } from "./llm";
+import { getLlmClient, getLlmModel, LLM_MAX_TOKENS } from "./llm";
 import { parseModelJson } from "./parse-json";
 import { EMPTY_PROFILE } from "./profile";
 
@@ -52,6 +52,7 @@ export async function extractProfileFromResumeText(
   const completion = await client.chat.completions.create({
     model,
     temperature: 0.1,
+    max_tokens: LLM_MAX_TOKENS.extractResume,
     response_format: { type: "json_object" },
     messages: [
       { role: "system", content: SYSTEM_PROMPT },

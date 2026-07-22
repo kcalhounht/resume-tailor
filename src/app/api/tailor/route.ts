@@ -1,4 +1,5 @@
 import { ZodError } from "zod";
+import { formatOpenRouterError } from "@/lib/llm";
 import { processOneJob } from "@/lib/process-job";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
@@ -170,16 +171,13 @@ export async function POST(request: Request) {
 
             outcomes.push({ ok: true });
           } catch (err) {
-            const message =
-              err instanceof Error
-                ? err.message
-                : "Unknown error for this job.";
+            const message = formatOpenRouterError(err);
             send({
               type: "job_error",
               index,
               jobUrl,
               step: currentStep,
-              error: message,
+              error: message || "Unknown error for this job.",
             });
             outcomes.push({ ok: false });
           }
@@ -194,7 +192,7 @@ export async function POST(request: Request) {
       } catch (err) {
         send({
           type: "fatal",
-          error: err instanceof Error ? err.message : "Unexpected error",
+          error: formatOpenRouterError(err) || "Unexpected error",
         });
       } finally {
         clearInterval(keepalive);

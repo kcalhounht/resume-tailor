@@ -1,5 +1,10 @@
 import { NextResponse } from "next/server";
-import { getLlmClient, getLlmModel } from "@/lib/llm";
+import {
+  formatOpenRouterError,
+  getLlmClient,
+  getLlmModel,
+  LLM_MAX_TOKENS,
+} from "@/lib/llm";
 import { parseModelJson } from "@/lib/parse-json";
 import {
   MIN_JD_CHARS,
@@ -56,20 +61,7 @@ Rules:
 6. Do NOT drop or merge jobs — labeling only.`;
 
 function formatLlmError(err: unknown): string {
-  if (!(err instanceof Error)) return "OpenRouter request failed";
-  const anyErr = err as Error & {
-    error?: { message?: string };
-    message?: string;
-  };
-  const detail =
-    anyErr.error?.message || anyErr.message || "OpenRouter request failed";
-  if (/api key|unauthorized|401|403|not set/i.test(detail)) {
-    return `OpenRouter auth failed: ${detail}. Check OPENROUTER_API_KEY in Vercel and redeploy.`;
-  }
-  if (/model|404|not found/i.test(detail)) {
-    return `OpenRouter model error: ${detail}. Check OPENROUTER_MODEL (expected deepseek/deepseek-v4-flash).`;
-  }
-  return detail;
+  return formatOpenRouterError(err);
 }
 
 function requireApiKey() {
@@ -120,6 +112,7 @@ async function splitChunkWithOpenRouter(chunk: string): Promise<DetectedJd[]> {
   const completion = await client.chat.completions.create({
     model,
     temperature: 0,
+    max_tokens: LLM_MAX_TOKENS.split,
     messages: [
       { role: "system", content: SPLIT_PROMPT },
       {
@@ -155,6 +148,7 @@ async function labelPreviewsWithOpenRouter(
   const completion = await client.chat.completions.create({
     model,
     temperature: 0,
+    max_tokens: LLM_MAX_TOKENS.label,
     messages: [
       { role: "system", content: LABEL_PROMPT },
       {

@@ -1,5 +1,5 @@
 import type { ExtractedJD, JobType, WorkMode } from "./types";
-import { getLlmClient, getLlmModel } from "./llm";
+import { getLlmClient, getLlmModel, LLM_MAX_TOKENS } from "./llm";
 import { parseModelJson } from "./parse-json";
 
 const JOB_TYPES: JobType[] = [
@@ -267,6 +267,7 @@ async function callExtractLlm(
     {
       model: getLlmModel(),
       temperature: 0.2,
+      max_tokens: LLM_MAX_TOKENS.extract,
       ...(options.useJsonObjectFormat
         ? { response_format: { type: "json_object" as const } }
         : {}),

@@ -11,8 +11,13 @@ function normalizeBulletKey(text: string): string {
 }
 
 function skillPool(extracted: ExtractedJD): string[] {
-  const fromJd = extracted.hardTechnicalSkills.map(String).filter(Boolean);
-  if (fromJd.length >= 3) return fromJd;
+  const fromJd = [
+    ...extracted.hardTechnicalSkills,
+    ...extracted.requiredSkills,
+  ]
+    .map(String)
+    .filter(Boolean);
+  if (fromJd.length >= 3) return [...new Set(fromJd)];
   return [
     ...fromJd,
     "APIs",
@@ -41,13 +46,14 @@ export function buildExperienceOverview(
   extracted: ExtractedJD,
   roleIndex: number,
 ): string {
-  const skills = skillPhrase(skillPool(extracted), roleIndex, 3);
+  const skills = skillPhrase(skillPool(extracted), roleIndex, 4);
   const place = exp.location.trim() || "hybrid";
+  const target = extracted.jobTitle || extracted.type || "engineering";
   const variants = [
-    `At ${exp.company}, contributed as ${exp.title} in a ${place.toLowerCase()} environment, focusing on ${skills} and reliable delivery with product and engineering partners.`,
-    `${exp.title} at ${exp.company} supporting scalable systems with ${skills}; collaborated across teams to ship production features aligned to business priorities.`,
-    `Served as ${exp.title} at ${exp.company} (${place}), owning implementation and iteration of services involving ${skills} for customer-facing and internal platforms.`,
-    `${exp.company} engineering team member as ${exp.title}, delivering features and operational improvements around ${skills} in a ${place.toLowerCase()} setting.`,
+    `At ${exp.company}, served as ${exp.title} in a ${place.toLowerCase()} setting, owning delivery around ${skills} with clear accountability for production quality aligned to ${target} outcomes.`,
+    `${exp.title} at ${exp.company} building and operating scalable systems with ${skills}; partnered with product and platform teams to ship measurable improvements for customer-facing and internal workloads.`,
+    `As ${exp.title} at ${exp.company} (${place}), led implementation and iteration of services involving ${skills}, emphasizing latency, reliability, and maintainable architecture.`,
+    `${exp.company} engineering contributor as ${exp.title}, delivering features and operational hardening around ${skills} with ownership from design reviews through production rollout.`,
   ];
   return variants[roleIndex % variants.length];
 }
@@ -64,14 +70,14 @@ export function buildVariedExperienceBullets(
 ): string[] {
   const skills = skillPool(extracted);
   const templates = [
-    `Built and shipped production features as ${exp.title} at ${exp.company} using ${skillPhrase(skills, 0)}, cutting critical-path latency by ~25% for high-traffic workflows serving thousands of daily users.`,
-    `Led design and delivery of services with ${skillPhrase(skills, 1)} at ${exp.company}, increasing release throughput by shipping 8+ production increments per quarter with automated regression coverage.`,
-    `Owned end-to-end implementation involving ${skillPhrase(skills, 2)}, including reviews and rollouts that reduced recurring production defects by ~30% for ${exp.company} stakeholders.`,
-    `Scaled platform components around ${skillPhrase(skills, 3)} at ${exp.company}, supporting 10x peak request volume during campaigns while keeping p95 latency within agreed SLOs.`,
-    `Automated delivery and monitoring with ${skillPhrase(skills, 4)}, reducing mean time to detect incidents from hours to minutes across ${exp.company} ${exp.location.toLowerCase() || "engineering"} environments.`,
-    `Delivered customer-facing capabilities with ${skillPhrase(skills, 5)}, improving conversion/completion funnels by measurable double-digit gains on priority ${exp.company} journeys.`,
-    `Migrated and hardened core paths using ${skillPhrase(skills, 6)}, cutting infrastructure/runtime cost by ~20% while maintaining availability targets for ${exp.company} production systems.`,
-    `Drove troubleshooting and iterative performance work on ${skillPhrase(skills, 2)} stacks, clearing a backlog of 40+ reliability items and stabilizing on-call load for ${exp.company} teams.`,
+    `Built and shipped production features as ${exp.title} at ${exp.company} using ${skillPhrase(skills, 0)}, cutting critical-path p95 latency by ~28% for workflows serving 10k+ daily active users.`,
+    `Led design and delivery of services with ${skillPhrase(skills, 1)} at ${exp.company}, raising release throughput to 8+ production increments per quarter with automated regression coverage and safer rollbacks.`,
+    `Owned end-to-end implementation involving ${skillPhrase(skills, 2)}, including reviews and staged rollouts that reduced recurring production defects by ~30% for ${exp.company} workloads.`,
+    `Scaled platform components around ${skillPhrase(skills, 3)} at ${exp.company}, supporting ~10x peak request volume during campaigns while keeping p95 latency within agreed SLOs.`,
+    `Automated delivery and monitoring with ${skillPhrase(skills, 4)}, reducing mean time to detect incidents from hours to under 10 minutes across ${exp.company} ${exp.location.toLowerCase() || "engineering"} environments.`,
+    `Delivered customer-facing capabilities with ${skillPhrase(skills, 5)}, improving completion/conversion on priority ${exp.company} journeys by a measurable mid-teens percentage lift.`,
+    `Migrated and hardened core paths using ${skillPhrase(skills, 6)}, cutting infrastructure/runtime cost by ~20% while holding availability targets for ${exp.company} production systems.`,
+    `Drove performance and reliability work on ${skillPhrase(skills, 2)} stacks, clearing a backlog of 40+ stability items and reducing on-call noise for ${exp.company} teams.`,
   ];
 
   const seen = new Set<string>();

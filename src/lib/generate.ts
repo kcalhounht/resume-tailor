@@ -5,7 +5,7 @@ import type {
   TailoredPackage,
   TailoredResume,
 } from "./types";
-import { getLlmClient, getLlmModel } from "./llm";
+import { getLlmClient, getLlmModel, LLM_MAX_TOKENS, formatOpenRouterError } from "./llm";
 import { parseModelJson } from "./parse-json";
 import {
   buildExperienceOverview,
@@ -13,25 +13,26 @@ import {
 } from "./resume-fallbacks";
 import { sanitizePlainText } from "./validate-resume";
 
-const SYSTEM_PROMPT = `You are an elite ATS resume writer who produces HIGH-IMPACT, job-winning resumes.
-Create a tailored resume and cover letter that beat average AI resumes on specificity, metrics, and JD keyword density.
+const SYSTEM_PROMPT = `You are an elite technical recruiter + ATS resume ghostwriter. Output resumes that look hand-crafted by a senior hiring manager — dense, specific, metric-heavy, and tightly mirrored to the JD.
 
-Accuracy first — never invent employers or schools. Prefer real achievements from the profile/source resume; when inventing plausible metrics for a role, keep them realistic and grounded in that company's domain and the JD.
+Accuracy: never invent employers or schools. Prefer real achievements from the profile/source resume. When adding plausible metrics, ground them in that company's domain and the JD stack (realistic numbers only; avoid 90%+ claims).
 
 Hard rules:
-1. Resume sections: Summary, Skills, Experience, Education.
-2. SUMMARY (critical): 55-90 words. Open with the target job title / seniority from the JD. Name 4-8 hard skills from the JD. State domain impact (scale, systems, products). Sound senior and concrete — no vague soft filler like "passionate team player".
-3. SKILLS (critical): 5-6 groups (e.g. Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices). Each group MUST have 5-10 items. Heavily mirror JD hardTechnicalSkills / requiredSkills. Include adjacent high-signal tools the candidate would plausibly know. No tiny 2-item groups.
+1. Sections: Summary, Skills, Experience, Education.
+2. SUMMARY (critical): 60-95 words. First words = target job title/seniority from the JD. Embed 5-10 hard skills from the JD. Mention domain + impact (systems, data, users, products). Senior voice. Ban: "passionate", "team player", "results-driven", "leveraging synergies".
+3. SKILLS (critical): exactly 5-6 groups with clear names (Languages; Frameworks/Libraries; Cloud/DevOps; Data/AI/ML; Databases; Tools/Practices — pick what fits). Each group 6-10 items. Mirror JD hardTechnicalSkills / requiredSkills first, then add adjacent high-signal tools. No 2-3 item groups.
 4. Each experience MUST include:
-   - overview: 1-2 sentences (30-50 words) — what the company/product does + the candidate's ownership, tailored to the JD.
-   - exactly 7 UNIQUE accomplishment bullets.
-5. QUANTIFIED IMPACT (critical): At least 6 of 7 bullets per role MUST include a concrete metric (users, requests/QPS, latency ms, uptime, revenue/cost, dataset size, services, PRs, tickets, team size, % only if realistic <40, time saved, etc.). Start bullets with strong verbs (Built, Led, Designed, Reduced, Scaled, Automated, Migrated, Shipped).
-6. Each bullet ~28-42 words, specific stack + outcome. Ban vague filler: "partnered with stakeholders", "cross-functional collaboration" as the whole point, "improved reliability" without a number.
-7. Mirror JD terminology heavily for ATS. keywords: 12-25 important JD phrases to bold later.
-8. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis. Tie 2-3 quantified achievements to the target company/role.
-9. Keep company names, periods, locations, and education exactly as given. Slight title refinement allowed if plausible.
-10. When sourceResumeText is provided: prefer true achievements/skills from it; do not invent major claims absent from source/profile.
-11. Return ONLY valid compact JSON. Escape quotes inside strings. No markdown. NEVER use **bold**, *italic*, backticks, or headings in any string.
+   - overview: 35-55 words — company/product context + candidate ownership, JD-aligned.
+   - exactly 7 UNIQUE accomplishment bullets (never clone the same bullet across roles).
+5. QUANTIFIED IMPACT: ≥6 of 7 bullets per role include a concrete metric (users, QPS/RPS, latency ms, uptime, $ cost/revenue, dataset size, model accuracy/F1 only if ML role, services count, PRs, tickets, team size, % under 40, time saved). Strong verbs: Built, Led, Designed, Reduced, Scaled, Automated, Migrated, Fine-tuned, Shipped, Optimized.
+6. Each bullet 28-45 words: stack + action + outcome. Ban empty filler as the whole point: "partnered with stakeholders", "cross-functional collaboration", "improved reliability" with no number.
+7. keywords: 15-25 JD phrases for ATS. Cover letter: 3-4 short paragraphs in ONE string with \\n\\n between paragraphs; tie 2-3 quantified wins to the target company/role.
+8. Keep company names, periods, locations, education exact. Slight title refinement OK if plausible.
+9. If sourceResumeText exists: prefer its real achievements/skills; do not invent major claims absent from source/profile.
+10. Return ONLY valid compact JSON. Escape quotes. No markdown. NEVER use **bold**, *italic*, backticks, or headings in any string.
+
+Good bullet example: "Fine-tuned LLM inference pipelines with PyTorch and vLLM on GPU clusters, cutting p95 latency from 1.8s to 420ms while serving 50k+ daily requests for production NLP features."
+Bad bullet example: "Collaborated with cross-functional teams to improve AI systems and deliver value."
 
 JSON shape:
 {
@@ -46,7 +47,7 @@ JSON shape:
 }`;
 
 /** Abort hung calls, but allow enough time for a real quality completion. */
-const GENERATE_TIMEOUT_MS = 75_000;
+const GENERATE_TIMEOUT_MS = 90_000;
 
 function buildFallbackPackage(
   profile: CandidateProfile,
@@ -73,10 +74,20 @@ function countUniqueBullets(bullets: unknown): number {
 }
 
 function bulletHasMetric(text: string): boolean {
-  return /\d/.test(text) ||
-    /\$|€|£|%|\bms\b|\bqps\b|\brps\b|\bk\b|\bm\b|\busers?\b|\brequests?\b|\blatency\b|\buptime\b|\brevenue\b|\bcost\b|\bteam of\b|\bservices?\b/i.test(
+  return (
+    /\d/.test(text) ||
+    /\$|€|£|%|\bms\b|\bqps\b|\brps\b|\btps\b|\bk\b|\bm\b|\busers?\b|\brequests?\b|\blatency\b|\buptime\b|\brevenue\b|\bcost\b|\bteam of\b|\bservices?\b|\bGPU\b|\btokens?\b/i.test(
       text,
-    );
+    )
+  );
+}
+
+function isVagueBullet(text: string): boolean {
+  const t = text.toLowerCase();
+  const vagueOnly =
+    /partnered with stakeholders|cross-functional collaboration|improved reliability|drove initiatives|helped the team|worked closely with|contributed to various|responsible for supporting/;
+  if (!vagueOnly.test(t)) return false;
+  return !bulletHasMetric(text) || text.trim().split(/\s+/).length < 22;
 }
 
 function countSkillItems(skills: unknown): { groups: number; items: number } {
@@ -101,21 +112,27 @@ function isWeakModelPackage(
   extracted: ExtractedJD,
 ): boolean {
   const summary = String(draft.resume?.summary || "").trim();
-  if (summary.length < 220) return true;
+  const summaryWords = summary.split(/\s+/).filter(Boolean).length;
+  if (summaryWords < 55 || summary.length < 280) return true;
   if (!String(draft.coverLetter || "").trim()) return true;
+  if (String(draft.coverLetter || "").trim().split(/\s+/).filter(Boolean).length < 90) {
+    return true;
+  }
 
   const { groups, items } = countSkillItems(draft.resume?.skills);
-  if (groups < 4 || items < 18) return true;
+  if (groups < 5 || items < 28) return true;
 
-  // Prefer resumes that actually mention JD hard skills in summary or skills.
-  const jdSkills = extracted.hardTechnicalSkills
-    .map((s) => s.toLowerCase())
-    .filter((s) => s.length >= 2)
-    .slice(0, 12);
-  if (jdSkills.length >= 3) {
+  const jdSkills = [
+    ...extracted.hardTechnicalSkills,
+    ...extracted.requiredSkills,
+  ]
+    .map((s) => s.toLowerCase().trim())
+    .filter((s) => s.length >= 2);
+  const uniqueJd = [...new Set(jdSkills)].slice(0, 14);
+  if (uniqueJd.length >= 3) {
     const hay = `${summary} ${JSON.stringify(draft.resume?.skills || [])}`.toLowerCase();
-    const hits = jdSkills.filter((s) => hay.includes(s)).length;
-    if (hits < Math.min(3, jdSkills.length)) return true;
+    const hits = uniqueJd.filter((s) => hay.includes(s)).length;
+    if (hits < Math.min(4, uniqueJd.length)) return true;
   }
 
   for (let i = 0; i < profile.experiences.length; i++) {
@@ -124,11 +141,15 @@ function isWeakModelPackage(
       ? exp!.bullets.map((b) => String(b || "").trim()).filter(Boolean)
       : [];
     const unique = countUniqueBullets(bullets);
-    if (unique < 6) return true;
+    if (unique < 7) return true;
     const withMetrics = bullets.filter(bulletHasMetric).length;
-    if (withMetrics < 5) return true;
+    if (withMetrics < 6) return true;
+    const shortOrVague = bullets.filter(
+      (b) => b.split(/\s+/).length < 24 || isVagueBullet(b),
+    ).length;
+    if (shortOrVague >= 3) return true;
     const overview = String(exp?.overview || "").trim();
-    if (overview.length < 60) return true;
+    if (overview.split(/\s+/).filter(Boolean).length < 28) return true;
   }
   return false;
 }
@@ -168,12 +189,17 @@ export async function generateTailoredPackage(
     sourceResumeText: options?.sourceResumeText
       ? options.sourceResumeText.slice(0, 22000)
       : undefined,
-    mustIncludeSkills: extracted.hardTechnicalSkills.slice(0, 20),
+    mustIncludeSkills: [
+      ...extracted.hardTechnicalSkills,
+      ...extracted.requiredSkills,
+    ].slice(0, 28),
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
+    qualityBar:
+      "This must beat generic AI resumes: denser skills, longer JD-aligned summary, 7 metric-heavy UNIQUE bullets per role, strong cover letter.",
     instructions: options?.sourceResumeText
-      ? "STRENGTH FIRST: Tailor the uploaded resume into a HIGH-IMPACT package for this JD. Dense JD-aligned skills (5-6 groups). Summary 55-90 words naming the target role + key stack. 7 UNIQUE bullets per role with quantified impact in at least 6 bullets. No vague filler."
-      : "STRENGTH FIRST: Build a HIGH-IMPACT tailored resume for this JD. Dense JD-aligned skills (5-6 groups, 5-10 items each). Summary 55-90 words with target title + stack + impact. Exactly 7 UNIQUE bullets per role; at least 6 with concrete metrics. No vague stakeholder filler.",
+      ? "STRENGTH FIRST from uploaded resume: HIGH-IMPACT package. 5-6 skill groups × 6-10 items. Summary 60-95 words with target title + JD stack. Exactly 7 UNIQUE bullets/role with metrics in ≥6. No vague filler."
+      : "STRENGTH FIRST: HIGH-IMPACT tailored resume. 5-6 skill groups × 6-10 items. Summary 60-95 words with target title + stack + impact. Exactly 7 UNIQUE bullets/role; ≥6 with concrete metrics. Mirror JD language heavily.",
   });
 
   const baseMessages: Array<{
@@ -186,22 +212,28 @@ export async function generateTailoredPackage(
 
   async function runOnce(
     messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+    temperature = 0.5,
   ): Promise<TailoredPackage | null> {
     try {
-      let content = await requestJson(client, model, messages);
+      let content = await requestJson(client, model, messages, temperature);
       let parsedRaw: unknown;
       try {
         parsedRaw = parseModelJson(content);
       } catch {
-        content = await requestJson(client, model, [
-          ...messages,
-          { role: "assistant", content },
-          {
-            role: "user",
-            content:
-              "Your previous reply was invalid JSON. Return ONLY repaired valid JSON. Requirements: strong 55-90 word summary, 5-6 skill groups with 5-10 items each, 7 DISTINCT bullets per role with metrics in most bullets, non-empty coverLetter. No markdown.",
-          },
-        ]);
+        content = await requestJson(
+          client,
+          model,
+          [
+            ...messages,
+            { role: "assistant", content },
+            {
+              role: "user",
+              content:
+                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid JSON. Requirements: 60-95 word summary opening with target title, 5-6 skill groups with 6-10 items each, 7 DISTINCT metric-heavy bullets per role, non-empty coverLetter (3-4 paragraphs). No markdown.",
+            },
+          ],
+          Math.min(temperature, 0.35),
+        );
         parsedRaw = parseModelJson(content);
       }
       return coerceTailoredPackage(parsedRaw);
@@ -214,25 +246,33 @@ export async function generateTailoredPackage(
     }
   }
 
-  try {
-    let draft = await runOnce(baseMessages);
-
-    // Quality retry when summary/skills/metrics are weak.
-    if (!draft || isWeakModelPackage(draft, profile, extracted)) {
-      draft =
-        (await runOnce([
-          ...baseMessages,
-          {
-            role: "user",
-            content: `REWRITE the FULL JSON. Previous draft was too weak.
+  const rewritePrompt = `REWRITE the FULL JSON. Previous draft failed the quality bar for a competitive ${extracted.jobTitle || extracted.type} application at ${extracted.company || "the employer"}.
 Mandatory upgrades:
-- Summary: 55-90 words, start with "${extracted.jobTitle || extracted.type}", weave in these skills: ${extracted.hardTechnicalSkills.slice(0, 8).join(", ") || "JD hard skills"}.
-- Skills: 5-6 categories, 5-10 items each, maximize overlap with JD hard skills.
-- Experience: exactly 7 UNIQUE bullets per role; at least 6 bullets MUST include concrete numbers (users, latency, cost, services, team size, throughput, etc.).
-- No vague "partnered with stakeholders" filler without an outcome metric.
-- Strong cover letter tied to ${extracted.company || "the employer"}.`,
-          },
-        ])) || draft;
+- Summary: 60-95 words, START with "${extracted.jobTitle || extracted.type}", weave in: ${[...extracted.hardTechnicalSkills, ...extracted.requiredSkills].slice(0, 10).join(", ") || "JD hard skills"}.
+- Skills: 5-6 categories, 6-10 items EACH, maximize overlap with JD hard/required skills; add adjacent tools.
+- Experience: exactly 7 UNIQUE bullets per role; ≥6 bullets MUST include concrete numbers (latency ms, users, cost, throughput, team size, dataset size, model metrics if ML, services, etc.).
+- Overviews: 35-55 words, company + ownership + JD stack.
+- Ban vague "partnered with stakeholders" filler without an outcome metric.
+- Cover letter: 3-4 paragraphs tied to ${extracted.company || "the employer"} with 2-3 quantified wins.
+Return complete JSON only.`;
+
+  try {
+    let draft = await runOnce(baseMessages, 0.5);
+
+    // Up to two quality rewrites when summary/skills/metrics are weak.
+    for (let pass = 0; pass < 2; pass++) {
+      if (draft && !isWeakModelPackage(draft, profile, extracted)) break;
+      draft =
+        (await runOnce(
+          [
+            ...baseMessages,
+            {
+              role: "user",
+              content: rewritePrompt,
+            },
+          ],
+          0.55 + pass * 0.05,
+        )) || draft;
     }
 
     if (!draft) {
@@ -315,16 +355,21 @@ function buildFallbackSummary(
   extracted: ExtractedJD,
 ): string {
   const title = extracted.jobTitle || extracted.type || "Software Engineer";
-  const skills = extracted.hardTechnicalSkills.slice(0, 8);
+  const skills = [
+    ...extracted.hardTechnicalSkills,
+    ...extracted.requiredSkills,
+  ]
+    .filter(Boolean)
+    .slice(0, 8);
   const skillBit = skills.length
     ? skills.join(", ")
-    : "modern cloud-native software stacks";
+    : "modern cloud-native software and data stacks";
   const latest = profile.experiences[0];
   const roleBit = latest
     ? `${latest.title} at ${latest.company}`
     : "shipping production systems across product engineering teams";
-  const mode = extracted.workMode ? ` ${extracted.workMode}` : "";
-  return `${profile.personal.name || "Candidate"} is a ${title} with experience as ${roleBit}. Strengths include ${skillBit}. Delivers measurable outcomes across reliability, performance, and product velocity for${mode} teams at ${extracted.company || "high-growth employers"}, with a track record of owning end-to-end features from design through production.`;
+  const company = extracted.company || "high-growth employers";
+  return `${title} with hands-on depth across ${skillBit}. Recent work as ${roleBit} focused on measurable delivery — reliability, performance, and product velocity. Brings end-to-end ownership from design through production for ${extracted.workMode || "hybrid"} teams, with a track record of shipping systems that scale for ${company}.`;
 }
 
 function buildFallbackCoverLetter(
@@ -334,11 +379,21 @@ function buildFallbackCoverLetter(
   const name = profile.personal.name || "Candidate";
   const company = extracted.company || "your team";
   const title = extracted.jobTitle || "the open role";
-  const skills = extracted.hardTechnicalSkills.slice(0, 4).join(", ");
+  const skills = [
+    ...extracted.hardTechnicalSkills,
+    ...extracted.requiredSkills,
+  ]
+    .filter(Boolean)
+    .slice(0, 6)
+    .join(", ");
+  const latest = profile.experiences[0];
+  const win = latest
+    ? `At ${latest.company} as ${latest.title}, I owned delivery involving ${skills || "core platform technologies"}, shipping production increments with clear latency, reliability, and throughput targets.`
+    : `I have delivered production systems involving ${skills || "modern engineering stacks"}, with clear ownership of reliability, performance, and release quality.`;
   return [
-    `Dear Hiring Manager,\n\nI am writing to apply for the ${title} role at ${company}. My background aligns closely with the position and I am excited about the opportunity to contribute.`,
-    `In recent roles I have delivered production systems and collaborated with cross-functional partners${skills ? `, including work involving ${skills}` : ""}. I focus on clear communication, reliable delivery, and measurable impact.`,
-    `I would welcome the chance to discuss how my experience can support ${company}. Thank you for your time and consideration.\n\nSincerely,\n${name}`,
+    `Dear Hiring Manager,\n\nI am applying for the ${title} role at ${company}. My background maps closely to the stack and outcomes described in the posting, and I am eager to contribute immediately.`,
+    win,
+    `I care about concrete results — cutting latency, raising throughput, and keeping systems operable — and I communicate tradeoffs clearly with product and engineering partners. I would welcome a conversation about how this experience can support ${company}'s roadmap.\n\nThank you for your time and consideration.\n\nSincerely,\n${name}`,
   ].join("\n\n");
 }
 
@@ -367,6 +422,7 @@ async function requestJson(
   client: ReturnType<typeof getLlmClient>,
   model: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  temperature = 0.5,
 ): Promise<string> {
   const attempts: Array<{ useJsonObjectFormat: boolean; label: string }> = [
     { useJsonObjectFormat: true, label: "json_object" },
@@ -380,7 +436,8 @@ async function requestJson(
         client.chat.completions.create(
           {
             model,
-            temperature: 0.45,
+            temperature,
+            max_tokens: LLM_MAX_TOKENS.generate,
             ...(attempt.useJsonObjectFormat
               ? { response_format: { type: "json_object" as const } }
               : {}),
@@ -393,9 +450,15 @@ async function requestJson(
       );
 
       const content = completion.choices[0]?.message?.content;
+      const finish = completion.choices[0]?.finish_reason;
       if (!content?.trim()) {
         throw new Error(
           `Empty response while generating tailored resume (${attempt.label}).`,
+        );
+      }
+      if (finish === "length") {
+        throw new Error(
+          `Generate response truncated at max_tokens (${attempt.label}).`,
         );
       }
       return content;
@@ -405,38 +468,199 @@ async function requestJson(
     }
   }
 
-  throw (
-    lastError || new Error("Empty response while generating tailored resume.")
-  );
+  if (lastError) {
+    throw new Error(formatOpenRouterError(lastError));
+  }
+  throw new Error("Empty response while generating tailored resume.");
 }
 
 function normalizeSkills(
   skills: unknown,
   extracted: ExtractedJD,
 ): SkillGroup[] {
-  const jdSkills = extracted.hardTechnicalSkills
+  const jdSkills = [
+    ...extracted.hardTechnicalSkills,
+    ...extracted.requiredSkills,
+  ]
     .map((s) => sanitizePlainText(String(s)))
     .filter(Boolean);
 
+  const jdHay = [
+    ...jdSkills,
+    extracted.jobTitle,
+    extracted.type,
+    extracted.summary,
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  const isMl =
+    /ml|ai|llm|nlp|pytorch|tensorflow|machine learning|deep learning|data scientist/i.test(
+      jdHay,
+    );
+  const isData =
+    isMl ||
+    /data engineer|spark|airflow|etl|warehouse|snowflake|kafka|analytics/i.test(
+      jdHay,
+    );
+
+  const adjacentRows: Array<{ category: string; seeds: string[] }> = [
+    {
+      category: "Languages",
+      seeds: ["Python", "TypeScript", "SQL", "Bash"],
+    },
+    {
+      category: "Frameworks/Libraries",
+      seeds: isMl
+        ? [
+            "PyTorch",
+            "Hugging Face",
+            "FastAPI",
+            "LangChain",
+            "scikit-learn",
+            "NumPy",
+            "Pandas",
+          ]
+        : ["React", "Node.js", "FastAPI", "REST APIs", "GraphQL", "Express"],
+    },
+    {
+      category: "Cloud/DevOps",
+      seeds: [
+        "AWS",
+        "Docker",
+        "Kubernetes",
+        "CI/CD",
+        "Terraform",
+        "GitHub Actions",
+      ],
+    },
+    {
+      category: isMl || isData ? "Data/AI/ML" : "Data/Platform",
+      seeds: isMl
+        ? [
+            "LLMs",
+            "NLP",
+            "RAG",
+            "feature stores",
+            "model evaluation",
+            "vector search",
+            "ETL",
+          ]
+        : isData
+          ? [
+              "ETL",
+              "data pipelines",
+              "Spark",
+              "Kafka",
+              "warehousing",
+              "SQL analytics",
+            ]
+          : [
+              "PostgreSQL",
+              "Redis",
+              "caching",
+              "event-driven design",
+              "API design",
+            ],
+    },
+    {
+      category: "Databases",
+      seeds: ["PostgreSQL", "Redis", "MongoDB", "S3", "Kafka"],
+    },
+    {
+      category: "Tools/Practices",
+      seeds: [
+        "system design",
+        "observability",
+        "A/B testing",
+        "code review",
+        "Agile",
+        "on-call",
+      ],
+    },
+  ];
+
+  const densify = (groups: SkillGroup[]): SkillGroup[] => {
+    const merged = groups.map((g) => ({
+      category: g.category,
+      items: [...g.items],
+    }));
+
+    const ensure = (category: string, seeds: string[]) => {
+      const idx = merged.findIndex(
+        (g) => g.category.toLowerCase() === category.toLowerCase(),
+      );
+      const existing =
+        idx >= 0 ? merged[idx].items.map((i) => i.toLowerCase()) : [];
+      const fromJd = jdSkills.filter(
+        (s) => s && !existing.includes(s.toLowerCase()),
+      );
+      const add = [...fromJd.slice(0, 4), ...seeds].filter(
+        (s) => s && !existing.includes(s.toLowerCase()),
+      );
+      if (idx >= 0) {
+        merged[idx] = {
+          ...merged[idx],
+          items: [...merged[idx].items, ...add].slice(0, 10),
+        };
+      } else if (merged.length < 6) {
+        merged.push({
+          category,
+          items: Array.from(new Set([...fromJd.slice(0, 3), ...seeds])).slice(
+            0,
+            10,
+          ),
+        });
+      }
+    };
+
+    for (const row of adjacentRows) {
+      ensure(row.category, row.seeds.slice(0, isMl ? 5 : 4));
+    }
+
+    const all = new Set(
+      merged.flatMap((g) => g.items.map((i) => i.toLowerCase())),
+    );
+    const missing = jdSkills.filter((s) => !all.has(s.toLowerCase()));
+    if (missing.length && merged.length) {
+      merged[0] = {
+        ...merged[0],
+        items: [...merged[0].items, ...missing].slice(0, 10),
+      };
+    }
+
+    return merged
+      .map((g) => ({
+        ...g,
+        items: Array.from(
+          new Set(g.items.map((i) => i.trim()).filter(Boolean)),
+        ).slice(0, 10),
+      }))
+      .filter((g) => g.items.length >= 4)
+      .slice(0, 6);
+  };
+
   const mergeJd = (groups: SkillGroup[]): SkillGroup[] => {
-    if (!jdSkills.length) return groups;
+    if (!jdSkills.length) return densify(groups);
     const existing = new Set(
       groups.flatMap((g) => g.items.map((i) => i.toLowerCase())),
     );
     const missing = jdSkills.filter((s) => !existing.has(s.toLowerCase()));
-    if (!missing.length) return groups;
+    if (!missing.length) return densify(groups);
     if (!groups.length) {
-      return [{ category: "Technical Skills", items: missing.slice(0, 12) }];
+      return densify([
+        { category: "Technical Skills", items: missing.slice(0, 12) },
+      ]);
     }
-    // Fold missing JD skills into the first group so ATS coverage stays dense.
-    return groups.map((group, index) =>
+    const next = groups.map((group, index) =>
       index === 0
         ? {
             ...group,
-            items: [...group.items, ...missing].slice(0, 14),
+            items: [...group.items, ...missing].slice(0, 12),
           }
         : group,
     );
+    return densify(next);
   };
 
   if (Array.isArray(skills) && skills.length) {
@@ -472,7 +696,7 @@ function normalizeSkills(
 
   const fallback = jdSkills;
   if (!fallback.length) {
-    return [
+    return densify([
       {
         category: "Core",
         items: [
@@ -484,12 +708,11 @@ function normalizeSkills(
           "Agile Delivery",
         ],
       },
-    ];
+    ]);
   }
 
-  // Spread JD skills into denser groups when the model returned nothing useful.
   const languages = fallback.filter((s) =>
-    /python|java|typescript|javascript|go|rust|c\+\+|c#|kotlin|swift|scala/i.test(
+    /python|java|typescript|javascript|go|rust|c\+\+|c#|kotlin|swift|scala|sql|bash/i.test(
       s,
     ),
   );
@@ -497,13 +720,13 @@ function normalizeSkills(
     /aws|gcp|azure|docker|kubernetes|terraform|ci\/?cd|devops/i.test(s),
   );
   const data = fallback.filter((s) =>
-    /sql|postgres|mysql|mongo|redis|kafka|spark|snowflake|airflow|etl/i.test(s),
+    /sql|postgres|mysql|mongo|redis|kafka|spark|snowflake|airflow|etl|llm|nlp|ml|pytorch|tensorflow|rag|vector/i.test(
+      s,
+    ),
   );
   const frameworks = fallback.filter(
     (s) =>
-      !languages.includes(s) &&
-      !cloud.includes(s) &&
-      !data.includes(s),
+      !languages.includes(s) && !cloud.includes(s) && !data.includes(s),
   );
 
   const groups: SkillGroup[] = [];
@@ -511,11 +734,15 @@ function normalizeSkills(
   if (frameworks.length)
     groups.push({ category: "Frameworks/Libraries", items: frameworks });
   if (cloud.length) groups.push({ category: "Cloud/DevOps", items: cloud });
-  if (data.length) groups.push({ category: "Data/Platform", items: data });
+  if (data.length)
+    groups.push({
+      category: isMl || isData ? "Data/AI/ML" : "Data/Platform",
+      items: data,
+    });
   if (!groups.length) {
     groups.push({ category: "Technical Skills", items: fallback });
   }
-  return groups;
+  return densify(groups);
 }
 
 function normalizeResume(
