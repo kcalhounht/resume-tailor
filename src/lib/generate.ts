@@ -13,26 +13,28 @@ import {
 } from "./resume-fallbacks";
 import { sanitizePlainText } from "./validate-resume";
 
-const SYSTEM_PROMPT = `You are an elite technical recruiter + ATS resume ghostwriter. Output resumes that look hand-crafted by a senior hiring manager — dense, specific, metric-heavy, and tightly mirrored to the JD.
-
-Accuracy: never invent employers or schools. Prefer real achievements from the profile/source resume. When adding plausible metrics, ground them in that company's domain and the JD stack (realistic numbers only; avoid 90%+ claims).
+const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
+Create a tailored resume that maximize ATS keyword match for the target role.
 
 Hard rules:
-1. Sections: Summary, Skills, Experience, Education.
-2. SUMMARY (critical): 60-95 words. First words = target job title/seniority from the JD. Embed 5-10 hard skills from the JD. Mention domain + impact (systems, data, users, products). Senior voice. Ban: "passionate", "team player", "results-driven", "leveraging synergies".
-3. SKILLS (critical): exactly 5-6 groups with clear names (Languages; Frameworks/Libraries; Cloud/DevOps; Data/AI/ML; Databases; Tools/Practices — pick what fits). Each group 6-10 items. Mirror JD hardTechnicalSkills / requiredSkills first, then add adjacent high-signal tools. No 2-3 item groups.
-4. Each experience MUST include:
-   - overview: 35-55 words — company/product context + candidate ownership, JD-aligned.
-   - exactly 7 UNIQUE accomplishment bullets (never clone the same bullet across roles).
-5. QUANTIFIED IMPACT: ≥6 of 7 bullets per role include a concrete metric (users, QPS/RPS, latency ms, uptime, $ cost/revenue, dataset size, model accuracy/F1 only if ML role, services count, PRs, tickets, team size, % under 40, time saved). Strong verbs: Built, Led, Designed, Reduced, Scaled, Automated, Migrated, Fine-tuned, Shipped, Optimized.
-6. Each bullet 28-45 words: stack + action + outcome. Ban empty filler as the whole point: "partnered with stakeholders", "cross-functional collaboration", "improved reliability" with no number.
-7. keywords: 15-25 JD phrases for ATS.
-8. Keep company names, periods, locations, education exact. Slight title refinement OK if plausible.
-9. If sourceResumeText exists: prefer its real achievements/skills; do not invent major claims absent from source/profile.
-10. Return ONLY valid compact JSON for the RESUME. Do NOT include a cover letter in this response. Escape quotes. No markdown.
-
-Good bullet example: "Fine-tuned LLM inference pipelines with PyTorch and vLLM on GPU clusters, cutting p95 latency from 1.8s to 420ms while serving 50k+ daily requests for production NLP features."
-Bad bullet example: "Collaborated with cross-functional teams to improve AI systems and deliver value."
+1. Resume sections: Summary, Skills, Experience, Education.
+2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
+   Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices.
+   Each group has a short category name and 4-10 comma-ready item strings.
+3. Each experience MUST include:
+   - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
+   - exactly 7 bullet points of accomplishments.
+4. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
+5. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
+6. Include slightly MORE relevant experience breadth than the JD strictly requires.
+7. Mirror JD terminology and hard skills heavily for ATS scoring.
+8. keywords: array of important JD keywords/phrases that should be bolded.
+9. Keep the candidate's company names, periods, locations, and education exactly as given. You may refine job titles slightly if plausible.
+10. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
+11. When sourceResumeText is provided, prefer real achievements and skills from it; do not invent major claims absent from source/profile.
+12. SUMMARY: 55-90 words. Open with the target job title / seniority from the JD. Name 5-10 hard skills from the JD. State domain impact. Senior, concrete voice — no vague soft filler.
+13. Return ONLY valid compact JSON for the RESUME (no cover letter in this response). Escape all double quotes inside strings. Do not wrap in markdown.
+14. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
 
 JSON shape:
 {
@@ -45,9 +47,15 @@ JSON shape:
   }
 }`;
 
-const COVER_LETTER_PROMPT = `Write a professional cover letter for the candidate and job.
-Return ONLY JSON: { "coverLetter": string }
-Rules: 3-4 short paragraphs in ONE string with \\n\\n between paragraphs. No markdown. Tie 2-3 concrete achievements to the target company/role. No icons/emojis.`;
+const COVER_LETTER_PROMPT = `You are an expert ATS resume writer and career coach.
+Create a tailored cover letter that maximizes fit for the target role.
+
+Hard rules:
+1. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
+2. Mirror JD terminology and hard skills. Tie 2-3 concrete achievements to the target company/role.
+3. Do not invent employers or schools. Ground claims in the candidate profile / resume summary / bullets provided.
+4. Return ONLY valid compact JSON: { "coverLetter": string }
+5. Escape all double quotes inside strings. NEVER use markdown (**bold**, *italic*, backticks, headings). Plain text only.`;
 
 /** Abort hung calls, but allow enough time for a real quality completion. */
 const GENERATE_TIMEOUT_MS = 90_000;
@@ -119,7 +127,7 @@ function isWeakModelPackage(
   if (summaryWords < 55 || summary.length < 280) return true;
 
   const { groups, items } = countSkillItems(draft.resume?.skills);
-  if (groups < 5 || items < 28) return true;
+  if (groups < 4 || items < 20) return true;
 
   const jdSkills = [
     ...extracted.hardTechnicalSkills,
@@ -127,11 +135,12 @@ function isWeakModelPackage(
   ]
     .map((s) => s.toLowerCase().trim())
     .filter((s) => s.length >= 2);
-  const uniqueJd = [...new Set(jdSkills)].slice(0, 14);
+  const uniqueJd = [...new Set(jdSkills)].slice(0, 16);
   if (uniqueJd.length >= 3) {
     const hay = `${summary} ${JSON.stringify(draft.resume?.skills || [])}`.toLowerCase();
     const hits = uniqueJd.filter((s) => hay.includes(s)).length;
-    if (hits < Math.min(4, uniqueJd.length)) return true;
+    // Strong ATS: require most JD hard skills to appear in summary/skills.
+    if (hits < Math.min(5, uniqueJd.length)) return true;
   }
 
   for (let i = 0; i < profile.experiences.length; i++) {
@@ -142,13 +151,13 @@ function isWeakModelPackage(
     const unique = countUniqueBullets(bullets);
     if (unique < 7) return true;
     const withMetrics = bullets.filter(bulletHasMetric).length;
-    if (withMetrics < 6) return true;
+    if (withMetrics < 5) return true;
     const shortOrVague = bullets.filter(
-      (b) => b.split(/\s+/).length < 24 || isVagueBullet(b),
+      (b) => b.split(/\s+/).length < 22 || isVagueBullet(b),
     ).length;
     if (shortOrVague >= 3) return true;
     const overview = String(exp?.overview || "").trim();
-    if (overview.split(/\s+/).filter(Boolean).length < 28) return true;
+    if (overview.split(/\s+/).filter(Boolean).length < 22) return true;
   }
   return false;
 }
@@ -195,10 +204,10 @@ export async function generateTailoredPackage(
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
     qualityBar:
-      "Beat generic AI resumes: denser skills, JD-aligned summary, 7 metric-heavy UNIQUE bullets per role.",
+      "Maximize ATS keyword match: mirror JD terms heavily, 4-6 dense skill groups, 7 specific bullets/role with realistic hard numbers (no unrealistic %), slightly MORE breadth than the JD requires.",
     instructions: options?.sourceResumeText
-      ? "STRENGTH FIRST from uploaded resume: HIGH-IMPACT resume JSON only (no cover letter). 5-6 skill groups × 6-10 items. Summary 60-95 words. Exactly 7 UNIQUE bullets/role with metrics in ≥6."
-      : "STRENGTH FIRST: HIGH-IMPACT resume JSON only (no cover letter). 5-6 skill groups × 6-10 items. Summary 60-95 words. Exactly 7 UNIQUE bullets/role; ≥6 with concrete metrics.",
+      ? "STRONG ATS TAILOR from uploaded resume: resume JSON only (no cover letter). 4-6 skill groups × 4-10 items. Summary 55-90 words opening with target title + JD hard skills. Exactly 7 UNIQUE specific bullets/role (~25-40 words) with hard numbers; never invent unrealistic percentages. Mirror JD terminology heavily."
+      : "STRONG ATS TAILOR: resume JSON only (no cover letter). 4-6 skill groups × 4-10 items. Summary 55-90 words opening with target title + JD hard skills. Exactly 7 UNIQUE specific bullets/role (~25-40 words) with hard numbers; never invent unrealistic percentages. Mirror JD terminology heavily; include slightly more relevant breadth than the JD requires.",
   });
 
   const baseMessages: Array<{
@@ -235,7 +244,7 @@ export async function generateTailoredPackage(
             {
               role: "user",
               content:
-                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid JSON for the resume (no coverLetter). Requirements: 60-95 word summary opening with target title, 5-6 skill groups with 6-10 items each, 7 DISTINCT metric-heavy bullets per role. No markdown.",
+                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid resume JSON (no coverLetter). Requirements: 55-90 word summary opening with target title + JD skills, 4-6 skill groups with 4-10 items each, exactly 7 DISTINCT specific bullets per role (~25-40 words) with realistic hard numbers (no unrealistic %), dense JD keyword mirror. No markdown.",
             },
           ],
           Math.min(temperature, 0.35),
@@ -268,6 +277,11 @@ export async function generateTailoredPackage(
               candidateName: profile.personal.name,
               targetCompany: extracted.company,
               targetRole: extracted.jobTitle || extracted.type,
+              mustIncludeSkills: [
+                ...extracted.hardTechnicalSkills,
+                ...extracted.requiredSkills,
+              ].slice(0, 12),
+              jdSummary: extracted.summary,
               resumeSummary: resume.summary,
               topSkills: resume.skills.flatMap((g) => g.items).slice(0, 12),
               recentBullets: resume.experiences[0]?.bullets?.slice(0, 3) || [],
@@ -288,20 +302,21 @@ export async function generateTailoredPackage(
     }
   }
 
-  const rewritePrompt = `REWRITE the FULL resume JSON (no coverLetter). Previous draft failed the quality bar for a competitive ${extracted.jobTitle || extracted.type} application at ${extracted.company || "the employer"}.
+  const rewritePrompt = `REWRITE the FULL resume JSON (no coverLetter). Previous draft was NOT strong enough for ATS keyword match for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
 Mandatory upgrades:
-- Summary: 60-95 words, START with "${extracted.jobTitle || extracted.type}", weave in: ${[...extracted.hardTechnicalSkills, ...extracted.requiredSkills].slice(0, 10).join(", ") || "JD hard skills"}.
-- Skills: 5-6 categories, 6-10 items EACH, maximize overlap with JD hard/required skills.
-- Experience: exactly 7 UNIQUE bullets per role; ≥6 bullets MUST include concrete numbers.
-- Overviews: 35-55 words, company + ownership + JD stack.
-- Ban vague filler without an outcome metric.
-Return complete resume JSON only.`;
+- Summary: 55-90 words, START with "${extracted.jobTitle || extracted.type}", weave in: ${[...extracted.hardTechnicalSkills, ...extracted.requiredSkills].slice(0, 12).join(", ") || "JD hard skills"}.
+- Skills: 4-6 compact groups (Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices), 4-10 items EACH; maximize overlap with JD hard/required skills; add slightly MORE adjacent relevant tools than the JD lists.
+- Experience: overview 25-45 words (company + ownership, JD-tailored). Exactly 7 UNIQUE bullets per role (~25-40 words each); include hard numbers (counts, scale, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
+- Mirror JD terminology heavily throughout for ATS.
+- keywords: important JD phrases for later bolding.
+Return complete resume JSON only. No markdown.`;
 
   try {
     let draft = await runOnce(baseMessages, 0.5);
 
-    // One quality rewrite when summary/skills/metrics are weak (keeps credit use low).
-    if (!draft || isWeakModelPackage(draft, profile, extracted)) {
+    // Up to two strong ATS rewrites when keyword/skill/bullet quality is weak.
+    for (let pass = 0; pass < 2; pass++) {
+      if (draft && !isWeakModelPackage(draft, profile, extracted)) break;
       draft =
         (await runOnce(
           [
@@ -311,7 +326,7 @@ Return complete resume JSON only.`;
               content: rewritePrompt,
             },
           ],
-          0.55,
+          0.55 + pass * 0.05,
         )) || draft;
     }
 
