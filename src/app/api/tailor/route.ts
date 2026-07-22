@@ -133,6 +133,7 @@ export async function POST(request: Request) {
               resumeDocxName: result.resumeDocxName,
               resumePdfName: result.resumePdfName,
               coverLetterDocxName: result.coverLetterDocxName,
+              coverLetterTxtName: result.coverLetterTxtName,
               atsScore: result.atsScore,
               atsSummary: result.atsSummary,
               extracted: {
@@ -162,6 +163,7 @@ export async function POST(request: Request) {
                 resumeDocxName: result.resumeDocxName,
                 resumePdfName: result.resumePdfName,
                 coverLetterDocxName: result.coverLetterDocxName,
+                coverLetterTxtName: result.coverLetterTxtName,
                 downloads: result.downloads,
               });
             }

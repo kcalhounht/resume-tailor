@@ -38,6 +38,7 @@ export type ProgressEvent =
       resumeDocxName: string;
       resumePdfName: string;
       coverLetterDocxName: string;
+      coverLetterTxtName?: string;
       atsScore: number;
       atsSummary: string;
       extracted: {
@@ -69,6 +70,7 @@ export type ProgressEvent =
         resumeDocxBase64: string;
         resumePdfBase64: string;
         coverLetterDocxBase64: string;
+        coverLetterTxtBase64?: string;
       };
     }
   | {
@@ -79,12 +81,14 @@ export type ProgressEvent =
       resumeDocxName: string;
       resumePdfName: string;
       coverLetterDocxName: string;
+      coverLetterTxtName?: string;
       zipName: string;
       downloads: {
         zipBase64?: string;
         resumeDocxBase64: string;
         resumePdfBase64: string;
         coverLetterDocxBase64: string;
+        coverLetterTxtBase64?: string;
       };
     }
   | {

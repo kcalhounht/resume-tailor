@@ -88,6 +88,7 @@ export async function POST(request: Request) {
       resumeDocxName: saved.resumeDocxName,
       resumePdfName: saved.resumePdfName,
       coverLetterDocxName: saved.coverLetterDocxName,
+      coverLetterTxtName: saved.coverLetterTxtName,
       downloads: saved.downloads,
     });
   } catch (err) {

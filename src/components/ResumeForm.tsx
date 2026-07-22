@@ -113,6 +113,7 @@ type JobProgress = {
   resumeDocxName?: string;
   resumePdfName?: string;
   coverLetterDocxName?: string;
+  coverLetterTxtName?: string;
   jobTitle?: string;
   atsScore?: number;
   sourceJd?: string;
@@ -122,6 +123,7 @@ type JobProgress = {
     resumeDocx: string;
     resumePdf: string;
     coverLetterDocx: string;
+    coverLetterTxt?: string;
   };
   resume?: TailoredResume;
   coverLetter?: string;
@@ -214,18 +216,28 @@ function buildClientZipObjectUrl(files: Record<string, string>): string {
   );
 }
 
+function utf8ToBase64(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
+}
+
 function buildDownloadUrls(
   downloads: {
     zipBase64?: string;
     resumeDocxBase64: string;
     resumePdfBase64: string;
     coverLetterDocxBase64: string;
+    coverLetterTxtBase64?: string;
   },
   names: {
     resumeDocxName: string;
     resumePdfName: string;
     coverLetterDocxName: string;
+    coverLetterTxtName?: string;
   },
+  coverLetterText?: string,
 ) {
   const DOCX =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -238,16 +250,29 @@ function buildDownloadUrls(
     downloads.coverLetterDocxBase64,
     DOCX,
   );
+  const coverLetterTxtBase64 =
+    downloads.coverLetterTxtBase64 ||
+    (coverLetterText ? utf8ToBase64(coverLetterText) : undefined);
+  const coverLetterTxt = coverLetterTxtBase64
+    ? base64ToObjectUrl(coverLetterTxtBase64, "text/plain;charset=utf-8")
+    : undefined;
+
+  const zipEntries: Record<string, string> = {
+    [names.resumeDocxName || "resume.docx"]: downloads.resumeDocxBase64,
+    [names.resumePdfName || "resume.pdf"]: downloads.resumePdfBase64,
+    [names.coverLetterDocxName || "cover-letter.docx"]:
+      downloads.coverLetterDocxBase64,
+  };
+  if (coverLetterTxtBase64) {
+    zipEntries[names.coverLetterTxtName || "cover-letter.txt"] =
+      coverLetterTxtBase64;
+  }
+
   const zip = downloads.zipBase64
     ? base64ToObjectUrl(downloads.zipBase64, "application/zip")
-    : buildClientZipObjectUrl({
-        [names.resumeDocxName || "resume.docx"]: downloads.resumeDocxBase64,
-        [names.resumePdfName || "resume.pdf"]: downloads.resumePdfBase64,
-        [names.coverLetterDocxName || "cover-letter.docx"]:
-          downloads.coverLetterDocxBase64,
-      });
+    : buildClientZipObjectUrl(zipEntries);
 
-  return { zip, resumeDocx, resumePdf, coverLetterDocx };
+  return { zip, resumeDocx, resumePdf, coverLetterDocx, coverLetterTxt };
 }
 
 function FolderIcon() {
@@ -291,6 +316,17 @@ function coverLetterDocxUrl(job: JobProgress): string | null {
   return `/api/download?folder=${encodeURIComponent(job.folderName)}&name=${encodeURIComponent(job.coverLetterDocxName)}`;
 }
 
+function coverLetterTxtUrl(job: JobProgress): string | null {
+  if (job.downloadUrls?.coverLetterTxt) return job.downloadUrls.coverLetterTxt;
+  if (job.coverLetter) {
+    return URL.createObjectURL(
+      new Blob([job.coverLetter], { type: "text/plain;charset=utf-8" }),
+    );
+  }
+  if (!job.coverLetterTxtName || !job.folderName) return null;
+  return `/api/download?folder=${encodeURIComponent(job.folderName)}&name=${encodeURIComponent(job.coverLetterTxtName)}`;
+}
+
 function markJobDone(
   job: JobProgress,
   data: Extract<ProgressEvent, { type: "job_done" }>,
@@ -299,11 +335,16 @@ function markJobDone(
   for (const step of JOB_STEPS) stepStatuses[step] = "done";
 
   const downloadUrls = data.downloads
-    ? buildDownloadUrls(data.downloads, {
-        resumeDocxName: data.resumeDocxName,
-        resumePdfName: data.resumePdfName,
-        coverLetterDocxName: data.coverLetterDocxName,
-      })
+    ? buildDownloadUrls(
+        data.downloads,
+        {
+          resumeDocxName: data.resumeDocxName,
+          resumePdfName: data.resumePdfName,
+          coverLetterDocxName: data.coverLetterDocxName,
+          coverLetterTxtName: data.coverLetterTxtName,
+        },
+        data.coverLetter,
+      )
     : undefined;
 
   return {
@@ -318,6 +359,7 @@ function markJobDone(
     resumeDocxName: data.resumeDocxName,
     resumePdfName: data.resumePdfName,
     coverLetterDocxName: data.coverLetterDocxName,
+    coverLetterTxtName: data.coverLetterTxtName,
     jobTitle: data.extracted.jobTitle,
     atsScore: data.atsScore,
     error: undefined,
@@ -939,6 +981,7 @@ export default function ResumeForm() {
     resumeDocxName?: string;
     resumePdfName?: string;
     coverLetterDocxName?: string;
+    coverLetterTxtName?: string;
   }): Promise<{
     downloadUrls: NonNullable<JobProgress["downloadUrls"]>;
     meta: {
@@ -948,6 +991,7 @@ export default function ResumeForm() {
       resumeDocxName?: string;
       resumePdfName?: string;
       coverLetterDocxName?: string;
+      coverLetterTxtName?: string;
     };
   } | null> {
     if (!job.resume || !job.personal || !job.coverLetter) return null;
@@ -968,15 +1012,23 @@ export default function ResumeForm() {
       throw new Error(data?.error || "Failed to update downloads");
     }
     return {
-      downloadUrls: buildDownloadUrls(data.downloads, {
-        resumeDocxName:
-          data.resumeDocxName || job.resumeDocxName || "resume.docx",
-        resumePdfName: data.resumePdfName || job.resumePdfName || "resume.pdf",
-        coverLetterDocxName:
-          data.coverLetterDocxName ||
-          job.coverLetterDocxName ||
-          "cover-letter.docx",
-      }),
+      downloadUrls: buildDownloadUrls(
+        data.downloads,
+        {
+          resumeDocxName:
+            data.resumeDocxName || job.resumeDocxName || "resume.docx",
+          resumePdfName: data.resumePdfName || job.resumePdfName || "resume.pdf",
+          coverLetterDocxName:
+            data.coverLetterDocxName ||
+            job.coverLetterDocxName ||
+            "cover-letter.docx",
+          coverLetterTxtName:
+            data.coverLetterTxtName ||
+            job.coverLetterTxtName ||
+            "cover-letter.txt",
+        },
+        job.coverLetter,
+      ),
       meta: {
         company: data.company,
         zipName: data.zipName,
@@ -984,6 +1036,7 @@ export default function ResumeForm() {
         resumeDocxName: data.resumeDocxName,
         resumePdfName: data.resumePdfName,
         coverLetterDocxName: data.coverLetterDocxName,
+        coverLetterTxtName: data.coverLetterTxtName,
       },
     };
   }
@@ -1010,6 +1063,8 @@ export default function ResumeForm() {
                 resumePdfName: packed.meta.resumePdfName || item.resumePdfName,
                 coverLetterDocxName:
                   packed.meta.coverLetterDocxName || item.coverLetterDocxName,
+                coverLetterTxtName:
+                  packed.meta.coverLetterTxtName || item.coverLetterTxtName,
                 downloadUrls: packed.downloadUrls,
               }
             : item,
@@ -1273,11 +1328,18 @@ export default function ResumeForm() {
             resumePdfName: event.resumePdfName || job.resumePdfName,
             coverLetterDocxName:
               event.coverLetterDocxName || job.coverLetterDocxName,
-            downloadUrls: buildDownloadUrls(event.downloads, {
-              resumeDocxName: event.resumeDocxName,
-              resumePdfName: event.resumePdfName,
-              coverLetterDocxName: event.coverLetterDocxName,
-            }),
+            coverLetterTxtName:
+              event.coverLetterTxtName || job.coverLetterTxtName,
+            downloadUrls: buildDownloadUrls(
+              event.downloads,
+              {
+                resumeDocxName: event.resumeDocxName,
+                resumePdfName: event.resumePdfName,
+                coverLetterDocxName: event.coverLetterDocxName,
+                coverLetterTxtName: event.coverLetterTxtName,
+              },
+              job.coverLetter,
+            ),
           }));
         } else if (event.type === "job_error") {
           sawTerminal = true;
@@ -1326,6 +1388,8 @@ export default function ResumeForm() {
             resumePdfName: packed.meta.resumePdfName || job.resumePdfName,
             coverLetterDocxName:
               packed.meta.coverLetterDocxName || job.coverLetterDocxName,
+            coverLetterTxtName:
+              packed.meta.coverLetterTxtName || job.coverLetterTxtName,
             downloadUrls: packed.downloadUrls,
           }));
         }
@@ -1339,11 +1403,16 @@ export default function ResumeForm() {
           ? job
           : {
               ...job,
-              downloadUrls: buildDownloadUrls(doneEvent!.downloads!, {
-                resumeDocxName: doneEvent!.resumeDocxName,
-                resumePdfName: doneEvent!.resumePdfName,
-                coverLetterDocxName: doneEvent!.coverLetterDocxName,
-              }),
+              downloadUrls: buildDownloadUrls(
+                doneEvent!.downloads!,
+                {
+                  resumeDocxName: doneEvent!.resumeDocxName,
+                  resumePdfName: doneEvent!.resumePdfName,
+                  coverLetterDocxName: doneEvent!.coverLetterDocxName,
+                  coverLetterTxtName: doneEvent!.coverLetterTxtName,
+                },
+                doneEvent!.coverLetter,
+              ),
             },
       );
     }
@@ -2051,7 +2120,39 @@ export default function ResumeForm() {
                             }}
                           >
                             <DownloadIcon />
-                            Cover letter
+                            Cover letter DOCX
+                          </button>
+                          <button
+                            type="button"
+                            className="download-btn"
+                            onClick={() => {
+                              const fileName =
+                                job.coverLetterTxtName || "cover-letter.txt";
+                              if (job.downloadUrls?.coverLetterTxt) {
+                                void downloadJobFile(
+                                  job.downloadUrls.coverLetterTxt,
+                                  fileName,
+                                  job.folderName,
+                                );
+                                return;
+                              }
+                              if (!job.coverLetter?.trim()) return;
+                              const url = URL.createObjectURL(
+                                new Blob([job.coverLetter], {
+                                  type: "text/plain;charset=utf-8",
+                                }),
+                              );
+                              void downloadJobFile(
+                                url,
+                                fileName,
+                                job.folderName,
+                              ).finally(() => {
+                                URL.revokeObjectURL(url);
+                              });
+                            }}
+                          >
+                            <DownloadIcon />
+                            Cover letter TXT
                           </button>
                           <button
                             type="button"

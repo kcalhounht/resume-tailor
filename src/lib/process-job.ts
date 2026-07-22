@@ -25,6 +25,7 @@ export async function processOneJob(options: {
   resumeDocxName: string;
   resumePdfName: string;
   coverLetterDocxName: string;
+  coverLetterTxtName: string;
   extracted: ExtractedJD;
   atsScore: number;
   atsSummary: string;
@@ -36,6 +37,7 @@ export async function processOneJob(options: {
     resumeDocxBase64: string;
     resumePdfBase64: string;
     coverLetterDocxBase64: string;
+    coverLetterTxtBase64?: string;
   };
 }> {
   const {
@@ -115,6 +117,7 @@ export async function processOneJob(options: {
     resumeDocxName: saved.resumeDocxName,
     resumePdfName: saved.resumePdfName,
     coverLetterDocxName: saved.coverLetterDocxName,
+    coverLetterTxtName: saved.coverLetterTxtName,
     extracted,
     atsScore: ats.score,
     atsSummary: `ATS score ${ats.score}/100`,

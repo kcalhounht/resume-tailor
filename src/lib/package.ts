@@ -61,6 +61,7 @@ export async function saveJobPackage(options: {
   resumeDocxName: string;
   resumePdfName: string;
   coverLetterDocxName: string;
+  coverLetterTxtName: string;
   /** Present on serverless so the client can download without shared disk. */
   downloads?: {
     /** Optional — omitted on Vercel to keep SSE payloads small. */
@@ -68,6 +69,7 @@ export async function saveJobPackage(options: {
     resumeDocxBase64: string;
     resumePdfBase64: string;
     coverLetterDocxBase64: string;
+    coverLetterTxtBase64: string;
   };
 }> {
   const { index, extracted, personal, tailored } = options;
@@ -93,6 +95,9 @@ export async function saveJobPackage(options: {
 
   const zipName = buildZipFileName(extracted.company, extracted.jobTitle);
   const zipPath = path.join(outputRoot, zipName);
+  const coverLetterTxtBase64 = Buffer.from(tailored.coverLetter, "utf8").toString(
+    "base64",
+  );
 
   if (ephemeral) {
     // No disk I/O on Vercel — stream base64 only. Client builds the zip.
@@ -105,10 +110,12 @@ export async function saveJobPackage(options: {
       resumeDocxName: files.resumeDocx,
       resumePdfName: files.resumePdf,
       coverLetterDocxName: files.coverLetterDocx,
+      coverLetterTxtName: files.coverLetterTxt,
       downloads: {
         resumeDocxBase64: resumeDocx.toString("base64"),
         resumePdfBase64: resumePdf.toString("base64"),
         coverLetterDocxBase64: coverDocx.toString("base64"),
+        coverLetterTxtBase64,
       },
     };
   }
@@ -135,5 +142,6 @@ export async function saveJobPackage(options: {
     resumeDocxName: files.resumeDocx,
     resumePdfName: files.resumePdf,
     coverLetterDocxName: files.coverLetterDocx,
+    coverLetterTxtName: files.coverLetterTxt,
   };
 }
