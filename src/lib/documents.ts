@@ -8,12 +8,28 @@ import {
   TextRun,
   UnderlineType,
 } from "docx";
+import path from "path";
 import PDFDocument from "pdfkit";
 import type { PersonalInfo, TailoredResume } from "./types";
 import { segmentWithKeywords } from "./keywords";
 
 const LINK_COLOR = "1F4E79";
 const MUTED_COLOR = "555555";
+
+/** Unicode-capable fonts — Helvetica cannot render Polish ł/ż/ń etc. */
+const PDF_FONT = "ResumeSans";
+const PDF_FONT_BOLD = "ResumeSans-Bold";
+const PDF_FONT_ITALIC = "ResumeSans-Italic";
+
+function fontPath(fileName: string): string {
+  return path.join(process.cwd(), "assets", "fonts", fileName);
+}
+
+function registerPdfFonts(doc: PDFKit.PDFDocument) {
+  doc.registerFont(PDF_FONT, fontPath("NotoSans-Regular.ttf"));
+  doc.registerFont(PDF_FONT_BOLD, fontPath("NotoSans-Bold.ttf"));
+  doc.registerFont(PDF_FONT_ITALIC, fontPath("NotoSans-Italic.ttf"));
+}
 
 function linkedInDisplay(url: string): string {
   try {
@@ -316,7 +332,7 @@ function drawSegmentedLine(
   const fontSize = options.fontSize ?? 10.5;
   const segments = segmentWithKeywords(text, keywords);
   if (!segments.length) {
-    doc.font("Helvetica").fontSize(fontSize).text(" ");
+    doc.font(PDF_FONT).fontSize(fontSize).text(" ");
     return;
   }
 
@@ -327,7 +343,7 @@ function drawSegmentedLine(
   segments.forEach((seg, i) => {
     doc
       .fillColor("#000000")
-      .font(seg.bold ? "Helvetica-Bold" : "Helvetica")
+      .font(seg.bold ? PDF_FONT_BOLD : PDF_FONT)
       .fontSize(fontSize)
       .text(seg.text, {
         continued: i < segments.length - 1,
@@ -346,7 +362,7 @@ function drawPdfContactLine(
   const y = Number.isFinite(doc.y) ? doc.y : doc.page.margins.top + 40;
   const sep = " | ";
 
-  doc.font("Helvetica").fontSize(9);
+  doc.font(PDF_FONT).fontSize(9);
   const full = parts.map((p) => p.label).join(sep);
   let fullWidth = 0;
   try {
@@ -413,8 +429,10 @@ export async function buildResumePdf(
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
+    registerPdfFonts(doc);
+
     doc
-      .font("Helvetica-Bold")
+      .font(PDF_FONT_BOLD)
       .fontSize(20)
       .fillColor("#1A1A1A")
       .text(personal.name.toUpperCase(), {
@@ -465,7 +483,7 @@ export async function buildResumePdf(
       doc.x = doc.page.margins.left;
       doc.y = y;
       doc
-        .font("Helvetica-Bold")
+        .font(PDF_FONT_BOLD)
         .fontSize(11)
         .fillColor("#1F4E79")
         .text(label.toUpperCase());
@@ -487,7 +505,7 @@ export async function buildResumePdf(
 
     heading("Skills");
     for (const group of resume.skills) {
-      doc.font("Helvetica-Bold").fontSize(10.5).text(`${group.category}: `, {
+      doc.font(PDF_FONT_BOLD).fontSize(10.5).text(`${group.category}: `, {
         continued: true,
       });
       drawSegmentedLine(doc, group.items.join(", "), kw, { fontSize: 10.5 });
@@ -497,16 +515,16 @@ export async function buildResumePdf(
     heading("Experience");
     for (const [expIndex, exp] of resume.experiences.entries()) {
       doc.moveDown(expIndex === 0 ? 0.35 : 0.7);
-      doc.font("Helvetica-Bold").fontSize(11).text(exp.title);
+      doc.font(PDF_FONT_BOLD).fontSize(11).text(exp.title);
       doc.moveDown(0.08);
       doc
-        .font("Helvetica-Oblique")
+        .font(PDF_FONT_ITALIC)
         .fontSize(10)
         .text(`${exp.company}  |  ${exp.location}  |  ${exp.period}`);
       if (exp.overview) {
         doc.moveDown(0.45);
         doc
-          .font("Helvetica-Oblique")
+          .font(PDF_FONT_ITALIC)
           .fontSize(10)
           .fillColor("#444444")
           .text(exp.overview, { lineGap: 2 });
@@ -514,7 +532,7 @@ export async function buildResumePdf(
       }
       doc.moveDown(0.5);
       for (const bullet of exp.bullets) {
-        doc.font("Helvetica").fontSize(10.5).text("•  ", {
+        doc.font(PDF_FONT).fontSize(10.5).text("•  ", {
           continued: true,
         });
         drawSegmentedLine(doc, bullet, kw, { fontSize: 10.5 });
@@ -526,12 +544,12 @@ export async function buildResumePdf(
     for (const [eduIndex, edu] of resume.education.entries()) {
       doc.moveDown(eduIndex === 0 ? 0.3 : 0.55);
       doc
-        .font("Helvetica-Bold")
+        .font(PDF_FONT_BOLD)
         .fontSize(11)
         .text(edu.discipline ? `${edu.degree}, ${edu.discipline}` : edu.degree);
       doc.moveDown(0.08);
       doc
-        .font("Helvetica-Oblique")
+        .font(PDF_FONT_ITALIC)
         .fontSize(10)
         .text(`${edu.school}  |  ${edu.location}  |  ${edu.period}`);
     }

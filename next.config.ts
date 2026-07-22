@@ -10,6 +10,11 @@ const nextConfig: NextConfig = {
     "archiver",
     "unpdf",
   ],
+  // Ship Unicode fonts with serverless functions that build PDFs
+  outputFileTracingIncludes: {
+    "/api/tailor": ["./assets/fonts/**/*"],
+    "/api/repackage": ["./assets/fonts/**/*"],
+  },
 };
 
 export default nextConfig;
