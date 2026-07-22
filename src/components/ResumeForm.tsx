@@ -1030,7 +1030,7 @@ export default function ResumeForm() {
       setRetryingIndices([]);
       setLoading(true);
       setStatus(
-        `Running ${targets.length} job${targets.length > 1 ? "s" : ""} in parallel`,
+        `Running ${targets.length} job${targets.length > 1 ? "s" : ""} one at a time`,
       );
     } else {
       const target = targets[0];
@@ -1043,97 +1043,34 @@ export default function ResumeForm() {
       setStatus(`Retrying job ${target.index}…`);
     }
 
+    let succeeded = 0;
+    let failed = 0;
+
     try {
-      const response = await fetch("/api/tailor", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          mode: inputMode,
-          profile: inputMode === "profile_jd" ? profile : undefined,
-          resumePdfBase64:
-            inputMode === "resume_pdf" ? resumePdfBase64 : undefined,
-          jobUrls: targets.map((t) => t.url),
-          indices: targets.map((t) => t.index),
-          manualJds: targets.map((t) => t.manualJd || ""),
-        }),
-      });
-
-      if (!response.ok || !response.body) {
-        const raw = await response.text().catch(() => "");
-        let message = "Failed to start processing.";
-        try {
-          const data = JSON.parse(raw) as { error?: string };
-          if (data?.error) message = data.error;
-        } catch {
-          if (raw.trim()) {
-            message = `Failed to start processing (${response.status}): ${raw.slice(0, 200)}`;
-          } else {
-            message = `Failed to start processing (HTTP ${response.status}).`;
-          }
+      // One HTTP request per job so each package gets a full server time budget.
+      // Multi-job streams were closing mid-Generate with "Connection closed…".
+      for (let i = 0; i < targets.length; i++) {
+        const target = targets[i];
+        if (mode === "batch" && targets.length > 1) {
+          setStatus(
+            `Running job ${target.index} (${i + 1}/${targets.length})…`,
+          );
         }
-        throw new Error(message);
+
+        const outcome = await streamOneTailorJob(target);
+        if (outcome === "ok") succeeded += 1;
+        else failed += 1;
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const chunks = buffer.split("\n\n");
-        buffer = chunks.pop() || "";
-
-        for (const chunk of chunks) {
-          const line = chunk
-            .split("\n")
-            .find((entry) => entry.startsWith("data: "));
-          if (!line) continue;
-
-          const event = JSON.parse(line.slice(6)) as ProgressEvent;
-
-          if (event.type === "step") {
-            patchJob(event.index, (job) =>
-              markStepProgress(job, event.step, event.message),
-            );
-          } else if (event.type === "job_done") {
-            patchJob(event.index, (job) => markJobDone(job, event));
-          } else if (event.type === "job_error") {
-            patchJob(event.index, (job) => markJobError(job, event));
-          } else if (event.type === "done") {
-            setStatus(
-              mode === "retry"
-                ? event.succeeded
-                  ? `Retry finished · job succeeded`
-                  : `Retry finished · job failed`
-                : `Finished · ${event.succeeded} succeeded${
-                    event.failed ? ` · ${event.failed} failed` : ""
-                  }`,
-            );
-          } else if (event.type === "fatal") {
-            setError(event.error);
-            setStatus(null);
-          }
-        }
-      }
-
-      // Stream ended without job_done/job_error (e.g. platform timeout) —
-      // don't leave cards stuck on RUNNING forever.
-      for (const target of targets) {
-        patchJob(target.index, (job) => {
-          if (job.status !== "running" && job.status !== "queued") return job;
-          return markJobError(job, {
-            type: "job_error",
-            index: target.index,
-            jobUrl: target.url,
-            step: job.currentStep || "generating",
-            error:
-              "Connection closed before this job finished. Retry this job.",
-          });
-        });
-      }
+      setStatus(
+        mode === "retry"
+          ? succeeded
+            ? `Retry finished · job succeeded`
+            : `Retry finished · job failed`
+          : `Finished · ${succeeded} succeeded${
+              failed ? ` · ${failed} failed` : ""
+            }`,
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "Unexpected error");
       setStatus(null);
@@ -1162,6 +1099,124 @@ export default function ResumeForm() {
         }
       }
     }
+  }
+
+  async function streamOneTailorJob(target: {
+    url: string;
+    index: number;
+    manualJd?: string;
+  }): Promise<"ok" | "error"> {
+    const response = await fetch("/api/tailor", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: inputMode,
+        profile: inputMode === "profile_jd" ? profile : undefined,
+        resumePdfBase64:
+          inputMode === "resume_pdf" ? resumePdfBase64 : undefined,
+        jobUrls: [target.url],
+        indices: [target.index],
+        manualJds: [target.manualJd || ""],
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      const raw = await response.text().catch(() => "");
+      let message = "Failed to start processing.";
+      try {
+        const data = JSON.parse(raw) as { error?: string };
+        if (data?.error) message = data.error;
+      } catch {
+        if (raw.trim()) {
+          message = `Failed to start processing (${response.status}): ${raw.slice(0, 200)}`;
+        } else {
+          message = `Failed to start processing (HTTP ${response.status}).`;
+        }
+      }
+      patchJob(target.index, (job) =>
+        markJobError(job, {
+          type: "job_error",
+          index: target.index,
+          jobUrl: target.url,
+          step: job.currentStep || "scraping",
+          error: message,
+        }),
+      );
+      return "error";
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let sawTerminal = false;
+    let ok = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const chunks = buffer.split("\n\n");
+      buffer = chunks.pop() || "";
+
+      for (const chunk of chunks) {
+        // Ignore SSE comments (keepalives)
+        if (chunk.trimStart().startsWith(":")) continue;
+
+        const line = chunk
+          .split("\n")
+          .find((entry) => entry.startsWith("data: "));
+        if (!line) continue;
+
+        const event = JSON.parse(line.slice(6)) as ProgressEvent;
+
+        if (event.type === "step") {
+          patchJob(event.index, (job) =>
+            markStepProgress(job, event.step, event.message),
+          );
+        } else if (event.type === "job_done") {
+          sawTerminal = true;
+          ok = true;
+          patchJob(event.index, (job) => markJobDone(job, event));
+        } else if (event.type === "job_error") {
+          sawTerminal = true;
+          ok = false;
+          patchJob(event.index, (job) => markJobError(job, event));
+        } else if (event.type === "done") {
+          // per-job done is informational; terminal state comes from job_* 
+        } else if (event.type === "fatal") {
+          sawTerminal = true;
+          ok = false;
+          setError(event.error);
+          patchJob(target.index, (job) =>
+            markJobError(job, {
+              type: "job_error",
+              index: target.index,
+              jobUrl: target.url,
+              step: job.currentStep || "generating",
+              error: event.error,
+            }),
+          );
+        }
+      }
+    }
+
+    if (!sawTerminal) {
+      patchJob(target.index, (job) => {
+        if (job.status === "done" || job.status === "error") return job;
+        return markJobError(job, {
+          type: "job_error",
+          index: target.index,
+          jobUrl: target.url,
+          step: job.currentStep || "generating",
+          error:
+            "Connection closed before this job finished. Retry this job.",
+        });
+      });
+      return "error";
+    }
+
+    return ok ? "ok" : "error";
   }
 
   async function onSubmit(event: FormEvent) {

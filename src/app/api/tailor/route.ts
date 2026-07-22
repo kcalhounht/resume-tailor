@@ -7,35 +7,12 @@ import type { CandidateProfile } from "@/lib/types";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 
-/** Keep OpenRouter load sane — unbounded Promise.all often hangs one job on Generate. */
-const JOB_CONCURRENCY = 2;
-const JOB_TIMEOUT_MS = 150_000;
+/** One job at a time keeps each package inside Vercel/proxy limits. */
+const JOB_TIMEOUT_MS = 240_000;
+const KEEPALIVE_MS = 10_000;
 
 function encodeSse(event: ProgressEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
-}
-
-async function mapPool<T, R>(
-  items: T[],
-  concurrency: number,
-  worker: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let next = 0;
-
-  async function runWorker() {
-    while (next < items.length) {
-      const index = next;
-      next += 1;
-      results[index] = await worker(items[index], index);
-    }
-  }
-
-  const poolSize = Math.min(Math.max(1, concurrency), items.length || 1);
-  await Promise.all(
-    Array.from({ length: poolSize }, () => runWorker()),
-  );
-  return results;
 }
 
 async function withTimeout<T>(
@@ -84,6 +61,15 @@ export async function POST(request: Request) {
         controller.enqueue(encoder.encode(encodeSse(event)));
       };
 
+      // Keep proxies from closing idle SSE while OpenRouter is thinking.
+      const keepalive = setInterval(() => {
+        try {
+          controller.enqueue(encoder.encode(": keepalive\n\n"));
+        } catch {
+          // stream already closed
+        }
+      }, KEEPALIVE_MS);
+
       try {
         let profile: CandidateProfile;
         let sourceResumeText: string | undefined;
@@ -129,73 +115,73 @@ export async function POST(request: Request) {
           profile = payload.profile;
         }
 
-        const outcomes = await mapPool(
-          payload.jobUrls,
-          JOB_CONCURRENCY,
-          async (jobUrl, i) => {
-            const index = payload.indices?.[i] ?? i + 1;
-            let currentStep: JobStep = JOB_STEPS[0];
+        const outcomes: Array<{ ok: boolean }> = [];
 
-            try {
-              const result = await withTimeout(
-                processOneJob({
-                  index,
-                  jobUrl,
-                  profile,
-                  personal: profile.personal,
-                  manualJd: payload.manualJds?.[i],
-                  sourceResumeText,
-                  onStep: (step, message) => {
-                    currentStep = step;
-                    send({
-                      type: "step",
-                      index,
-                      jobUrl,
-                      step,
-                      message,
-                    });
-                  },
-                }),
-                JOB_TIMEOUT_MS,
-                `Job ${index}`,
-              );
+        // Always sequential — parallel multi-job streams get killed mid-Generate.
+        for (let i = 0; i < payload.jobUrls.length; i++) {
+          const jobUrl = payload.jobUrls[i];
+          const index = payload.indices?.[i] ?? i + 1;
+          let currentStep: JobStep = JOB_STEPS[0];
 
-              send({
-                type: "job_done",
+          try {
+            const result = await withTimeout(
+              processOneJob({
                 index,
                 jobUrl,
-                company: result.company,
-                zipName: result.zipName,
-                folderName: result.folderName,
-                resumeDocxName: result.resumeDocxName,
-                resumePdfName: result.resumePdfName,
-                coverLetterDocxName: result.coverLetterDocxName,
-                atsScore: result.atsScore,
-                atsSummary: result.atsSummary,
-                extracted: result.extracted,
-                resume: result.resume,
-                coverLetter: result.coverLetter,
-                personal: result.personal,
-                downloads: result.downloads,
-              });
+                profile,
+                personal: profile.personal,
+                manualJd: payload.manualJds?.[i],
+                sourceResumeText,
+                onStep: (step, message) => {
+                  currentStep = step;
+                  send({
+                    type: "step",
+                    index,
+                    jobUrl,
+                    step,
+                    message,
+                  });
+                },
+              }),
+              JOB_TIMEOUT_MS,
+              `Job ${index}`,
+            );
 
-              return { ok: true as const };
-            } catch (err) {
-              const message =
-                err instanceof Error
-                  ? err.message
-                  : "Unknown error for this job.";
-              send({
-                type: "job_error",
-                index,
-                jobUrl,
-                step: currentStep,
-                error: message,
-              });
-              return { ok: false as const };
-            }
-          },
-        );
+            send({
+              type: "job_done",
+              index,
+              jobUrl,
+              company: result.company,
+              zipName: result.zipName,
+              folderName: result.folderName,
+              resumeDocxName: result.resumeDocxName,
+              resumePdfName: result.resumePdfName,
+              coverLetterDocxName: result.coverLetterDocxName,
+              atsScore: result.atsScore,
+              atsSummary: result.atsSummary,
+              extracted: result.extracted,
+              resume: result.resume,
+              coverLetter: result.coverLetter,
+              personal: result.personal,
+              downloads: result.downloads,
+            });
+
+            outcomes.push({ ok: true });
+          } catch (err) {
+            const message =
+              err instanceof Error
+                ? err.message
+                : "Unknown error for this job.";
+            send({
+              type: "job_error",
+              index,
+              jobUrl,
+              step: currentStep,
+              error: message,
+            });
+            outcomes.push({ ok: false });
+          }
+        }
 
         const succeeded = outcomes.filter((o) => o.ok).length;
         send({
@@ -209,6 +195,7 @@ export async function POST(request: Request) {
           error: err instanceof Error ? err.message : "Unexpected error",
         });
       } finally {
+        clearInterval(keepalive);
         controller.close();
       }
     },

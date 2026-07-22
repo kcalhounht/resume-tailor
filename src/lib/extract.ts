@@ -261,17 +261,19 @@ async function callExtractLlm(
   jobUrl: string,
   options: { useJsonObjectFormat: boolean },
 ): Promise<string> {
+  const EXTRACT_TIMEOUT_MS = 30_000;
   const client = getLlmClient();
-  const completion = await client.chat.completions.create({
-    model: getLlmModel(),
-    temperature: 0.2,
-    ...(options.useJsonObjectFormat
-      ? { response_format: { type: "json_object" as const } }
-      : {}),
-    messages: [
-      {
-        role: "system",
-        content: `You extract structured hiring information from job postings.
+  const completion = await client.chat.completions.create(
+    {
+      model: getLlmModel(),
+      temperature: 0.2,
+      ...(options.useJsonObjectFormat
+        ? { response_format: { type: "json_object" as const } }
+        : {}),
+      messages: [
+        {
+          role: "system",
+          content: `You extract structured hiring information from job postings.
 Return ONLY valid JSON (no markdown) with keys:
 - company (string)
 - jobTitle (string)
@@ -293,17 +295,19 @@ Return ONLY valid JSON (no markdown) with keys:
 
 Be thorough. Infer company from title/URL when missing. Prefer specific skill names.
 Use empty arrays when absent. Escape quotes inside strings.`,
-      },
-      {
-        role: "user",
-        content: `Job URL: ${jobUrl}
+        },
+        {
+          role: "user",
+          content: `Job URL: ${jobUrl}
 Page title: ${pageTitle}
 
 Job posting text:
 ${rawJd.slice(0, 20000)}`,
-      },
-    ],
-  });
+        },
+      ],
+    },
+    { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+  );
 
   return String(completion.choices[0]?.message?.content || "").trim();
 }
@@ -318,7 +322,6 @@ export async function extractJobDescription(
   const attempts: Array<{ useJsonObjectFormat: boolean; label: string }> = [
     { useJsonObjectFormat: true, label: "json_object" },
     { useJsonObjectFormat: false, label: "plain" },
-    { useJsonObjectFormat: false, label: "plain_retry" },
   ];
 
   let lastError: Error | null = null;

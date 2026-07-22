@@ -44,7 +44,8 @@ JSON shape:
   "coverLetter": string
 }`;
 
-const GENERATE_TIMEOUT_MS = 90_000;
+/** Keep each attempt short so Generate falls back instead of killing the SSE stream. */
+const GENERATE_TIMEOUT_MS = 45_000;
 
 function buildFallbackPackage(
   profile: CandidateProfile,
@@ -109,26 +110,7 @@ export async function generateTailoredPackage(
     let resume = normalizeResume(packageDraft.resume, profile, extracted);
     let coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
 
-    // One repair pass if the model omitted summary/cover letter
-    if (!resume.summary || !coverLetter) {
-      try {
-        content = await requestJson(client, model, [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPayload },
-          {
-            role: "user",
-            content:
-              "Return the full JSON again. resume.summary MUST be 40-80 words tailored to the JD. coverLetter MUST be 3 short paragraphs. Do not leave either empty.",
-          },
-        ]);
-        packageDraft = coerceTailoredPackage(parseModelJson(content));
-        resume = normalizeResume(packageDraft.resume, profile, extracted);
-        coverLetter = sanitizePlainText(packageDraft.coverLetter || "");
-      } catch {
-        // fall through to deterministic fallbacks
-      }
-    }
-
+    // Prefer local fill-ins over another slow LLM round-trip.
     if (!resume.summary) {
       resume = {
         ...resume,
@@ -269,22 +251,24 @@ async function requestJson(
   const attempts: Array<{ useJsonObjectFormat: boolean; label: string }> = [
     { useJsonObjectFormat: true, label: "json_object" },
     { useJsonObjectFormat: false, label: "plain" },
-    { useJsonObjectFormat: false, label: "plain_retry" },
   ];
 
   let lastError: Error | null = null;
   for (const attempt of attempts) {
     try {
       const completion = await withTimeout(
-        client.chat.completions.create({
-          model,
-          temperature: 0.3,
-          ...(attempt.useJsonObjectFormat
-            ? { response_format: { type: "json_object" as const } }
-            : {}),
-          messages,
-        }),
-        GENERATE_TIMEOUT_MS,
+        client.chat.completions.create(
+          {
+            model,
+            temperature: 0.3,
+            ...(attempt.useJsonObjectFormat
+              ? { response_format: { type: "json_object" as const } }
+              : {}),
+            messages,
+          },
+          { signal: AbortSignal.timeout(GENERATE_TIMEOUT_MS) },
+        ),
+        GENERATE_TIMEOUT_MS + 2_000,
         `Generate (${attempt.label})`,
       );
 
