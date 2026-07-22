@@ -693,6 +693,30 @@ export default function ResumeForm() {
 
         const headerCount = countJobHeaders(text);
 
+        // Single "About the job" posting: stay local — OpenRouter full-split
+        // often 504s and leaves Unknown company/role for no benefit.
+        if (headerCount === 1) {
+          const base = toDetectedJobs([text]);
+          setRefinedJdJobs(base);
+          const labeled = await labelJobsFast(base);
+          if (cancelled) return;
+          const resolved = labeled.map((job) => {
+            const local = extractJdMeta(job.text);
+            return {
+              ...job,
+              company: isUnknownJdLabel(job.company)
+                ? local.company
+                : job.company,
+              role: isUnknownJdLabel(job.role) ? local.role : job.role,
+            };
+          });
+          setRefinedJdJobs(resolved);
+          setJdSplitStatus("ready");
+          setJdDetectProgress(null);
+          setError(null);
+          return;
+        }
+
         // LinkedIn / clear "About the job" mixtures:
         // exact sections locally + OpenRouter labels only (avoids 504 from rewriting full JD text)
         if (headerCount >= 2) {
@@ -800,11 +824,13 @@ export default function ResumeForm() {
         setRefinedJdJobs(deduped);
         setJdSplitStatus("ready");
         setJdDetectProgress(null);
-        setError(
-          failures.length
-            ? `Detected ${deduped.length} JD(s). Some OpenRouter chunks timed out (${failures[0]}); local company/role labels were used for those.`
-            : null,
-        );
+        // Detected jobs already — don't surface a hard red error for soft OpenRouter timeouts.
+        setError(null);
+        if (failures.length) {
+          setStatus(
+            `Detected ${deduped.length} JD(s) with local labels (OpenRouter timed out: ${failures[0]})`,
+          );
+        }
       } catch (err) {
         if (cancelled) return;
         if (err instanceof DOMException && err.name === "AbortError") return;

@@ -474,25 +474,45 @@ export function extractJdMeta(jd: string): { company: string; role: string } {
 
   const rolePatterns = [
     /\b(?:hiring|seeking|looking for|join us as|role(?:\s+title)?\s*[:\-]|position\s*[:\-]|title\s*[:\-])\s+([A-Z][A-Za-z0-9+/#&.'’\-\s]{2,70})/,
+    // Polish: "poszukujemy … specjalisty/ki / inżyniera / developera"
+    /\bposzukujemy\s+(?:do[sś]wiadczonego\/?ej\s+)?([A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż0-9+/#&.'’\-\/\s]{4,70})/i,
     /\b((?:Senior|Junior|Staff|Principal|Lead|Head of)?\s*(?:Software|Full[-\s]?Stack|Backend|Frontend|Front[-\s]?End|Back[-\s]?End|Data|AI|ML|DevOps|Cloud|Mobile|iOS|Android|Product|QA|Security)?\s*(?:Engineer|Developer|Scientist|Analyst|Architect|Manager|Designer|Consultant|Specialist)(?:\s+[IVX0-9]+)?)\b/i,
+    /\b((?:Starszy|Młodszy|Senior|Junior)?\s*(?:Inżynier|Programista|Developer|Specjalista|Analityk|Architekt)(?:\s+[A-Za-zĄĆĘŁŃÓŚŹŻąćęłńóśźż\/\-]+)?)/i,
   ];
   for (const re of rolePatterns) {
     const m = flat.match(re);
     if (m?.[1]) {
-      role = cleanLabel(m[1]);
+      role = cleanLabel(m[1].replace(/\/[a-ząćęłńóśźż]+/gi, ""));
       break;
+    }
+  }
+
+  if (!company) {
+    // Known employer brands often appear even when the opener is a recruiter blurb.
+    const brand = flat.match(
+      /\b(JetBrains|Alight|Google|Meta|Amazon|Microsoft|Apple|Netflix|Uber|Airbnb|Stripe|Shopify|Spotify|Allegro|Atlassian|Salesforce|Oracle|IBM|Intel|NVIDIA|Siemens|Bosch|Nokia|Ericsson|Samsung|Adobe|Cisco|Twilio|Datadog|Cloudflare|HashiCorp|GitLab|GitHub)\b/i,
+    );
+    if (brand?.[1]) company = cleanLabel(brand[1]);
+  }
+
+  if (!company) {
+    const plPartner = flat.match(
+      /\b(?:partnerem|dla|w)\s+([A-Z][A-Za-z0-9&.'’\-]{2,40})\b/,
+    );
+    if (plPartner?.[1] && !/Partnerem|Sektorze|Razem|Naszym/i.test(plPartner[1])) {
+      company = cleanLabel(plPartner[1]);
     }
   }
 
   if (!role) {
     const skip =
-      /^(about the job|about the role|job description|responsibilities|requirements|qualifications|show more|show less|we are|our team|our story)/i;
+      /^(about the job|about the role|job description|responsibilities|requirements|qualifications|show more|show less|we are|our team|our story|o nas|wymagania|obowi)/i;
     const candidate = lines.find(
       (l) =>
         !skip.test(l) &&
         l.length >= 6 &&
         l.length <= 90 &&
-        /engineer|developer|manager|analyst|scientist|designer|architect|lead|specialist|consultant/i.test(
+        /engineer|developer|manager|analyst|scientist|designer|architect|lead|specialist|consultant|inżynier|programista|specjalista|analityk/i.test(
           l,
         ),
     );
