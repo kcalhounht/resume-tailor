@@ -440,15 +440,15 @@ export function extractJdMeta(jd: string): { company: string; role: string } {
   let role = "";
 
   const atCompany =
+    // "At Alight, we believe…" / "at Acme is hiring…"
     flat.match(
-      /\b(?:at|@)\s+([A-Z][A-Za-z0-9&.'’\-\s]{1,60}?)(?:[,.]|\s+(?:we|is|are|believes?|helps?|provides?|offers?|looking|hiring|seeking)\b)/,
+      /\b(?:at|@)\s+([A-Z][A-Za-z0-9&.'’\-]{1,40})\b(?:\s*[,.]|\s+(?:we|is|are|believes?|helps?|provides?|offers?|looking|hiring|seeking)\b)/i,
     ) ||
+    // "About the job … At Alight …" (copy can sit between header and company)
     flat.match(
-      /\bAbout the (?:job|role)\s+At\s+([A-Z][A-Za-z0-9&.'’\-\s]{1,60}?)(?:[,.]|\s+)/i,
+      /\bAbout the (?:job|role)\b[\s\S]{0,120}?\bAt\s+([A-Z][A-Za-z0-9&.'’\-]{1,40})\b/i,
     ) ||
-    flat.match(
-      /\bWho are\s+([A-Z][A-Za-z0-9&.'’\-]{1,40})\b/i,
-    ) ||
+    flat.match(/\bWho are\s+([A-Z][A-Za-z0-9&.'’\-]{1,40})\b/i) ||
     flat.match(
       /\b([A-Z][A-Za-z0-9&.'’\-]{1,40})\s+(?:API Management|is the leading|is hiring|is looking)\b/,
     );
@@ -486,7 +486,7 @@ export function extractJdMeta(jd: string): { company: string; role: string } {
 
   if (!role) {
     const skip =
-      /^(about the job|about the role|job description|responsibilities|requirements|qualifications|show more|show less|we are|our team)/i;
+      /^(about the job|about the role|job description|responsibilities|requirements|qualifications|show more|show less|we are|our team|our story)/i;
     const candidate = lines.find(
       (l) =>
         !skip.test(l) &&
@@ -503,6 +503,20 @@ export function extractJdMeta(jd: string): { company: string; role: string } {
   if (!role) role = "Unknown role";
 
   return { company, role };
+}
+
+/** Treat placeholder labels as empty so local heuristics can replace them. */
+export function isUnknownJdLabel(value: string | undefined | null): boolean {
+  const v = String(value || "")
+    .trim()
+    .toLowerCase();
+  return (
+    !v ||
+    v === "unknown company" ||
+    v === "unknown role" ||
+    v === "unknown" ||
+    v === "n/a"
+  );
 }
 
 export function toDetectedJobs(texts: string[]): DetectedJd[] {

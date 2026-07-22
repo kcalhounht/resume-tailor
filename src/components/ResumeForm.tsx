@@ -32,6 +32,9 @@ import {
   countJobHeaders,
   looksLikeStructuredJdPaste,
   parseStructuredJdList,
+  extractJdMeta,
+  isUnknownJdLabel,
+  toDetectedJobs,
   type DetectedJd,
 } from "@/lib/split-jds";
 
@@ -541,17 +544,17 @@ export default function ResumeForm() {
           const row = item as Record<string, unknown>;
           const jdText = String(row.text || "").trim();
           if (jdText.length < 80) return null;
-          const fallback = splitJobDescriptionsDetailed(jdText)[0];
+          const local = extractJdMeta(jdText);
+          const companyRaw = String(row.company || "").trim();
+          const roleRaw = String(
+            row.role || row.position || "",
+          ).trim();
           return {
             text: jdText,
-            company:
-              String(row.company || "").trim() ||
-              fallback?.company ||
-              "Unknown company",
-            role:
-              String(row.role || row.position || "").trim() ||
-              fallback?.role ||
-              "Unknown role",
+            company: isUnknownJdLabel(companyRaw)
+              ? local.company
+              : companyRaw,
+            role: isUnknownJdLabel(roleRaw) ? local.role : roleRaw,
             url: String(row.url || "").trim() || undefined,
           } satisfies DetectedJd;
         })
@@ -709,17 +712,11 @@ export default function ResumeForm() {
                 });
                 const data = await response.json().catch(() => null);
                 if (!response.ok || !data?.ok || !Array.isArray(data.jobs)) {
-                  // Fallback: treat chunk as one JD so a 504 does not kill the batch
+                  // Fallback: local meta so a 504 does not leave Unknown labels
                   failures.push(
                     `chunk ${i + wi + 1}/${chunks.length} HTTP ${response.status}`,
                   );
-                  return normalizeJobs([
-                    {
-                      text: chunk,
-                      company: "Unknown company",
-                      role: "Unknown role",
-                    },
-                  ]);
+                  return toDetectedJobs([chunk]);
                 }
                 return normalizeJobs(data.jobs);
               } catch (err) {
@@ -731,13 +728,7 @@ export default function ResumeForm() {
                     err instanceof Error ? err.message : "failed"
                   }`,
                 );
-                return normalizeJobs([
-                  {
-                    text: chunk,
-                    company: "Unknown company",
-                    role: "Unknown role",
-                  },
-                ]);
+                return toDetectedJobs([chunk]);
               }
             }),
           );
@@ -769,7 +760,7 @@ export default function ResumeForm() {
         setJdDetectProgress(null);
         setError(
           failures.length
-            ? `Detected ${deduped.length} JD(s). Some OpenRouter chunks timed out (${failures[0]}); those kept provisional labels.`
+            ? `Detected ${deduped.length} JD(s). Some OpenRouter chunks timed out (${failures[0]}); local company/role labels were used for those.`
             : null,
         );
       } catch (err) {
