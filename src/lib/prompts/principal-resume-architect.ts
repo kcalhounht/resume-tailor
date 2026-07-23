@@ -120,11 +120,16 @@ Bullets: ACTION + TECHNOLOGY + ENGINEERING PROBLEM + IMPACT.
 Write 5–7 strong bullets per role when source experience supports it.
 
 CRITICAL ANTI-REPETITION (Resume Worded Style/Repetition score):
-- NEVER reuse the same opening action verb more than TWICE across the entire resume.
+- Start EVERY bullet with a verb from the STRONG ACTION VERB BANK below.
+- Prefer a DIFFERENT strong verb for each bullet; NEVER reuse the same opening verb more than TWICE across the entire resume.
 - NEVER copy the same sentence skeleton across companies (changing only company/tech/numbers is forbidden).
 - NEVER paste JD marketing text into bullets (ban: "About the job", "Who are we", "the leading … company").
 - Each role must have DISTINCT accomplishments, verbs, and sentence structures.
 - If two bullets would look similar after removing company/tech names, rewrite one completely.
+- Ban weak openers: Helped, Assisted, Worked on, Responsible for, Supported, Participated, Handled, Tasked with.
+
+STRONG ACTION VERB BANK (use these — rotate; do not repeat):
+Accelerated, Achieved, Attained, Completed, Conceived, Convinced, Discovered, Doubled, Effected, Eliminated, Expanded, Expedited, Founded, Improved, Increased, Initiated, Innovated, Introduced, Invented, Launched, Mastered, Overcame, Overhauled, Pioneered, Reduced, Resolved, Revitalized, Spearheaded, Strengthened, Transformed, Upgraded, Tripled, Addressed, Advised, Arranged, Authored, Co-authored, Co-ordinated, Communicated, Corresponded, Counselled, Developed, Demonstrated, Directed, Drafted, Enlisted, Facilitated, Formulated, Guided, Influenced, Interpreted, Interviewed, Instructed, Lectured, Led, Liaised, Mediated, Moderated, Motivated, Negotiated, Persuaded, Presented, Promoted, Proposed, Publicized, Recommended, Reconciled, Recruited, Taught, Trained, Translated, Composed, Created, Designed, Devised, Established, Generated, Implemented, Instituted, Opened, Originated, Planned, Prepared, Produced, Started, Released, Administered, Analyzed, Assigned, Chaired, Consolidated, Contracted, Delegated, Evaluated, Executed, Organized, Prioritized, Reorganized, Reviewed, Scheduled, Supervised, Managed, Coached, Conducted, Illustrated, Performed, Mentored, Awarded, Revamped, Allocated, Assessed, Clarified, Counseled, Diagnosed, Educated, Familiarized, Referred, Rehabilitated, Reinforced, Represented, Verified, Adapted, Coordinated, Enabled, Encouraged, Explained, Informed, Stimulated, Classified, Collated, Defined, Forecasted, Identified, Investigated, Researched, Tested, Traced, Uncovered, Collected, Critiqued, Examined, Extracted, Inspected, Inspired, Summarized, Surveyed, Systemized, Budgeted, Controlled, Itemised, Modernised, Operated, Organised, Processed, Redesigned, Refined, Revised, Simplified, Solved, Streamlined, Combined, Converted, Cut, Decreased, Minimised, Restructured, Saved, Serviced, Trimmed, Unified, Widened, Broadened, Appraised, Audited, Balanced, Calculated, Computed, Projected, Modelled, Arbitrated, Acted, Conceptualized, Customized, Fashioned, Integrated, Proved, Set up, Shaped, Structured, Tabulated, Validated, Approved, Catalogued, Compiled, Dispatched, Monitored, Ordered, Purchased, Recorded, Retrieved, Screened, Specified, Systematized, Coded, Extrapolated, Predicted, Installed, Engineered, Segmented, Estimated, Assembled, Visualized, Debugged, Standardized, Steered, Automated, Troubleshooted, Architected, Deployed.
 
 ATS OPTIMIZATION:
 Place critical JD keywords naturally in Summary → Skills → recent Experience.
@@ -192,5 +197,5 @@ Priority fixes:
 1) Cover every supported mustHave / requiredSkill / hardTechnicalSkill / responsibility with Summary, Skills, or recent bullets using JD wording.
 2) Include supported niceToHave only after must-haves.
 3) Keep employment periods exact; reflect yearsOfExperience only if true from candidate history.
-4) Fix repetition: unique action verbs (no verb >2 times), no similar bullet skeletons, no JD text leaks.
+4) Fix repetition: start every bullet with a DIFFERENT verb from the STRONG ACTION VERB BANK (no verb >2 times), no similar bullet skeletons, no JD text leaks.
 Return the complete JSON object with resume, coverLetter, and optimization_report.`;

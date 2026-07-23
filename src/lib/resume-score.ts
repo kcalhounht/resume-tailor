@@ -5,6 +5,7 @@ import type {
   TailoredPackage,
   TailoredResume,
 } from "./types";
+import { STRONG_ACTION_VERBS } from "./action-verbs";
 
 export type RuleResult = {
   rule: string;
@@ -29,8 +30,14 @@ export type ResumeScoreReport = {
   improvement_suggestions: string[];
 };
 
-const STRONG_VERBS =
-  /\b(built|developed|designed|architected|implemented|optimized|automated|delivered|improved|reduced|increased|scaled|led|created|deployed|integrated|owned|drove|established|migrated|fine-tuned|spearheaded|streamlined|accelerated)\b/i;
+const STRONG_VERBS = new RegExp(
+  `\\b(${[...new Set(
+    STRONG_ACTION_VERBS.map((v) =>
+      v.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+    ),
+  )].join("|")})\\b`,
+  "i",
+);
 
 const WEAK_VERBS =
   /\b(helped|assisted|worked on|responsible for|participated|supported|handled|tasked with)\b/i;

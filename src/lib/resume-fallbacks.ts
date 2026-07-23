@@ -1,4 +1,5 @@
 import type { ExtractedJD } from "./types";
+import { STRONG_ACTION_VERBS } from "./action-verbs";
 
 type ExperienceSeed = {
   company: string;
@@ -21,39 +22,8 @@ const BANNED_TEMPLATE_OPENERS = [
   /supporting .+ outcomes through /i,
 ];
 
-/** Strong verbs — rotate so no opener repeats across the whole resume. */
-const VERB_BANK = [
-  "Architected",
-  "Designed",
-  "Implemented",
-  "Optimized",
-  "Automated",
-  "Scaled",
-  "Migrated",
-  "Refactored",
-  "Orchestrated",
-  "Engineered",
-  "Hardened",
-  "Streamlined",
-  "Instrumented",
-  "Diagnosed",
-  "Stabilized",
-  "Modernized",
-  "Integrated",
-  "Deployed",
-  "Tuned",
-  "Unified",
-  "Extended",
-    "Prototyped",
-  "Spearheaded",
-  "Championed",
-  "Elevated",
-  "Accelerated",
-  "Consolidated",
-  "Standardized",
-  "Provisioned",
-  "Secured",
-];
+/** Strong verbs from the accomplishment-driven bank — rotate to avoid repetition. */
+const VERB_BANK = [...STRONG_ACTION_VERBS];
 
 function normalizeBulletKey(text: string): string {
   return text.toLowerCase().replace(/\s+/g, " ").trim();
