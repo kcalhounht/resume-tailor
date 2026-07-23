@@ -10,6 +10,7 @@ import { parseModelJson } from "./parse-json";
 import {
   buildExperienceOverview,
   buildVariedExperienceBullets,
+  isCannedFillerText,
   sanitizeExperienceBullet,
 } from "./resume-fallbacks";
 import { sanitizePlainText } from "./validate-resume";
@@ -158,10 +159,12 @@ function looksTemplatedExperience(
   const bullets = experiences.flatMap((e) => e.bullets || []).map(String);
   if (bullets.length < 4) return true;
 
-  const cannedHits = bullets.filter((b) =>
-    /built and shipped production features as |led design and delivery of services with |scaled platform components around |cutting critical-path p95 latency by ~28%|8\+ production increments per quarter|supporting ~10x peak request volume|delivered work at |owned a slice of |partnered on .+ at |improved operational readiness for |built tooling\/process for |translated .+ requirements into concrete |supporting .+ outcomes through |about the job|who are we\??/i.test(
-      b,
-    ),
+  const cannedHits = bullets.filter(
+    (b) =>
+      isCannedFillerText(b) ||
+      /built and shipped production features as |led design and delivery of services with |scaled platform components around |delivered work at |owned a slice of |partnered on .+ at |improved operational readiness for |built tooling\/process for |translated .+ requirements into concrete |supporting .+ outcomes through |about the job|who are we\??|progressive delivery controls|pairing architecture decisions|unified fragmented|weekly reliability reviews|blast radius of risky changes/i.test(
+        b,
+      ),
   ).length;
   if (cannedHits >= 1) return true;
 
@@ -171,8 +174,21 @@ function looksTemplatedExperience(
   const verbCounts = new Map<string, number>();
   for (const v of verbs) verbCounts.set(v, (verbCounts.get(v) || 0) + 1);
   const maxVerb = Math.max(...verbCounts.values(), 0);
-  // Resume Worded: same action verb more than twice → fail
   if (maxVerb >= 3) return true;
+
+  // Cross-role skeleton clones (same first 5 words ignoring company/tech)
+  const skeletons = bullets.map((b) =>
+    b
+      .toLowerCase()
+      .replace(/\b(python|aws|kubernetes|react|typescript|java|visa|hp|plutora)\b/gi, "X")
+      .replace(/\b\d+(\.\d+)?%?\b/g, "#")
+      .split(/\s+/)
+      .slice(0, 6)
+      .join(" "),
+  );
+  const skCounts = new Map<string, number>();
+  for (const s of skeletons) skCounts.set(s, (skCounts.get(s) || 0) + 1);
+  if (Math.max(...skCounts.values(), 0) >= 2) return true;
 
   return false;
 }
@@ -239,6 +255,7 @@ function isWeakModelPackage(
 ): boolean {
   const summary = String(draft.resume?.summary || "").trim();
   if (summaryLooksWeak(summary, extracted)) return true;
+  if (isCannedFillerText(summary)) return true;
 
   const { groups, items, duplicateItems } = countSkillItems(
     draft.resume?.skills,
@@ -517,6 +534,8 @@ export async function generateTailoredPackage(
       const improvePayload = JSON.stringify({
         action: "improve",
         prompt: IMPROVE_RESUME_PROMPT,
+        critical:
+          "Previous draft used FORBIDDEN filler/template shells or was too thin. Rewrite every experience bullet uniquely per company in Ivan template voice. Expand Skills to 4–6 rich groups. Profile must be 2–3 paragraphs starting with exact JD title. Never reuse sentence skeletons across Visa/HP/Plutora-style roles.",
         current_score: scored?.overall_score ?? 0,
         category_scores: scored?.category_scores ?? {},
         lowest_category: lowest?.[0] ?? null,
@@ -644,28 +663,26 @@ function buildFallbackSummary(
   const title = extracted.jobTitle || extracted.type || "Software Engineer";
   const skills = Array.from(
     new Set(
-      [...extracted.hardTechnicalSkills, ...extracted.requiredSkills]
+      [
+        ...extracted.mustHave,
+        ...extracted.hardTechnicalSkills,
+        ...extracted.requiredSkills,
+      ]
         .map((s) => String(s).trim())
-        .filter(Boolean),
+        .filter((s) => s.length >= 2 && s.length <= 40),
     ),
   ).slice(0, 8);
   const skillBit = skills.length
-    ? skills.join(", ")
-    : "modern cloud-native software and data stacks";
+    ? skills.slice(0, 5).join(", ")
+    : "cloud-native backend and platform systems";
   const latest = profile.experiences[0];
-  const badCompany =
-    !latest?.company ||
-    /^(company|previous employer|employer|unknown)$/i.test(latest.company);
   const roleBit =
-    latest && !badCompany
+    latest?.company &&
+    !/^(company|previous employer|employer|unknown)$/i.test(latest.company)
       ? `${latest.title} at ${latest.company}`
-      : "shipping production ML and platform systems";
-  const company =
-    extracted.company &&
-    !/^(unknown company|company|unknown)$/i.test(extracted.company)
-      ? extracted.company
-      : "product and platform engineering teams";
-  return `${title} specializing in ${skillBit}. Recent work as ${roleBit} focused on production delivery — model/system quality, latency, and reliable rollout. Combines hands-on implementation with clear ownership from design through monitoring for ${extracted.workMode || "hybrid"} environments supporting ${company}.`;
+      : "production engineering roles";
+  // Ivan-style multi-paragraph profile (no canned "model/system quality" filler)
+  return `${title} with hands-on ownership of ${skillBit} in production environments. Experienced delivering reliable services, APIs, and cloud infrastructure with clear accountability from design through operations.\n\nRecent work as ${roleBit} emphasized scalable systems, operational excellence, and close alignment to ${title} requirements across ${extracted.workMode || "hybrid"} delivery settings.`;
 }
 
 function collapseRepeatedTokens(text: string): string {
@@ -708,10 +725,11 @@ function dedupeExperienceBullets(
       kept.push(clean);
     }
 
-    // Only template-fill when the role has almost no usable bullets.
+    // Prefer real bullets; only fill when almost empty (and never keep canned clones).
+    const real = kept.filter((b) => !isCannedFillerText(b));
     const bullets =
-      kept.length >= 3
-        ? kept.slice(0, 8)
+      real.length >= 1
+        ? real.slice(0, 10)
         : buildVariedExperienceBullets(
             {
               company:
@@ -721,8 +739,8 @@ function dedupeExperienceBullets(
                 exp.location || profile.experiences[index]?.location || "Remote",
             },
             extracted,
-            kept,
-            Math.max(5, kept.length),
+            [],
+            5,
             undefined,
             undefined,
             undefined,
@@ -1098,11 +1116,12 @@ function normalizeResume(
       .map((b) => sanitizeExperienceBullet(b) || b)
       .filter((b) => b.length >= 20);
 
-    // Keep LLM bullets. Only template-fill when nearly empty.
+    // Keep ALL usable LLM bullets. Never pad with canned fillers when we already have content.
+    const cleaned = incoming.filter((b) => !isCannedFillerText(b));
     const bullets =
-      incoming.length >= 3
-        ? incoming.slice(0, 8)
-        : buildVariedExperienceBullets(exp, extracted, incoming, 5);
+      cleaned.length >= 1
+        ? cleaned.slice(0, 10)
+        : buildVariedExperienceBullets(exp, extracted, [], 5);
 
     const overview = sanitizePlainText(
       String(

@@ -8,6 +8,7 @@ import type {
 import {
   buildExperienceOverview,
   buildVariedExperienceBullets,
+  isCannedFillerText,
 } from "./resume-fallbacks";
 
 export interface ValidationIssue {
@@ -161,7 +162,7 @@ export function validateAndFixResume(
     let overview = sanitizePlainText(generated?.overview || "");
     let bullets = (generated?.bullets || [])
       .map((b) => sanitizePlainText(b))
-      .filter(Boolean);
+      .filter((b) => b && !isCannedFillerText(b));
 
     if (generated?.company && generated.company !== exp.company) {
       issues.push({
