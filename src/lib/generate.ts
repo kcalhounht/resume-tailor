@@ -14,19 +14,21 @@ import {
 import { sanitizePlainText } from "./validate-resume";
 import { sanitizeKeywords } from "./keywords";
 
-const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
+const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach optimized for Resume Worded / Score My Resume.
+TARGET: produce a tailored resume that would score 90+ on Resume Worded (Impact, Brevity, Style, soft-skill signals).
+
 Create a tailored resume and cover letter that maximize ATS keyword match for the target role.
 
 Hard rules:
-1. Resume sections: Summary, Skills, Experience, Education.
+1. Resume sections ONLY: Summary, Skills, Experience, Education (no References, Objective, Hobbies, Interests, "Responsible for" blocks).
 2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
    Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices.
-   Each group has a short category name and 4-10 comma-ready item strings.
+   Each group has a short category name and 4-10 comma-ready item strings. JD-first, no duplicates across groups.
 3. Each experience MUST include:
    - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
-   - exactly 7 bullet points of accomplishments.
-4. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
-5. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
+   - exactly 7 bullet points of accomplishments (not duties).
+4. Each bullet must be professional, specific, and scannable (~22-38 words / about 1-2 lines). Describe concrete work done.
+5. QUANTIFY IMPACT: nearly every bullet needs a hard number (counts, scale, volume, latency, users, datasets, dollars, tickets, services). NEVER invent unrealistic percentages (avoid 80%+ claims).
 6. Include slightly MORE relevant experience breadth than the JD strictly requires.
 7. Mirror JD terminology and hard skills heavily for ATS scoring.
 8. keywords: array of important JD keywords/phrases that should be bolded.
@@ -36,42 +38,15 @@ Hard rules:
 12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
 13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
 
-Strength coach rules (make the resume MUCH stronger):
-14. Increase impact with numbers and metrics in nearly every bullet (scale, volume, latency, users, datasets, dollars, tickets, services). Never invent unrealistic percentages.
-15. Compare against what hiring managers expect for THIS target role — prioritize the JD's must-haves, seniority, and stack.
-16. Fix weak experience: rewrite thin/responsibility-only bullets into strong accomplishment bullets that show ownership and results.
-17. Resume summary — decide and make it effective:
-   - For this product, ALWAYS include a Summary (it is not optional in output).
-   - Make it earn its space: 55-90 words, open with the target role title/seniority from the JD, name 5-10 DISTINCT hard skills from the JD (never repeat a skill), state domain + measurable impact.
-   - An effective summary answers: who you are for THIS role, what stack you bring, and what outcomes you deliver — not a generic career objective.
-   - Ban fluff: passionate, results-driven, team player, seeking opportunities, proven track record.
-   - Optional-summary test: if the Summary would only be generic filler beyond Skills + Experience, rewrite until it is role-specific and high-signal. Never leave a weak/placeholder Summary.
-18. Remove vague buzzwords that add little value (passionate, results-driven, team player, synergy, go-getter, self-motivated, detail-oriented as empty claims).
-19. Remove superfluous words; keep bullets crisp and high-signal (~25-40 words each).
-20. Eliminate careless errors: no typos, broken grammar, duplicated skills ("Python, Python"), or leftover markdown.
-21. Show ownership: project ownership, responsibility, and (when plausible) mentoring/leading — not just task lists.
-22. Show initiative: proactivity, self-starting delivery, persistence solving hard problems.
-23. Show communication: clear collaboration with stakeholders, teammates, or clients when relevant to the JD.
-24. Show analytical skill: break down complex problems, evaluate options, deliver appropriate solutions.
-25. Show teamwork: effective collaboration to achieve shared goals when relevant.
-26. Swap weak language for strong action verbs (Built, Led, Designed, Owned, Shipped, Automated, Optimized, Diagnosed, Migrated, Fine-tuned, Delivered, Spearheaded, Implemented, Accelerated).
-27. Avoid repeating action verbs and phrases on the resume (critical):
-   - Do NOT start multiple bullets with the same verb (e.g. Built… Built… Built…).
-   - Do NOT reuse the same opening phrase or near-identical clause across roles.
-   - Rotate verbs and sentence shapes so each bullet reads distinct; scan the full resume before finishing and rewrite repeats.
-28. Focus on accomplishments, not bare responsibilities.
-29. Remove personal pronouns (I, me, my, we, our) from the resume body.
-30. Keep bullet length consistent and scannable; use bullets only — never paragraphs in Experience.
-31. Keep periods/dates exactly as given; do not invent or reformat into inconsistent styles.
-32. Do NOT add outdated sections (References, Objective, Hobbies, Soft-skills essay, "Responsible for" blocks).
-33. Skills section must be effective: compact grouped skills, JD-first, no one-skill-per-line dumps, no duplicates across groups.
-34. Avoid unnecessary personal details — only name/contact from the profile, plus role content. No age, photo, marital status, etc.
-35. Avoid passive voice ("was responsible for", "tasks were completed"); write active voice.
-36. Keep punctuation and formatting consistent across bullets (same style, no trailing clutter).
-37. Provide enough detail for a strong 1-page technical resume — dense, not sparse; do not cram filler.
-38. Use correct tense: past roles in past tense; current role can use present/past mix for ongoing vs completed work.
-39. Show growth across roles (increasing scope, ownership, complexity) when the profile supports it.
-40. Keep the whole resume tightly focused on the target role and JD language for ATS screeners — key sections must be easy to scan (Summary, Skills, Experience, Education).
+Resume Worded 90+ checklist (must pass):
+A. IMPACT — every bullet = strong action verb + task/project + measurable result. Accomplishments over responsibilities. Show growth, ownership, and leadership/mentoring signals where plausible.
+B. BREVITY — no filler, no paragraphs in Experience, no superfluous words; each line earns its place; resume stays focused on the target role.
+C. STYLE — active voice only; no personal pronouns (I/me/my/we/our); consistent punctuation; correct tense (past for past roles); clean ATS-parseable wording; no careless errors or duplicated skills ("Python, Python").
+D. VERBS — strong verbs only; NEVER repeat the same opening verb or near-identical phrase across bullets/roles. Rotate: Built, Led, Designed, Owned, Shipped, Automated, Optimized, Diagnosed, Migrated, Fine-tuned, Delivered, Spearheaded, Implemented, Accelerated, Drove, Established, Streamlined.
+E. BAN weak/vague language: helped, assisted, worked on, responsible for, tasked with, participated in, various, several, passionate, results-driven, team player, synergy, go-getter, self-motivated, detail-oriented, proven track record, seeking opportunities.
+F. SUMMARY — required and effective (55-90 words): open with target job title, name 5-10 DISTINCT JD hard skills once each, state domain impact. Must beat the "optional summary" test (not generic filler).
+G. SOFT SKILLS via RESULTS — demonstrate initiative, communication, analytical problem-solving, and teamwork through concrete bullets — never as empty soft-skill lists.
+H. TARGET ROLE FOCUS — compare content to what hiring managers expect for THIS JD; prioritize must-haves, seniority, and stack; make experience unique to this JD (not a recycled template).
 
 JSON shape:
 {
@@ -85,14 +60,14 @@ JSON shape:
   "coverLetter": string
 }`;
 
-const COVER_LETTER_PROMPT = `You are an expert ATS resume writer and career coach.
+const COVER_LETTER_PROMPT = `You are an expert ATS resume writer and career coach (Resume Worded 90+ style).
 Create a tailored cover letter that maximize ATS keyword match for the target role.
 
 Hard rules:
 1. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
 2. Mirror JD terminology and hard skills heavily for ATS scoring.
 3. Keep claims grounded in the candidate profile / resume summary / bullets provided. Do not invent employers or schools.
-4. Emphasize ownership, initiative, communication, analytical problem-solving, and collaboration with concrete examples — not vague buzzwords.
+4. Emphasize quantified impact, ownership, initiative, communication, analytical problem-solving, and collaboration — not vague buzzwords.
 5. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
 6. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only.
 
@@ -247,10 +222,63 @@ function looksTemplatedExperience(
   const maxVerb = Math.max(...verbCounts.values(), 0);
   if (maxVerb >= Math.ceil(bullets.length * 0.45)) return true;
 
-  const metricShape = bullets.filter((b) =>
-    /~?\d+%\b|p95|10x|8\+|mid-teens/i.test(b),
-  ).length;
-  if (metricShape >= Math.ceil(bullets.length * 0.55)) return true;
+  return false;
+}
+
+function failsResumeWordedChecks(
+  draft: TailoredPackage,
+  profile: CandidateProfile,
+): boolean {
+  const weakVerb =
+    /^(helped|assisted|worked|responsible|tasked|participated|supported|involved)\b/i;
+  const buzz =
+    /\b(passionate|results-driven|team player|synergy|go-getter|self-motivated|detail-oriented|proven track record|seeking opportunities|various|several)\b/i;
+  const pronoun = /\b(i|me|my|we|our|i'm|i’ve|i've)\b/i;
+  const dutyOnly =
+    /\b(responsible for|duties included|tasked with|participated in)\b/i;
+
+  const allBullets: string[] = [];
+  for (let i = 0; i < profile.experiences.length; i++) {
+    const exp = draft.resume?.experiences?.[i];
+    const bullets = Array.isArray(exp?.bullets)
+      ? exp!.bullets.map((b) => String(b || "").trim()).filter(Boolean)
+      : [];
+    allBullets.push(...bullets);
+  }
+  if (allBullets.length < Math.max(4, profile.experiences.length * 5)) {
+    return true;
+  }
+
+  let weakHits = 0;
+  let missingMetrics = 0;
+  let badLength = 0;
+  for (const b of allBullets) {
+    const words = b.split(/\s+/).filter(Boolean).length;
+    if (words < 18 || words > 42) badLength += 1;
+    if (!bulletHasMetric(b)) missingMetrics += 1;
+    if (weakVerb.test(b) || buzz.test(b) || pronoun.test(b) || dutyOnly.test(b)) {
+      weakHits += 1;
+    }
+  }
+
+  if (missingMetrics > Math.max(1, Math.floor(allBullets.length * 0.2))) {
+    return true;
+  }
+  if (weakHits >= 2) return true;
+  if (badLength > Math.max(2, Math.floor(allBullets.length * 0.35))) {
+    return true;
+  }
+
+  const verbs = allBullets
+    .map((b) => (b.trim().split(/\s+/)[0] || "").toLowerCase())
+    .filter(Boolean);
+  const verbCounts = new Map<string, number>();
+  for (const v of verbs) verbCounts.set(v, (verbCounts.get(v) || 0) + 1);
+  const maxVerb = Math.max(...verbCounts.values(), 0);
+  if (maxVerb >= 3) return true;
+
+  const summary = String(draft.resume?.summary || "");
+  if (buzz.test(summary) || pronoun.test(summary)) return true;
 
   return false;
 }
@@ -286,6 +314,7 @@ function isWeakModelPackage(
 
   if (hasCrossRoleRepetition(draft.resume?.experiences)) return true;
   if (looksTemplatedExperience(draft.resume?.experiences)) return true;
+  if (failsResumeWordedChecks(draft, profile)) return true;
 
   for (let i = 0; i < profile.experiences.length; i++) {
     const exp = draft.resume?.experiences?.[i];
@@ -362,9 +391,9 @@ export async function generateTailoredPackage(
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
     qualityBar:
-      "Follow system hard rules + strength coach rules: metrics in bullets, strong action verbs, accomplishments not duties, no buzzwords/pronouns/passive voice, effective summary + grouped skills, JD-focused.",
+      "Resume Worded 90+ target: quantified impact bullets, varied strong verbs, no buzzwords/pronouns/passive/duty language, effective summary, dense JD skills, scannable brevity.",
     instructions:
-      "Follow the system prompt hard rules AND strength coach rules exactly. Maximize ATS keyword match and hiring-manager impact. Return valid compact JSON only (resume + coverLetter). No markdown.",
+      "Optimize for Resume Worded Score My Resume 90+. Follow system hard rules + Resume Worded 90+ checklist exactly. Return valid compact JSON only (resume + coverLetter). No markdown.",
   });
 
   const baseMessages: Array<{
@@ -461,14 +490,16 @@ export async function generateTailoredPackage(
     }
   }
 
-  const rewritePrompt = `REWRITE the FULL JSON to better follow the system hard rules AND strength coach rules for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
+  const rewritePrompt = `REWRITE the FULL JSON to hit Resume Worded 90+ (Impact + Brevity + Style) for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
 Mandatory:
-1. Skills: 4-6 compact groups, 4-10 items each; JD-first; no duplicates; effective for ATS screeners.
-2. Experience: overview 25-45 words + exactly 7 accomplishment bullets (~25-40 words) with metrics; strong VARIED action verbs (do NOT repeat the same verb/phrase); active voice; no pronouns; no buzzwords; ownership/initiative/collaboration/analytical impact where relevant.
-3. Summary: effective and role-specific (55-90 words). Open with target title + distinct JD skills + impact. If it reads like generic filler, rewrite until it earns its place.
-4. keywords: important JD phrases for bolding.
-5. coverLetter: 3-4 short paragraphs with \\n\\n; concrete fit, not vague praise.
-6. Keep company names, periods, locations, education exact. No markdown. No outdated sections.
+1. IMPACT: every bullet = strong UNIQUE action verb + work + hard metric. Accomplishments only. No helped/assisted/worked on/responsible for.
+2. VERBS: never repeat the same opening verb 3+ times across the resume; rotate verbs.
+3. STYLE: no pronouns, no buzzwords, active voice, ~22-38 words/bullet, consistent punctuation.
+4. SUMMARY: 55-90 words, target title first, DISTINCT JD skills, domain impact — not filler.
+5. SKILLS: 4-6 groups × 4-10 items, JD-first, no duplicates.
+6. EXPERIENCE: overview 25-45 words + exactly 7 bullets/role; unique to this JD.
+7. coverLetter: 3-4 paragraphs with \\n\\n; concrete quantified fit.
+8. Keep company names, periods, locations, education exact. No markdown.
 Return complete valid JSON only.`;
 
   try {
