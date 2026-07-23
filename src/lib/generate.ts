@@ -15,7 +15,18 @@ import { sanitizePlainText } from "./validate-resume";
 import { sanitizeKeywords } from "./keywords";
 import { scoreResumePackage } from "./resume-score";
 
-const SYSTEM_PROMPT = `Return ONLY valid compact JSON (no markdown) matching:
+const SYSTEM_PROMPT = `You are a Resume Scoring Engine–optimized ATS resume writer.
+Maximize an internal 0–100 score with these category weights:
+1) Impact and Achievements (35): quantified metrics; Action+Tech+Problem+Result bullets; strong action verbs; >70% achievement density.
+2) Skills and Keyword Alignment (20): match important JD keywords (>75%); skills evidenced in Experience; contextual tech+outcome usage (no stuffing).
+3) Experience Quality (20): ownership/leadership; production/scale complexity; career growth; relevance to target role.
+4) Writing Quality (15): 15–30 word bullets; no filler (responsible for/worked on/various); no buzzwords; no first-person; consistent grammar/tense.
+5) ATS Compatibility (10): Summary+Skills+Experience+Education; complete contact; plain single-column text (no tables/images/graphics).
+
+Strong verbs: Built, Developed, Designed, Architected, Implemented, Optimized, Automated, Scaled, Delivered, Improved, Reduced, Increased, Led, Created, Deployed, Integrated.
+Ban weak verbs: Helped, Assisted, Worked on, Responsible for, Supported, Participated, Handled.
+
+Return ONLY valid compact JSON (no markdown):
 {
   "resume": {
     "summary": string,
@@ -28,7 +39,8 @@ const SYSTEM_PROMPT = `Return ONLY valid compact JSON (no markdown) matching:
 }
 Keep company names, periods, locations, and education exact. Do not invent employers or schools. Plain text only.`;
 
-const COVER_LETTER_PROMPT = `Return ONLY valid compact JSON (no markdown):
+const COVER_LETTER_PROMPT = `Write a cover letter optimized for the Resume Scoring Engine rubric (impact, JD keywords, ownership, evidence-based writing).
+Return ONLY valid compact JSON (no markdown):
 { "coverLetter": string }
 coverLetter is 3-4 short paragraphs in ONE string with \\n\\n between paragraphs. Plain text only.`;
 
