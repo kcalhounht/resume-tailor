@@ -40,27 +40,48 @@ function skillPhrase(skills: string[], start: number, count = 3): string {
   return picked.join(", ");
 }
 
-/** Distinct role overview — never the same canned line for every company. */
+function jdFocusLines(extracted: ExtractedJD): string[] {
+  const lines = [
+    ...extracted.responsibilities,
+    ...extracted.mustHave,
+    extracted.summary,
+  ]
+    .map((s) => String(s || "").trim())
+    .filter((s) => s.length >= 12)
+    .map((s) => s.replace(/^[-•\s]+/, "").slice(0, 90));
+  return [...new Set(lines)].slice(0, 8);
+}
+
+function hashSeed(text: string): number {
+  let h = 0;
+  for (let i = 0; i < text.length; i++) h = (h * 31 + text.charCodeAt(i)) >>> 0;
+  return h;
+}
+
+/** Distinct role overview — JD-shaped, not a fixed template per company. */
 export function buildExperienceOverview(
   exp: ExperienceSeed,
   extracted: ExtractedJD,
   roleIndex: number,
 ): string {
-  const skills = skillPhrase(skillPool(extracted), roleIndex, 4);
+  const skills = skillPhrase(skillPool(extracted), roleIndex + 1, 3);
   const place = exp.location.trim() || "hybrid";
   const target = extracted.jobTitle || extracted.type || "engineering";
+  const focus =
+    jdFocusLines(extracted)[roleIndex % Math.max(1, jdFocusLines(extracted).length)] ||
+    `${target} delivery`;
   const variants = [
-    `At ${exp.company}, served as ${exp.title} in a ${place.toLowerCase()} setting, owning delivery around ${skills} with clear accountability for production quality aligned to ${target} outcomes.`,
-    `${exp.title} at ${exp.company} building and operating scalable systems with ${skills}; partnered with product and platform teams to ship measurable improvements for customer-facing and internal workloads.`,
-    `As ${exp.title} at ${exp.company} (${place}), led implementation and iteration of services involving ${skills}, emphasizing latency, reliability, and maintainable architecture.`,
-    `${exp.company} engineering contributor as ${exp.title}, delivering features and operational hardening around ${skills} with ownership from design reviews through production rollout.`,
+    `At ${exp.company}, worked as ${exp.title} (${place}) with ownership of ${skills}, aligning day-to-day delivery to ${focus}.`,
+    `${exp.title} at ${exp.company} supporting ${target} outcomes through ${skills}, with emphasis on ${focus}.`,
+    `As ${exp.title} at ${exp.company}, contributed across ${skills} while advancing ${focus} for production stakeholders.`,
+    `${exp.company} role as ${exp.title} focused on practical ${skills} work tied to ${focus} in a ${place.toLowerCase()} setting.`,
   ];
-  return variants[roleIndex % variants.length];
+  return variants[(roleIndex + hashSeed(exp.company)) % variants.length];
 }
 
 /**
- * Fill experience bullets to 7–8 without repeating the same sentence.
- * Uses company/title/skills so fallback content stays specific per role.
+ * Fill experience bullets without the same rigid verb+metric formula every time.
+ * Mix JD responsibilities/must-haves so each JD produces different shapes.
  */
 export function buildVariedExperienceBullets(
   exp: ExperienceSeed,
@@ -69,15 +90,27 @@ export function buildVariedExperienceBullets(
   targetCount = 7,
 ): string[] {
   const skills = skillPool(extracted);
+  const focuses = jdFocusLines(extracted);
+  const seed = hashSeed(`${exp.company}|${exp.title}|${extracted.jobTitle}`);
+  const n = (i: number) => 3 + ((seed + i * 7) % 9); // 3..11 style variety
+  const users = [2, 5, 8, 12, 20, 35, 50][(seed + 1) % 7];
+  const ms = [120, 180, 250, 320, 420, 500][(seed + 2) % 6];
+
   const templates = [
-    `Built and shipped production features as ${exp.title} at ${exp.company} using ${skillPhrase(skills, 0)}, cutting critical-path p95 latency by ~28% for workflows serving 10k+ daily active users.`,
-    `Led design and delivery of services with ${skillPhrase(skills, 1)} at ${exp.company}, raising release throughput to 8+ production increments per quarter with automated regression coverage and safer rollbacks.`,
-    `Owned end-to-end implementation involving ${skillPhrase(skills, 2)}, including reviews and staged rollouts that reduced recurring production defects by ~30% for ${exp.company} workloads.`,
-    `Scaled platform components around ${skillPhrase(skills, 3)} at ${exp.company}, supporting ~10x peak request volume during campaigns while keeping p95 latency within agreed SLOs.`,
-    `Automated delivery and monitoring with ${skillPhrase(skills, 4)}, reducing mean time to detect incidents from hours to under 10 minutes across ${exp.company} ${exp.location.toLowerCase() || "engineering"} environments.`,
-    `Delivered customer-facing capabilities with ${skillPhrase(skills, 5)}, improving completion/conversion on priority ${exp.company} journeys by a measurable mid-teens percentage lift.`,
-    `Migrated and hardened core paths using ${skillPhrase(skills, 6)}, cutting infrastructure/runtime cost by ~20% while holding availability targets for ${exp.company} production systems.`,
-    `Drove performance and reliability work on ${skillPhrase(skills, 2)} stacks, clearing a backlog of 40+ stability items and reducing on-call noise for ${exp.company} teams.`,
+    `Delivered work at ${exp.company} on ${skillPhrase(skills, seed, 3)} tied to ${focuses[0] || extracted.jobTitle || "core platform goals"}, shipping ${n(0)} production changes across a quarter.`,
+    `Owned a slice of ${focuses[1] || "service reliability"} as ${exp.title}, using ${skillPhrase(skills, seed + 1, 2)} to keep p95 near ${ms}ms for ${users}k+ weekly users.`,
+    `Partnered on ${focuses[2] || "feature delivery"} at ${exp.company}: implemented ${skillPhrase(skills, seed + 2, 3)} paths and closed ${10 + ((seed + 3) % 20)} review/QA follow-ups before release.`,
+    `Improved operational readiness for ${exp.company} systems around ${skillPhrase(skills, seed + 3, 2)}, cutting recurring incident noise by clearing ${15 + ((seed + 4) % 25)} backlog items.`,
+    `Built tooling/process for ${focuses[3] || "faster iteration"} with ${skillPhrase(skills, seed + 4, 3)}, enabling ${n(4)} safer rollouts per month for ${exp.title} responsibilities.`,
+    `Translated ${extracted.jobTitle || extracted.type || "role"} requirements into concrete ${exp.company} deliverables using ${skillPhrase(skills, seed + 5, 2)}, covering data/quality checks on ${n(5)} critical flows.`,
+    `Strengthened ${focuses[4] || "production observability"} at ${exp.company} with ${skillPhrase(skills, seed + 6, 3)}, documenting runbooks and reducing handoff time for on-call rotations.`,
+    `Advanced ${focuses[5] || "platform capabilities"} as ${exp.title}: extended ${skillPhrase(skills, seed + 7, 2)} components used by ${n(7)} internal consumers without blocking release trains.`,
+  ];
+
+  // Rotate template order by company so roles don't share the same sequence.
+  const rotated = [
+    ...templates.slice(seed % templates.length),
+    ...templates.slice(0, seed % templates.length),
   ];
 
   const seen = new Set<string>();
@@ -86,14 +119,21 @@ export function buildVariedExperienceBullets(
   for (const bullet of existing) {
     const key = normalizeBulletKey(bullet);
     if (!key || seen.has(key)) continue;
-    // Drop near-duplicates (same opening clause)
     const prefix = key.slice(0, 72);
     if ([...seen].some((s) => s.slice(0, 72) === prefix)) continue;
+    // Drop obvious canned openings that make every JD look identical.
+    if (
+      /^built and shipped production features as /i.test(key) ||
+      /^led design and delivery of services with /i.test(key) ||
+      /^scaled platform components around /i.test(key)
+    ) {
+      continue;
+    }
     seen.add(key);
     out.push(bullet);
   }
 
-  for (const template of templates) {
+  for (const template of rotated) {
     if (out.length >= targetCount) break;
     const key = normalizeBulletKey(template);
     if (seen.has(key)) continue;

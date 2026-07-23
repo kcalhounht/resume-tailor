@@ -30,14 +30,15 @@ Hard rules:
    - Each group: 6-10 DISTINCT items. No duplicates inside a group. No same item repeated across groups.
    - Lead with JD hardTechnicalSkills / requiredSkills, then add adjacent high-signal tools.
    - Never output a thin 2-4 item group. Never dump one giant unsorted list.
-4. Each experience MUST include:
-   - overview: 25-45 words — company context + ownership, JD-tailored, UNIQUE per company (never clone overviews).
+4. EXPERIENCE (critical — must vary by JD, never look templated):
+   - overview: 25-45 words — company context + ownership, rewritten for THIS JD's domain (LLM vs data vs backend, etc.). UNIQUE per company.
    - exactly 7 UNIQUE accomplishment bullets (~25-40 words).
-5. NO REPETITION (critical):
-   - Never reuse the same bullet (or near-duplicate opening clause) across roles.
-   - Never reuse the same metric sentence with only the company name swapped.
-   - Vary verbs and outcomes per role (Built/Led/Designed/Fine-tuned/Scaled/Automated/Migrated/Optimized…).
-6. Hard numbers (counts, scale, latency, users, datasets, dollars) are required in most bullets, but NEVER invent unrealistic percentages (no 90%+ claims).
+   - Each bullet must map to a different JD responsibility / must-have / skill theme — not the same formula 7 times.
+   - Ban rigid cookie-cutter patterns: do NOT start every bullet with the same verb; do NOT reuse the same metric shape (e.g. always "cut p95 by ~28%" / "8+ increments per quarter" / "10x peak volume") across roles or JDs.
+   - Vary sentence structure: mix owned/shipped/diagnosed/fine-tuned/designed/automated/partnered openings; change what is measured (latency, dataset size, model evals, tickets, services, cost, coverage) based on the JD.
+   - Prefer sourceResumeText achievements when present; rephrase them toward the target JD vocabulary.
+5. NO REPETITION: never clone bullets/overviews across roles; never swap only the company name in the same sentence.
+6. Hard numbers (counts, scale, latency, users, datasets, dollars) in most bullets, but NEVER invent unrealistic percentages (no 90%+ claims).
 7. Include slightly MORE relevant breadth than the JD strictly requires.
 8. Mirror JD terminology heavily for ATS. keywords: 15-25 important JD phrases (deduped).
 9. Keep company names, periods, locations, education exact. Slight title refinement OK if plausible.
@@ -191,6 +192,36 @@ function hasCrossRoleRepetition(experiences: TailoredResume["experiences"] | und
   return false;
 }
 
+function looksTemplatedExperience(
+  experiences: TailoredResume["experiences"] | undefined,
+): boolean {
+  if (!Array.isArray(experiences) || !experiences.length) return true;
+  const bullets = experiences.flatMap((e) => e.bullets || []).map(String);
+  if (bullets.length < 4) return true;
+
+  const cannedHits = bullets.filter((b) =>
+    /built and shipped production features as |led design and delivery of services with |scaled platform components around |cutting critical-path p95 latency by ~28%|8\+ production increments per quarter|supporting ~10x peak request volume/i.test(
+      b,
+    ),
+  ).length;
+  if (cannedHits >= 2) return true;
+
+  const verbs = bullets
+    .map((b) => (b.trim().split(/\s+/)[0] || "").toLowerCase())
+    .filter(Boolean);
+  const verbCounts = new Map<string, number>();
+  for (const v of verbs) verbCounts.set(v, (verbCounts.get(v) || 0) + 1);
+  const maxVerb = Math.max(...verbCounts.values(), 0);
+  if (maxVerb >= Math.ceil(bullets.length * 0.45)) return true;
+
+  const metricShape = bullets.filter((b) =>
+    /~?\d+%\b|p95|10x|8\+|mid-teens/i.test(b),
+  ).length;
+  if (metricShape >= Math.ceil(bullets.length * 0.55)) return true;
+
+  return false;
+}
+
 /** True when the model returned thin summary/skills or low-impact / repetitive bullets. */
 function isWeakModelPackage(
   draft: TailoredPackage,
@@ -221,6 +252,7 @@ function isWeakModelPackage(
   }
 
   if (hasCrossRoleRepetition(draft.resume?.experiences)) return true;
+  if (looksTemplatedExperience(draft.resume?.experiences)) return true;
 
   for (let i = 0; i < profile.experiences.length; i++) {
     const exp = draft.resume?.experiences?.[i];
@@ -290,13 +322,17 @@ export async function generateTailoredPackage(
       ...extracted.hardTechnicalSkills,
       ...extracted.requiredSkills,
     ].slice(0, 28),
+    jdExperienceThemes: [
+      ...extracted.responsibilities,
+      ...extracted.mustHave,
+    ].slice(0, 12),
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
     qualityBar:
-      "NO repetition. STRONG 60-95 word summary opening with target title + 6-10 DISTINCT JD skills. STRONG 5-6 skill groups × 6-10 UNIQUE items each (no cross-group duplicates). 7 UNIQUE bullets/role with realistic hard numbers.",
+      "Experience must be UNIQUE to this JD — not a recycled template. Strong summary/skills. Zero bullet clones. Vary verbs, metrics, and themes per responsibility.",
     instructions: options?.sourceResumeText
-      ? "STRONG ATS TAILOR from uploaded resume: resume JSON only. Fix weak summary/skills. Zero bullet cloning across roles. 5-6 dense skill groups with DISTINCT items. Summary 60-95 words, no filler, no repeated skill names."
-      : "STRONG ATS TAILOR: resume JSON only. Fix weak summary/skills. Zero bullet cloning across roles. 5-6 dense skill groups with DISTINCT items. Summary 60-95 words opening with target title + DISTINCT JD skills; never write Python, Python.",
+      ? "STRONG ATS TAILOR from uploaded resume: rewrite experience toward THIS JD's responsibilities/must-haves with varied sentence shapes (not the same Built/Led/Scaled formula). Strong summary + dense unique skills. No cross-role clones."
+      : "STRONG ATS TAILOR: invent JD-specific experience stories grounded in each company — map bullets to different JD themes. Vary structure per bullet. Strong summary + dense unique skills. Never ship cookie-cutter metrics across roles.",
   });
 
   const baseMessages: Array<{
@@ -391,11 +427,13 @@ export async function generateTailoredPackage(
     }
   }
 
-  const rewritePrompt = `REWRITE the FULL resume JSON (no coverLetter). Previous draft FAILED because of REPETITION and/or WEAK SUMMARY / WEAK SKILLS for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
+  const rewritePrompt = `REWRITE the FULL resume JSON (no coverLetter). Previous draft FAILED: experience looked TEMPLATED/REPEATED and/or summary/skills were weak for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
 Mandatory upgrades:
-- SUMMARY: 60-95 words, START with "${extracted.jobTitle || extracted.type}". Weave in DISTINCT skills only once each: ${[...new Set([...extracted.hardTechnicalSkills, ...extracted.requiredSkills])].slice(0, 12).join(", ") || "JD hard skills"}. No filler. No "Python, Python".
-- SKILLS: exactly 5-6 groups, 6-10 UNIQUE items EACH. No duplicate items across groups. Maximize JD overlap, then add adjacent tools.
-- EXPERIENCE: overview 25-45 words UNIQUE per company. Exactly 7 UNIQUE bullets/role (~25-40 words). Do NOT clone bullets across roles. Hard numbers OK; NEVER unrealistic %.
+- SUMMARY: 60-95 words, START with "${extracted.jobTitle || extracted.type}". DISTINCT skills once each: ${[...new Set([...extracted.hardTechnicalSkills, ...extracted.requiredSkills])].slice(0, 12).join(", ") || "JD hard skills"}.
+- SKILLS: 5-6 groups × 6-10 UNIQUE items; no cross-group duplicates.
+- EXPERIENCE must be different for THIS JD: map 7 bullets/role to different themes from: ${[...extracted.responsibilities, ...extracted.mustHave].slice(0, 8).join(" | ") || "JD responsibilities"}.
+  Vary verbs and metrics. Ban cookie-cutter lines like "Built and shipped production features…" / always "~28% latency" / "8+ increments per quarter".
+  Overviews UNIQUE per company and rewritten for this JD domain.
 - keywords: deduped JD phrases.
 Return complete resume JSON only. No markdown.`;
 
