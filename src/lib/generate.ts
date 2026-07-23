@@ -10,6 +10,7 @@ import { parseModelJson } from "./parse-json";
 import {
   buildExperienceOverview,
   buildVariedExperienceBullets,
+  sanitizeExperienceBullet,
 } from "./resume-fallbacks";
 import { sanitizePlainText } from "./validate-resume";
 import { sanitizeKeywords } from "./keywords";
@@ -132,18 +133,39 @@ function summaryLooksWeak(summary: string, extracted: ExtractedJD): boolean {
 function hasCrossRoleRepetition(experiences: TailoredResume["experiences"] | undefined): boolean {
   if (!Array.isArray(experiences) || experiences.length < 2) return false;
   const prefixes: string[] = [];
+  const structures: string[] = [];
   for (const exp of experiences) {
     for (const raw of exp?.bullets || []) {
       const key = String(raw || "")
         .toLowerCase()
         .replace(/\s+/g, " ")
-        .trim()
-        .slice(0, 56);
+        .trim();
       if (key.length < 28) continue;
-      if (prefixes.some((p) => p === key || p.slice(0, 40) === key.slice(0, 40))) {
+      const prefix = key.slice(0, 56);
+      if (prefixes.some((p) => p === prefix || p.slice(0, 40) === prefix.slice(0, 40))) {
         return true;
       }
-      prefixes.push(key);
+      prefixes.push(prefix);
+
+      let structureSig = key
+        .replace(/\b\d+(\.\d+)?%?\b/g, "#")
+        .replace(/\b[a-z0-9+.#-]{2,24}(?:, [a-z0-9+.#-]{2,24}){1,4}\b/g, "TECH")
+        .slice(0, 70);
+      for (const company of experiences
+        .map((e) => String(e?.company || ""))
+        .filter((c) => c.length >= 2)) {
+        structureSig = structureSig.replace(
+          new RegExp(
+            `\\b${company.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+            "gi",
+          ),
+          "CO",
+        );
+      }
+      if (structures.some((s) => s.slice(0, 45) === structureSig.slice(0, 45))) {
+        return true;
+      }
+      structures.push(structureSig);
     }
   }
   return false;
@@ -157,11 +179,11 @@ function looksTemplatedExperience(
   if (bullets.length < 4) return true;
 
   const cannedHits = bullets.filter((b) =>
-    /built and shipped production features as |led design and delivery of services with |scaled platform components around |cutting critical-path p95 latency by ~28%|8\+ production increments per quarter|supporting ~10x peak request volume/i.test(
+    /built and shipped production features as |led design and delivery of services with |scaled platform components around |cutting critical-path p95 latency by ~28%|8\+ production increments per quarter|supporting ~10x peak request volume|delivered work at |owned a slice of |partnered on .+ at |improved operational readiness for |built tooling\/process for |translated .+ requirements into concrete |supporting .+ outcomes through |about the job|who are we\??/i.test(
       b,
     ),
   ).length;
-  if (cannedHits >= 2) return true;
+  if (cannedHits >= 1) return true;
 
   const verbs = bullets
     .map((b) => (b.trim().split(/\s+/)[0] || "").toLowerCase())
@@ -169,7 +191,8 @@ function looksTemplatedExperience(
   const verbCounts = new Map<string, number>();
   for (const v of verbs) verbCounts.set(v, (verbCounts.get(v) || 0) + 1);
   const maxVerb = Math.max(...verbCounts.values(), 0);
-  if (maxVerb >= Math.ceil(bullets.length * 0.45)) return true;
+  // Resume Worded: same action verb more than twice → fail
+  if (maxVerb >= 3) return true;
 
   return false;
 }
@@ -220,7 +243,7 @@ function failsResumeWordedChecks(
   const verbCounts = new Map<string, number>();
   for (const v of verbs) verbCounts.set(v, (verbCounts.get(v) || 0) + 1);
   const maxVerb = Math.max(...verbCounts.values(), 0);
-  if (maxVerb >= 4) return true;
+  if (maxVerb >= 3) return true;
 
   const summary = String(draft.resume?.summary || "");
   if (buzz.test(summary) || pronoun.test(summary)) return true;
@@ -606,17 +629,55 @@ function dedupeExperienceBullets(
   extracted: ExtractedJD,
 ): TailoredResume["experiences"] {
   const usedPrefixes = new Set<string>();
+  const usedOpeners = new Set<string>();
+  const usedStructures = new Set<string>();
+  const openerCounts = new Map<string, number>();
+  const allCompanies = experiences
+    .map((e) => e.company)
+    .concat(profile.experiences.map((e) => e.company))
+    .filter(Boolean);
 
   return experiences.map((exp, index) => {
     const kept: string[] = [];
     for (const bullet of exp.bullets || []) {
-      const clean = collapseRepeatedTokens(sanitizePlainText(bullet));
-      const prefix = clean.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 56);
-      if (!clean || prefix.length < 24) continue;
+      const clean = sanitizeExperienceBullet(
+        collapseRepeatedTokens(sanitizePlainText(bullet)),
+      );
+      if (!clean) continue;
+      const key = clean.toLowerCase().replace(/\s+/g, " ").trim();
+      const prefix = key.slice(0, 56);
+      const opener = (clean.trim().split(/\s+/)[0] || "").toLowerCase();
+      let structure = key
+        .replace(/\b\d+(\.\d+)?%?\b/g, "#")
+        .replace(/\b[a-z0-9+.#-]{2,24}(?:, [a-z0-9+.#-]{2,24}){1,4}\b/g, "TECH")
+        .slice(0, 70);
+      for (const company of allCompanies.filter((c) => c.length >= 2)) {
+        structure = structure.replace(
+          new RegExp(
+            `\\b${company.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+            "gi",
+          ),
+          "CO",
+        );
+      }
+
+      if (prefix.length < 24) continue;
       if ([...usedPrefixes].some((p) => p.slice(0, 40) === prefix.slice(0, 40))) {
         continue;
       }
+      if (opener && (openerCounts.get(opener) || 0) >= 2) continue;
+      if (
+        [...usedStructures].some((s) => s.slice(0, 45) === structure.slice(0, 45))
+      ) {
+        continue;
+      }
+
       usedPrefixes.add(prefix);
+      if (opener) {
+        usedOpeners.add(opener);
+        openerCounts.set(opener, (openerCounts.get(opener) || 0) + 1);
+      }
+      usedStructures.add(structure);
       kept.push(clean);
     }
 
@@ -629,34 +690,28 @@ function dedupeExperienceBullets(
       extracted,
       kept,
       7,
-    ).filter((b) => {
-      const prefix = b.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 56);
-      if ([...usedPrefixes].some((p) => p.slice(0, 40) === prefix.slice(0, 40))) {
-        return false;
-      }
-      usedPrefixes.add(prefix);
-      return true;
-    });
-
-    // If filters removed too many, keep role-local unique fills
-    const bullets =
-      filled.length >= 7
-        ? filled.slice(0, 7)
-        : buildVariedExperienceBullets(
-            {
-              company: exp.company,
-              title: exp.title,
-              location: exp.location,
-            },
-            extracted,
-            kept,
-            7,
-          );
+      usedOpeners,
+      usedStructures,
+      allCompanies,
+      openerCounts,
+    );
 
     return {
       ...exp,
-      overview: collapseRepeatedTokens(sanitizePlainText(exp.overview || "")),
-      bullets,
+      overview: collapseRepeatedTokens(
+        sanitizeExperienceBullet(sanitizePlainText(exp.overview || "")) ||
+          buildExperienceOverview(
+            {
+              company: exp.company || profile.experiences[index]?.company || "Company",
+              title: exp.title || profile.experiences[index]?.title || "Engineer",
+              location:
+                exp.location || profile.experiences[index]?.location || "Remote",
+            },
+            extracted,
+            index,
+          ),
+      ),
+      bullets: filled.slice(0, 7),
     };
   });
 }

@@ -107,6 +107,14 @@ Each bullet must:
 - Avoid responsibility-only descriptions
 Write 5–7 strong bullets per role when source experience supports it.
 
+CRITICAL ANTI-REPETITION (Resume Worded Style/Repetition score):
+- NEVER reuse the same opening action verb more than TWICE across the entire resume.
+- NEVER copy the same sentence skeleton across companies (changing only company/tech/numbers is forbidden).
+- NEVER paste JD marketing text into bullets (ban: "About the job", "Who are we", "the leading … company").
+- Each role must have DISTINCT accomplishments, verbs, and sentence structures.
+- Overviews must not share the same template across roles.
+- If two bullets would look similar after removing company/tech names, rewrite one completely.
+
 PRINCIPAL ENGINEER EMPHASIS (only if supported):
 Architecture, Ownership, Scale (HA/performance/distributed), Leadership (mentor/stakeholders/direction).
 
@@ -170,5 +178,6 @@ export const IMPROVE_RESUME_PROMPT = `Improve the resume JSON to raise the inter
 Follow the Principal Resume Architect rules.
 Use ONLY facts from the original JOB DESCRIPTION and ORIGINAL RESUME / CANDIDATE EXPERIENCE.
 Never invent companies, projects, technologies, certifications, metrics, education, or employment history.
+Fix repetition first: unique action verbs (no verb >2 times), no similar bullet skeletons across roles, no JD text leaks ("About the job" / "Who are we").
 Focus on the lowest scoring category and missing JD requirements.
 Return the complete JSON object with resume, coverLetter, and optimization_report.`;
