@@ -112,88 +112,118 @@ function plainContactRun(text: string) {
   });
 }
 
-function buildResumeHeader(personal: PersonalInfo): Paragraph[] {
-  const items: Array<{ label: string; href?: string }> = [];
-  if (personal.phone && !/^n\/?a$/i.test(personal.phone)) {
-    items.push({ label: personal.phone, href: phoneHref(personal.phone) });
-  }
-  if (personal.email && !/candidate@example\.com/i.test(personal.email)) {
-    items.push({ label: personal.email, href: emailHref(personal.email) });
-  }
-  if (
+function buildResumeHeader(
+  personal: PersonalInfo,
+  targetTitle?: string,
+): Paragraph[] {
+  const location = personal.location?.trim() || "";
+  const email = personal.email && !/candidate@example\.com/i.test(personal.email)
+    ? personal.email
+    : "";
+  const phone =
+    personal.phone && !/^n\/?a$/i.test(personal.phone) ? personal.phone : "";
+  const linkedin =
     personal.linkedin &&
     !/^linkedin\.com\/?$/i.test(personal.linkedin.trim())
-  ) {
-    items.push({
-      label: linkedInDisplay(personal.linkedin),
-      href: linkedInHref(personal.linkedin),
-    });
-  }
-  if (personal.location) {
-    items.push({ label: personal.location });
-  }
+      ? personal.linkedin
+      : "";
 
-  // Two short centered lines max — avoids DOCX overflow collisions.
-  const line1 = items.slice(0, 2);
-  const line2 = items.slice(2);
+  const contactBits: Array<{ label: string; href?: string }> = [];
+  if (location) contactBits.push({ label: location });
+  if (email) contactBits.push({ label: email, href: emailHref(email) });
+  if (phone) contactBits.push({ label: phone, href: phoneHref(phone) });
 
-  const toChildren = (row: typeof items) => {
-    const children: Array<TextRun | ExternalHyperlink> = [];
-    for (const item of row) {
-      if (children.length) children.push(contactSeparator());
-      if (item.href) children.push(hyperlinkRun(item.label, item.href));
-      else children.push(plainContactRun(item.label));
+  const contactChildren: Array<TextRun | ExternalHyperlink> = [];
+  for (const item of contactBits) {
+    if (contactChildren.length) {
+      contactChildren.push(
+        new TextRun({
+          text: " | ",
+          size: 18,
+          font: "Calibri",
+          color: MUTED_COLOR,
+        }),
+      );
     }
-    return children;
-  };
+    if (item.href) contactChildren.push(hyperlinkRun(item.label, item.href));
+    else contactChildren.push(plainContactRun(item.label));
+  }
 
-  return [
+  const paragraphs: Paragraph[] = [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: 80 },
+      spacing: { after: 40 },
       children: [
         new TextRun({
-          text: personal.name.toUpperCase(),
+          text: personal.name,
           bold: true,
-          size: 40,
+          size: 36,
           font: "Calibri",
           color: "1A1A1A",
         }),
       ],
     }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: line2.length ? 40 : 160 },
-      border: line2.length
-        ? undefined
-        : {
-            bottom: {
-              style: BorderStyle.SINGLE,
-              size: 12,
-              color: "1F4E79",
-              space: 10,
-            },
-          },
-      children: toChildren(line1),
-    }),
-    ...(line2.length
-      ? [
-          new Paragraph({
-            alignment: AlignmentType.CENTER,
-            spacing: { after: 160 },
-            border: {
+  ];
+
+  if (targetTitle?.trim()) {
+    paragraphs.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 60 },
+        children: [
+          new TextRun({
+            text: targetTitle.trim(),
+            bold: true,
+            size: 22,
+            font: "Calibri",
+            color: "1F4E79",
+          }),
+        ],
+      }),
+    );
+  }
+
+  if (contactChildren.length) {
+    paragraphs.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: linkedin ? 40 : 120 },
+        border: linkedin
+          ? undefined
+          : {
               bottom: {
                 style: BorderStyle.SINGLE,
                 size: 12,
                 color: "1F4E79",
-                space: 10,
+                space: 8,
               },
             },
-            children: toChildren(line2),
-          }),
-        ]
-      : []),
-  ];
+        children: contactChildren,
+      }),
+    );
+  }
+
+  if (linkedin) {
+    paragraphs.push(
+      new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 120 },
+        border: {
+          bottom: {
+            style: BorderStyle.SINGLE,
+            size: 12,
+            color: "1F4E79",
+            space: 8,
+          },
+        },
+        children: [
+          hyperlinkRun(linkedInDisplay(linkedin), linkedInHref(linkedin)),
+        ],
+      }),
+    );
+  }
+
+  return paragraphs;
 }
 
 function runsFromText(text: string, keywords: string[], size = 20) {
@@ -236,7 +266,7 @@ function skillGroupParagraph(
     spacing: { after: 80 },
     children: [
       new TextRun({
-        text: `${category}: `,
+        text: `• ${category}: `,
         bold: true,
         size: 20,
         font: "Calibri",
@@ -246,20 +276,34 @@ function skillGroupParagraph(
   });
 }
 
+export type ResumeDocOptions = {
+  /** JD target title shown under the candidate name (Ivan template). */
+  targetTitle?: string;
+};
+
 export async function buildResumeDocx(
   personal: PersonalInfo,
   resume: TailoredResume,
+  options?: ResumeDocOptions,
 ): Promise<Buffer> {
   const kw = resume.keywords;
+  const targetTitle = options?.targetTitle?.trim() || "";
 
   const children: Paragraph[] = [
-    ...buildResumeHeader(personal),
-    sectionHeading("Summary"),
-    new Paragraph({
-      spacing: { after: 140, line: 276 },
-      children: runsFromText(resume.summary, kw, 20),
-    }),
-    sectionHeading("Skills"),
+    ...buildResumeHeader(personal, targetTitle),
+    sectionHeading("Profile"),
+    ...String(resume.summary || "")
+      .split(/\n\n+/)
+      .map((p) => p.trim())
+      .filter(Boolean)
+      .map(
+        (para) =>
+          new Paragraph({
+            spacing: { after: 120, line: 276 },
+            children: runsFromText(para, kw, 20),
+          }),
+      ),
+    sectionHeading("Skills & Abilities"),
     ...resume.skills.map((group) =>
       skillGroupParagraph(group.category, group.items, kw),
     ),
@@ -267,49 +311,27 @@ export async function buildResumeDocx(
   ];
 
   for (const [expIndex, exp] of resume.experiences.entries()) {
+    const header = [exp.title, exp.company, exp.period]
+      .map((s) => String(s || "").trim())
+      .filter(Boolean)
+      .join(" | ")
+      .toUpperCase();
     children.push(
       new Paragraph({
-        spacing: { before: expIndex === 0 ? 120 : 220, after: 40 },
+        spacing: { before: expIndex === 0 ? 120 : 200, after: 80 },
         children: [
           new TextRun({
-            text: exp.title,
+            text: header,
             bold: true,
-            size: 22,
-            font: "Calibri",
-          }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { after: 140 },
-        children: [
-          new TextRun({
-            text: `${exp.company}  |  ${exp.location}  |  ${exp.period}`,
-            italics: true,
             size: 20,
             font: "Calibri",
           }),
         ],
       }),
-      ...(exp.overview
-        ? [
-            new Paragraph({
-              spacing: { after: 140, line: 276 },
-              children: [
-                new TextRun({
-                  text: exp.overview,
-                  size: 20,
-                  font: "Calibri",
-                  italics: true,
-                  color: "444444",
-                }),
-              ],
-            }),
-          ]
-        : []),
       ...exp.bullets.map(
         (bullet) =>
           new Paragraph({
-            spacing: { after: 90, line: 276 },
+            spacing: { after: 80, line: 276 },
             bullet: { level: 0 },
             children: runsFromText(bullet, kw, 20),
           }),
@@ -319,26 +341,20 @@ export async function buildResumeDocx(
 
   children.push(sectionHeading("Education"));
   for (const [eduIndex, edu] of resume.education.entries()) {
+    const degreeLine = [
+      edu.discipline ? `${edu.degree} in ${edu.discipline}` : edu.degree,
+      edu.period,
+      edu.school,
+    ]
+      .map((s) => String(s || "").trim())
+      .filter(Boolean)
+      .join(" | ");
     children.push(
       new Paragraph({
-        spacing: { before: eduIndex === 0 ? 100 : 160, after: 40 },
+        spacing: { before: eduIndex === 0 ? 100 : 140, after: 80 },
         children: [
           new TextRun({
-            text: edu.discipline
-              ? `${edu.degree}, ${edu.discipline}`
-              : edu.degree,
-            bold: true,
-            size: 22,
-            font: "Calibri",
-          }),
-        ],
-      }),
-      new Paragraph({
-        spacing: { after: 100 },
-        children: [
-          new TextRun({
-            text: educationMetaLine(edu),
-            italics: true,
+            text: degreeLine,
             size: 20,
             font: "Calibri",
           }),
@@ -475,8 +491,10 @@ function drawPdfContactLine(
 export async function buildResumePdf(
   personal: PersonalInfo,
   resume: TailoredResume,
+  options?: ResumeDocOptions,
 ): Promise<Buffer> {
   const kw = resume.keywords;
+  const targetTitle = options?.targetTitle?.trim() || "";
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
@@ -496,41 +514,68 @@ export async function buildResumePdf(
 
     doc
       .font(PDF_FONT_BOLD)
-      .fontSize(20)
+      .fontSize(18)
       .fillColor("#1A1A1A")
-      .text(personal.name.toUpperCase(), {
+      .text(personal.name, {
         align: "center",
         width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
       });
-    doc.moveDown(0.3);
+
+    if (targetTitle) {
+      doc.moveDown(0.2);
+      doc
+        .font(PDF_FONT_BOLD)
+        .fontSize(11)
+        .fillColor("#1F4E79")
+        .text(targetTitle, { align: "center" });
+    }
+    doc.moveDown(0.25);
 
     const contactParts: Array<{ label: string; href?: string }> = [];
-    if (personal.phone && !/^n\/?a$/i.test(personal.phone)) {
-      contactParts.push({
-        label: personal.phone,
-        href: phoneHref(personal.phone),
-      });
-    }
+    if (personal.location) contactParts.push({ label: personal.location });
     if (personal.email && !/candidate@example\.com/i.test(personal.email)) {
       contactParts.push({
         label: personal.email,
         href: emailHref(personal.email),
       });
     }
+    if (personal.phone && !/^n\/?a$/i.test(personal.phone)) {
+      contactParts.push({
+        label: personal.phone,
+        href: phoneHref(personal.phone),
+      });
+    }
+
+    // Ivan style: Location | email | phone on one line
+    if (contactParts.length) {
+      const left = doc.page.margins.left;
+      const right = doc.page.width - doc.page.margins.right;
+      const y = doc.y;
+      const labels = contactParts.map((p) => p.label);
+      const joined = labels.join(" | ");
+      doc
+        .font(PDF_FONT)
+        .fontSize(9)
+        .fillColor("#555555")
+        .text(joined, left, y, { width: right - left, align: "center" });
+      // Approximate link regions for email/phone if present
+      doc.y = y + 12;
+    }
+
     if (
       personal.linkedin &&
       !/^linkedin\.com\/?$/i.test(personal.linkedin.trim())
     ) {
-      contactParts.push({
-        label: linkedInDisplay(personal.linkedin),
-        href: linkedInHref(personal.linkedin),
-      });
+      const li = linkedInDisplay(personal.linkedin);
+      const href = linkedInHref(personal.linkedin);
+      const y = doc.y;
+      doc
+        .font(PDF_FONT)
+        .fontSize(9)
+        .fillColor("#1F4E79")
+        .text(li, { align: "center", link: href });
+      doc.y = Math.max(doc.y, y + 12);
     }
-    if (personal.location) {
-      contactParts.push({ label: personal.location });
-    }
-
-    drawPdfContactLine(doc, contactParts);
 
     const lineY = Number.isFinite(doc.y) ? doc.y + 2 : 90;
     doc
@@ -544,7 +589,7 @@ export async function buildResumePdf(
     doc.fillColor("#000000");
 
     const heading = (label: string) => {
-      doc.moveDown(0.65);
+      doc.moveDown(0.55);
       const y = Number.isFinite(doc.y) ? doc.y : doc.page.margins.top;
       doc.x = doc.page.margins.left;
       doc.y = y;
@@ -565,59 +610,56 @@ export async function buildResumePdf(
       doc.fillColor("#000000");
     };
 
-    heading("Summary");
-    drawSegmentedLine(doc, resume.summary, kw, { fontSize: 10.5 });
-    doc.moveDown(0.7);
+    heading("Profile");
+    for (const para of String(resume.summary || "")
+      .split(/\n\n+/)
+      .map((p) => p.trim())
+      .filter(Boolean)) {
+      drawSegmentedLine(doc, para, kw, { fontSize: 10.5 });
+      doc.moveDown(0.35);
+    }
+    doc.moveDown(0.25);
 
-    heading("Skills");
+    heading("Skills & Abilities");
     for (const group of resume.skills) {
-      doc.font(PDF_FONT_BOLD).fontSize(10.5).text(`${group.category}: `, {
+      doc.font(PDF_FONT_BOLD).fontSize(10.5).text(`• ${group.category}: `, {
         continued: true,
       });
       drawSegmentedLine(doc, group.items.join(", "), kw, { fontSize: 10.5 });
-      doc.moveDown(0.35);
+      doc.moveDown(0.3);
     }
 
     heading("Experience");
     for (const [expIndex, exp] of resume.experiences.entries()) {
-      doc.moveDown(expIndex === 0 ? 0.35 : 0.7);
-      doc.font(PDF_FONT_BOLD).fontSize(11).text(exp.title);
-      doc.moveDown(0.08);
-      doc
-        .font(PDF_FONT_ITALIC)
-        .fontSize(10)
-        .text(`${exp.company}  |  ${exp.location}  |  ${exp.period}`);
-      if (exp.overview) {
-        doc.moveDown(0.45);
-        doc
-          .font(PDF_FONT_ITALIC)
-          .fontSize(10)
-          .fillColor("#444444")
-          .text(exp.overview, { lineGap: 2 });
-        doc.fillColor("#000000");
-      }
-      doc.moveDown(0.5);
+      doc.moveDown(expIndex === 0 ? 0.25 : 0.55);
+      const header = [exp.title, exp.company, exp.period]
+        .map((s) => String(s || "").trim())
+        .filter(Boolean)
+        .join(" | ")
+        .toUpperCase();
+      doc.font(PDF_FONT_BOLD).fontSize(10.5).text(header);
+      doc.moveDown(0.2);
       for (const bullet of exp.bullets) {
         doc.font(PDF_FONT).fontSize(10.5).text("•  ", {
           continued: true,
         });
         drawSegmentedLine(doc, bullet, kw, { fontSize: 10.5 });
-        doc.moveDown(0.35);
+        doc.moveDown(0.28);
       }
     }
 
     heading("Education");
     for (const [eduIndex, edu] of resume.education.entries()) {
-      doc.moveDown(eduIndex === 0 ? 0.3 : 0.55);
-      doc
-        .font(PDF_FONT_BOLD)
-        .fontSize(11)
-        .text(edu.discipline ? `${edu.degree}, ${edu.discipline}` : edu.degree);
-      doc.moveDown(0.08);
-      doc
-        .font(PDF_FONT_ITALIC)
-        .fontSize(10)
-        .text(educationMetaLine(edu));
+      doc.moveDown(eduIndex === 0 ? 0.25 : 0.45);
+      const degreeLine = [
+        edu.discipline ? `${edu.degree} in ${edu.discipline}` : edu.degree,
+        edu.period,
+        edu.school,
+      ]
+        .map((s) => String(s || "").trim())
+        .filter(Boolean)
+        .join(" | ");
+      doc.font(PDF_FONT).fontSize(10.5).text(degreeLine);
     }
 
     doc.end();

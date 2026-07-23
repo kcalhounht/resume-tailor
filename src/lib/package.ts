@@ -82,8 +82,12 @@ export async function saveJobPackage(options: {
 
   // Build documents in parallel — biggest packaging speedup after the LLM.
   const [resumeDocx, resumePdf, coverDocx] = await Promise.all([
-    buildResumeDocx(personal, tailored.resume),
-    buildResumePdf(personal, tailored.resume),
+    buildResumeDocx(personal, tailored.resume, {
+      targetTitle: extracted.jobTitle || extracted.type,
+    }),
+    buildResumePdf(personal, tailored.resume, {
+      targetTitle: extracted.jobTitle || extracted.type,
+    }),
     buildCoverLetterDocx(
       personal,
       extracted.company,

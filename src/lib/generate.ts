@@ -729,28 +729,10 @@ function dedupeExperienceBullets(
             openerCounts,
           ).slice(0, 8);
 
-    const overviewRaw = collapseRepeatedTokens(
-      sanitizePlainText(exp.overview || ""),
-    );
+    const overviewRaw = "";
     return {
       ...exp,
-      overview:
-        overviewRaw.split(/\s+/).filter(Boolean).length >= 8
-          ? overviewRaw
-          : buildExperienceOverview(
-              {
-                company:
-                  exp.company || profile.experiences[index]?.company || "Company",
-                title:
-                  exp.title || profile.experiences[index]?.title || "Engineer",
-                location:
-                  exp.location ||
-                  profile.experiences[index]?.location ||
-                  "Remote",
-              },
-              extracted,
-              index,
-            ),
+      overview: overviewRaw,
       bullets,
     };
   });
@@ -1135,10 +1117,8 @@ function normalizeResume(
       title: sanitizePlainText(generated?.title?.trim() || exp.title),
       period: exp.period,
       location: exp.location,
-      overview:
-        overview.split(/\s+/).filter(Boolean).length >= 8
-          ? overview
-          : buildExperienceOverview(exp, extracted, index),
+      // Ivan template has no role overview blurbs
+      overview: "",
       bullets,
     };
   });
