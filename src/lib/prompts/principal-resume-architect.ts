@@ -81,37 +81,45 @@ STEP 4: RESUME POSITIONING STRATEGY
 Before writing, choose positioning from the JD (AI Engineer / Backend / Full Stack / Principal / etc.) and emphasize the matching signals only when supported.
 
 ==================================================
-STEP 5: GENERATE PROFESSIONAL SUMMARY
+STEP 5: GENERATE PROFESSIONAL SUMMARY (CRITICAL)
 ==================================================
-Create a 60–90 word summary (JSON field: summary). Prefer 1–2 short paragraphs separated by \\n\\n if helpful.
+Create a POWERFUL 70–110 word summary (JSON field: summary). Prefer exactly 2 short paragraphs separated by \\n\\n.
 
-Requirements:
-- Start with EXACT TARGET JOB TITLE
-- Include relevant years if available from candidate history (never invent)
-- Highest priority JD keywords
-- Strongest matching technical skills
-- Architecture/ownership signals
-- Relevant achievements only if present in source
+This section must feel JD-specific and senior — never generic, thin, or soft.
 
-Structure guide:
-[Job Title] with X years of experience building [systems/products] using [key technologies]. Experienced in [JD responsibilities], including [important skills]. Proven ability to architect, develop, and deploy scalable production systems while delivering measurable business impact.
+HARD REQUIREMENTS:
+1. Sentence 1 MUST start with the EXACT JD job title
+2. Pack 6–10 of the highest-priority JD technical skills / must-haves naturally (from INPUT_1 only)
+3. Mirror 2–3 core JD responsibilities using the JD's own technical language
+4. Include years ONLY if present in candidate history or JD (never invent)
+5. Signal architecture / ownership / end-to-end delivery when the JD asks for it
+6. Mention recent company/role only when true from INPUT_2
+7. No fluff adjectives. No first-person. No buzzwords.
 
-Avoid: passionate, hardworking, motivated, team player, results-driven
+Structure (follow closely):
+Paragraph 1: [Exact JD Title] with [years if known] experience building [JD product/system domain] using [top JD skills]. Owns [JD responsibility themes] across [frontend/backend/cloud/data as relevant], with emphasis on [architecture / scalability / reliability / performance as JD requires].
+Paragraph 2: Aligns to [company/role] needs through [2–3 JD-critical capabilities]. Strong in [remaining must-have skills], delivering production systems that match the posting's technical bar.
+
+Avoid: passionate, hardworking, motivated, team player, results-driven, leveraging, proven track record, dedicated professional, seeking opportunities
 
 ==================================================
-STEP 6: GENERATE SKILLS SECTION
+STEP 6: GENERATE SKILLS SECTION (CRITICAL)
 ==================================================
-JD-focused skills (JSON: skills as [{ category, items }]).
+Build a DENSE, JD-FIRST skills section (JSON: skills as [{ category, items }]).
 
-Prioritize:
-1. Required JD skills
-2. Candidate verified skills
-3. Relevant supporting skills
+HARD REQUIREMENTS:
+1. Lead with mustHave + hardTechnicalSkills + requiredSkills from the JD
+2. Use short skill tokens only (e.g. "TypeScript", "React", "PostgreSQL") — NEVER paste long JD sentences
+3. At least 4 categories and 16–28 total skill items when the JD supports it
+4. Put the most JD-critical items first inside every category
+5. Keep candidate-verified supporting skills that still fit the JD
+6. Drop irrelevant legacy skills that do not help this JD
 
-Organize categories among:
+Preferred categories (use what fits):
 Languages, Frontend, Backend, Frameworks, Cloud, Databases, AI/ML, DevOps, Architecture, Testing, Tools
 
-Remove irrelevant skills. Never add unsupported skills.
+Never invent technologies absent from BOTH the JD and the candidate resume.
+If a JD skill is explicitly required, it MUST appear in Skills (and preferably Summary too).
 
 ==================================================
 STEP 7: REWRITE EXPERIENCE SECTION
@@ -207,10 +215,10 @@ Follow the Principal Resume Strategist rules exactly.
 Use ONLY facts from JOB DESCRIPTION + CANDIDATE RESUME.
 Never invent companies, projects, technologies, certifications, metrics, education, employment history, or years.
 
-Priority fixes:
-1) Identify lowest scoring category and missing JD alignment; fix those first.
-2) Summary starts with exact JD title; pack critical keywords and ownership signals.
-3) Skills: required JD skills first; only verified skills; 4–6 clear categories.
+Priority fixes (in order):
+1) SUMMARY — rewrite first if thin/generic. Must start with exact JD title, pack 6–10 JD must-have/tech skills, mirror JD responsibilities, two strong paragraphs.
+2) SKILLS — rebuild JD-first: mustHave/hardTechnicalSkills/requiredSkills as short tokens; ≥4 categories; densest critical skills first; no long requirement sentences.
+3) Fix lowest scoring category and other missing JD alignment.
 4) Experience: Action+Tech+Problem+Result bullets; unique verbs/structures per role; overview "".
 5) Remove filler/template shells and JD marketing leaks.
 

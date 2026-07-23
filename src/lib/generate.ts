@@ -108,11 +108,62 @@ function countSkillItems(skills: unknown): {
   };
 }
 
+function collectJdSkillTokens(extracted: ExtractedJD): string[] {
+  const buckets = [
+    ...(extracted.mustHave || []),
+    ...(extracted.hardTechnicalSkills || []),
+    ...(extracted.requiredSkills || []),
+    ...(extracted.niceToHave || []),
+  ];
+  const out: string[] = [];
+  const seen = new Set<string>();
+
+  const push = (raw: string) => {
+    const clean = sanitizePlainText(String(raw || ""))
+      .replace(/^[-•*\d.)\s]+/, "")
+      .trim();
+    if (!clean) return;
+    if (clean.length < 2 || clean.length > 40) return;
+    if (
+      /^(experience|knowledge|ability|strong|excellent|proven|familiar|understanding|years?|bachelor|master|degree|must|should|preferred)\b/i.test(
+        clean,
+      )
+    ) {
+      return;
+    }
+    if (/\b(years? of|experience with|ability to|knowledge of)\b/i.test(clean)) {
+      return;
+    }
+    const key = clean.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push(clean);
+  };
+
+  for (const raw of buckets) {
+    const text = sanitizePlainText(String(raw || ""));
+    if (!text) continue;
+    const longOrSoft =
+      text.length > 40 ||
+      /\b(years?|experience|ability|knowledge|strong|excellent|proven)\b/i.test(
+        text,
+      );
+    if (longOrSoft) {
+      for (const part of text.split(/[,;/|]|(?:\sand\s)|(?:\swith\s)|(?:\susing\s)|\//i)) {
+        push(part);
+      }
+    } else {
+      push(text);
+    }
+  }
+  return out;
+}
+
 function summaryLooksWeak(summary: string, extracted: ExtractedJD): boolean {
   const words = summary.trim().split(/\s+/).filter(Boolean);
-  if (words.length < 60 || summary.length < 320) return true;
+  if (words.length < 70 || summary.length < 380) return true;
   if (
-    /passionate|results-driven|team player|leveraging|proven track record|highly motivated|dedicated professional|as engineer at company/i.test(
+    /passionate|results-driven|team player|leveraging|proven track record|highly motivated|dedicated professional|as engineer at company|seeking opportunities|hands-on ownership of cloud-native/i.test(
       summary,
     )
   ) {
@@ -127,6 +178,14 @@ function summaryLooksWeak(summary: string, extracted: ExtractedJD): boolean {
     // Allow near-start if title appears in first 8 words
     const head = words.slice(0, 8).join(" ").toLowerCase();
     if (!head.includes(title.split(/\s+/)[0] || title)) return true;
+  }
+
+  // Summary must carry real JD skill density — otherwise treat as weak.
+  const jdSkills = collectJdSkillTokens(extracted).slice(0, 12);
+  if (jdSkills.length >= 4) {
+    const hay = summary.toLowerCase();
+    const hits = jdSkills.filter((s) => hay.includes(s.toLowerCase())).length;
+    if (hits < Math.min(4, jdSkills.length)) return true;
   }
   return false;
 }
@@ -260,22 +319,22 @@ function isWeakModelPackage(
   const { groups, items, duplicateItems } = countSkillItems(
     draft.resume?.skills,
   );
-  // Prefer quality over stuffing; only verified skills should appear.
-  if (groups < 2 || items < 6 || duplicateItems >= 4) {
+  // Dense JD-facing skills: thin sections force another improve pass.
+  if (groups < 3 || items < 12 || duplicateItems >= 4) {
     return true;
   }
 
-  const jdSkills = [
-    ...extracted.hardTechnicalSkills,
-    ...extracted.requiredSkills,
-  ]
-    .map((s) => s.toLowerCase().trim())
-    .filter((s) => s.length >= 2);
-  const uniqueJd = [...new Set(jdSkills)].slice(0, 16);
-  if (uniqueJd.length >= 3) {
+  const jdSkills = collectJdSkillTokens(extracted).slice(0, 16);
+  if (jdSkills.length >= 3) {
     const hay = `${summary} ${JSON.stringify(draft.resume?.skills || [])} ${JSON.stringify(draft.resume?.experiences || [])}`.toLowerCase();
-    const hits = uniqueJd.filter((s) => hay.includes(s)).length;
-    if (hits < Math.min(3, uniqueJd.length)) return true;
+    const hits = jdSkills.filter((s) => hay.includes(s.toLowerCase())).length;
+    if (hits < Math.min(5, jdSkills.length)) return true;
+
+    const skillsHay = JSON.stringify(draft.resume?.skills || []).toLowerCase();
+    const skillHits = jdSkills.filter((s) =>
+      skillsHay.includes(s.toLowerCase()),
+    ).length;
+    if (skillHits < Math.min(4, jdSkills.length)) return true;
   }
 
   // Must-have coverage across the whole resume package
@@ -330,16 +389,20 @@ function finalizePackage(
     experiences: dedupeExperienceBullets(resume.experiences, profile, extracted),
   };
 
-  if (
-    !resume.summary ||
-    resume.summary.length < 120 ||
-    (summaryLooksWeak(resume.summary, extracted) && resume.summary.length < 180)
-  ) {
+  // Always force a strong JD-anchored summary when the model output is thin.
+  if (!resume.summary || summaryLooksWeak(resume.summary, extracted)) {
     resume = {
       ...resume,
       summary: buildFallbackSummary(profile, extracted),
     };
   }
+
+  // Skills are always re-densified JD-first in normalizeSkills; re-run after summary fix.
+  resume = {
+    ...resume,
+    skills: normalizeSkills(resume.skills, extracted),
+  };
+
   if (!coverLetter) {
     coverLetter = buildFallbackCoverLetter(profile, extracted);
   }
@@ -400,7 +463,7 @@ export async function generateTailoredPackage(
       locationRequirement: extracted.locationRequirement || "",
     },
     instructions:
-      "Follow Principal Resume Strategist steps 1–11. Use ONLY INPUT_1_JOB_DESCRIPTION + INPUT_2_CANDIDATE_RESUME. No invention. Return complete JSON.",
+      "Follow Principal Resume Strategist steps 1–11. SUMMARY and SKILLS are the top priority: make them dense and JD-specific (exact title, must-have tech, responsibilities). Use ONLY INPUT_1_JOB_DESCRIPTION + INPUT_2_CANDIDATE_RESUME. No invention. Return complete JSON.",
   });
 
   const baseMessages: Array<{
@@ -531,12 +594,14 @@ export async function generateTailoredPackage(
         action: "improve",
         prompt: IMPROVE_RESUME_PROMPT,
         critical:
-          "Rewrite for JD fit and score >= 90 using Principal Resume Strategist rules. Fix lowest scoring category and missing requirements. Unique bullets per company; no filler shells; no invented metrics.",
+          "PRIORITY: rewrite SUMMARY and SKILLS to be strongly JD-driven. Summary must start with exact JD title, pack 6–10 must-have/tech skills, and mirror JD responsibilities in two dense paragraphs. Skills must be JD-first short tokens across 4+ categories. Then fix lowest scoring category. Unique bullets per company; no filler shells; no invented metrics.",
+        focus_sections: ["summary", "skills"],
         current_score: scored?.overall_score ?? 0,
         category_scores: scored?.category_scores ?? {},
         lowest_category: lowest?.[0] ?? null,
         missing_keywords: scored?.missing_keywords?.slice(0, 16) ?? [],
         uncovered_must_have_or_required: uncoveredMust,
+        jd_skill_tokens: collectJdSkillTokens(extracted).slice(0, 20),
         suggestions: scored?.improvement_suggestions?.slice(0, 10) ?? [],
         weak_sections: scored?.weak_sections?.slice(0, 8) ?? [],
         jd_fit_priority: [
@@ -657,28 +722,48 @@ function buildFallbackSummary(
   extracted: ExtractedJD,
 ): string {
   const title = extracted.jobTitle || extracted.type || "Software Engineer";
-  const skills = Array.from(
-    new Set(
-      [
-        ...extracted.mustHave,
-        ...extracted.hardTechnicalSkills,
-        ...extracted.requiredSkills,
-      ]
-        .map((s) => String(s).trim())
-        .filter((s) => s.length >= 2 && s.length <= 40),
-    ),
-  ).slice(0, 8);
-  const skillBit = skills.length
-    ? skills.slice(0, 5).join(", ")
-    : "cloud-native backend and platform systems";
+  const skills = collectJdSkillTokens(extracted).slice(0, 10);
+  const primary = skills.slice(0, 6).join(", ") || "modern full-stack platforms";
+  const secondary =
+    skills.slice(6, 10).join(", ") ||
+    skills.slice(0, 3).join(", ") ||
+    "scalable production systems";
+
+  const responsibilities = (extracted.responsibilities || [])
+    .map((r) => sanitizePlainText(String(r || "")))
+    .filter((r) => r.length >= 18 && r.length <= 110)
+    .slice(0, 3);
+  const respBit =
+    responsibilities.length > 0
+      ? responsibilities
+          .map((r) => r.replace(/\.$/, "").trim())
+          .join("; ")
+      : "end-to-end feature delivery, API design, and production operations";
+
+  const yearsRaw = String(extracted.yearsOfExperience || "").trim();
+  const yearsBit =
+    yearsRaw &&
+    !/^not specified$/i.test(yearsRaw) &&
+    /\d/.test(yearsRaw)
+      ? ` with ${yearsRaw.replace(/\s+/g, " ").trim()} of relevant experience`
+      : "";
+
   const latest = profile.experiences[0];
   const roleBit =
     latest?.company &&
     !/^(company|previous employer|employer|unknown)$/i.test(latest.company)
       ? `${latest.title} at ${latest.company}`
-      : "production engineering roles";
-  // Ivan-style multi-paragraph profile (no canned "model/system quality" filler)
-  return `${title} with hands-on ownership of ${skillBit} in production environments. Experienced delivering reliable services, APIs, and cloud infrastructure with clear accountability from design through operations.\n\nRecent work as ${roleBit} emphasized scalable systems, operational excellence, and close alignment to ${title} requirements across ${extracted.workMode || "hybrid"} delivery settings.`;
+      : "recent production engineering roles";
+
+  const mode = extracted.workMode || "Hybrid";
+  const domain =
+    /full.?stack/i.test(title)
+      ? "frontend and backend product systems"
+      : /data|ml|ai/i.test(`${title} ${extracted.type}`)
+        ? "data and intelligent platforms"
+        : "scalable software platforms";
+
+  return `${title}${yearsBit} building ${domain} with ${primary}. Owns ${respBit}, with emphasis on architecture, reliability, and delivery quality demanded by the role.\n\nRecent work as ${roleBit} maps directly to this posting through ${secondary}, supporting ${mode} delivery with clear technical ownership from design through production.`;
 }
 
 function collapseRepeatedTokens(text: string): string {
@@ -859,26 +944,14 @@ function normalizeSkills(
   skills: unknown,
   extracted: ExtractedJD,
 ): SkillGroup[] {
-  const jdSkills = [
-    ...extracted.mustHave,
-    ...extracted.hardTechnicalSkills,
-    ...extracted.requiredSkills,
-    ...extracted.niceToHave,
-  ]
-    .map((s) => sanitizePlainText(String(s)))
-    .filter(Boolean);
-  // Prefer shorter skill tokens for skills section (drop long requirement sentences)
-  const jdSkillTokens = [
-    ...new Set(
-      jdSkills.filter((s) => s.length <= 40 && !/\s{3,}/.test(s)),
-    ),
-  ];
+  const jdSkillTokens = collectJdSkillTokens(extracted);
 
   const jdHay = [
-    ...jdSkills,
+    ...jdSkillTokens,
     extracted.jobTitle,
     extracted.type,
     extracted.summary,
+    ...(extracted.responsibilities || []).slice(0, 8),
   ]
     .join(" ")
     .toLowerCase();
@@ -892,6 +965,13 @@ function normalizeSkills(
     /data engineer|spark|airflow|etl|warehouse|snowflake|kafka|analytics/i.test(
       jdHay,
     );
+  const isFrontend = /react|next\.?js|vue|angular|frontend|front-end|ui\b/i.test(
+    jdHay,
+  );
+  const isBackend =
+    /node|nestjs|django|fastapi|spring|backend|back-end|api\b|graphql/i.test(
+      jdHay,
+    );
 
   const densify = (groups: SkillGroup[]): SkillGroup[] => {
     const classify = (skill: string): string => {
@@ -902,6 +982,18 @@ function normalizeSkills(
         )
       ) {
         return "Languages";
+      }
+      if (
+        /react|next|vue|angular|html|css|tailwind|frontend|ui\b/.test(s)
+      ) {
+        return "Frontend";
+      }
+      if (
+        /node|nestjs|express|django|flask|fastapi|spring|backend|\.net|graphql|rest\b/.test(
+          s,
+        )
+      ) {
+        return "Backend";
       }
       if (
         /aws|gcp|azure|docker|kubernetes|terraform|ci\/?cd|devops|github actions|gitlab/.test(
@@ -920,11 +1012,21 @@ function normalizeSkills(
       if (
         /ml|ai|llm|nlp|pytorch|tensor|spark|etl|rag|vector|pandas|sklearn|scikit|huggingface|langchain|airflow|feature store/.test(
           s,
-        ) ||
-        isMl ||
-        isData
+        )
       ) {
         return isMl || isData ? "Data/AI" : "Data/Platform";
+      }
+      if (
+        /architecture|system design|microservices|distributed|scalability|observability/.test(
+          s,
+        )
+      ) {
+        return "Architecture";
+      }
+      if (
+        /jest|cypress|playwright|pytest|junit|testing|tdd|qa\b/.test(s)
+      ) {
+        return "Testing";
       }
       if (
         /react|node|fastapi|django|flask|spring|express|graphql|langgraph|vllm|transformers/.test(
@@ -939,59 +1041,87 @@ function normalizeSkills(
     const byCategory = new Map<string, string[]>();
     const used = new Set<string>();
 
-    const push = (category: string, item: string) => {
+    const push = (category: string, item: string, front = false) => {
       const clean = sanitizePlainText(item);
       const key = clean.toLowerCase();
       if (!clean || used.has(key)) return;
       used.add(key);
       const list = byCategory.get(category) || [];
       if (list.length >= 10) return;
-      list.push(clean);
+      if (front) list.unshift(clean);
+      else list.push(clean);
       byCategory.set(category, list);
     };
 
-    // Preserve model groups first (deduped globally).
-    for (const group of groups) {
-      for (const item of group.items) push(group.category, item);
-    }
-
-    // Place each JD skill in ONE best category only (mustHave → required → niceToHave order).
+    // JD skills first — strongest ATS signal (keep mustHave order).
     for (const skill of jdSkillTokens) {
-      push(classify(skill), skill);
+      push(classify(skill), skill, false);
     }
 
-    // Do NOT invent adjacent seed skills — only model + JD tokens.
-    return [...byCategory.entries()]
-      .map(([category, items]) => ({ category, items }))
+    // Then preserve useful model/candidate skills that still fit.
+    for (const group of groups) {
+      for (const item of group.items) {
+        const clean = sanitizePlainText(item);
+        if (!clean || clean.length > 40) continue;
+        if (
+          !jdHay ||
+          jdSkillTokens.some((j) =>
+            clean.toLowerCase().includes(j.toLowerCase()),
+          ) ||
+          /python|java|typescript|javascript|react|node|aws|azure|gcp|docker|kubernetes|sql|postgres|mongo|redis|graphql|next/i.test(
+            clean,
+          )
+        ) {
+          push(group.category || classify(clean), clean, false);
+        }
+      }
+    }
+
+    // Ensure role-shaped categories exist when JD implies them.
+    if (isFrontend && !byCategory.has("Frontend")) {
+      for (const skill of jdSkillTokens.filter((s) =>
+        /react|next|vue|angular|typescript|javascript/i.test(s),
+      )) {
+        push("Frontend", skill, false);
+      }
+    }
+    if (isBackend && !byCategory.has("Backend")) {
+      for (const skill of jdSkillTokens.filter((s) =>
+        /node|nestjs|api|graphql|java|python|go\b/i.test(s),
+      )) {
+        push("Backend", skill, false);
+      }
+    }
+
+    const preferredOrder = [
+      "Languages",
+      "Frontend",
+      "Backend",
+      "Frameworks/Libraries",
+      "Cloud/DevOps",
+      "Databases",
+      "Data/AI",
+      "Data/Platform",
+      "Architecture",
+      "Testing",
+      "Tools/Practices",
+      "Technical Skills",
+    ];
+
+    return preferredOrder
+      .filter((cat) => byCategory.has(cat))
+      .concat(
+        [...byCategory.keys()].filter((cat) => !preferredOrder.includes(cat)),
+      )
+      .map((category) => ({
+        category,
+        items: (byCategory.get(category) || []).slice(0, 10),
+      }))
       .filter((g) => g.items.length >= 1)
       .slice(0, 8);
   };
 
-  const mergeJd = (groups: SkillGroup[]): SkillGroup[] => {
-    if (!jdSkillTokens.length) return densify(groups);
-    const existing = new Set(
-      groups.flatMap((g) => g.items.map((i) => i.toLowerCase())),
-    );
-    const missing = jdSkillTokens.filter((s) => !existing.has(s.toLowerCase()));
-    if (!missing.length) return densify(groups);
-    if (!groups.length) {
-      return densify([
-        { category: "Technical Skills", items: missing.slice(0, 12) },
-      ]);
-    }
-    const next = groups.map((group, index) =>
-      index === 0
-        ? {
-            ...group,
-            items: [...group.items, ...missing].slice(0, 12),
-          }
-        : group,
-    );
-    return densify(next);
-  };
-
   if (Array.isArray(skills) && skills.length) {
-    // New grouped format
     if (
       typeof skills[0] === "object" &&
       skills[0] !== null &&
@@ -1004,25 +1134,23 @@ function normalizeSkills(
             ? group.items
                 .map(String)
                 .map((s) => sanitizePlainText(s))
-                .filter(Boolean)
+                .filter((s) => Boolean(s) && s.length <= 40)
             : [],
         }))
         .filter((group) => group.items.length > 0);
-      return mergeJd(grouped);
+      return densify(grouped);
     }
 
-    // Legacy flat string list -> one compact Technical Skills group
     const items = skills
       .map(String)
       .map((s) => sanitizePlainText(s))
-      .filter(Boolean);
+      .filter((s) => Boolean(s) && s.length <= 40);
     if (items.length) {
-      return mergeJd([{ category: "Technical Skills", items }]);
+      return densify([{ category: "Technical Skills", items }]);
     }
   }
 
-  const fallback = jdSkillTokens;
-  if (!fallback.length) {
+  if (!jdSkillTokens.length) {
     return densify([
       {
         category: "Core",
@@ -1038,38 +1166,9 @@ function normalizeSkills(
     ]);
   }
 
-  const languages = fallback.filter((s) =>
-    /python|java|typescript|javascript|go|rust|c\+\+|c#|kotlin|swift|scala|sql|bash/i.test(
-      s,
-    ),
-  );
-  const cloud = fallback.filter((s) =>
-    /aws|gcp|azure|docker|kubernetes|terraform|ci\/?cd|devops/i.test(s),
-  );
-  const data = fallback.filter((s) =>
-    /sql|postgres|mysql|mongo|redis|kafka|spark|snowflake|airflow|etl|llm|nlp|ml|pytorch|tensorflow|rag|vector/i.test(
-      s,
-    ),
-  );
-  const frameworks = fallback.filter(
-    (s) =>
-      !languages.includes(s) && !cloud.includes(s) && !data.includes(s),
-  );
-
-  const groups: SkillGroup[] = [];
-  if (languages.length) groups.push({ category: "Languages", items: languages });
-  if (frameworks.length)
-    groups.push({ category: "Frameworks/Libraries", items: frameworks });
-  if (cloud.length) groups.push({ category: "Cloud/DevOps", items: cloud });
-  if (data.length)
-    groups.push({
-      category: isMl || isData ? "Data/AI/ML" : "Data/Platform",
-      items: data,
-    });
-  if (!groups.length) {
-    groups.push({ category: "Technical Skills", items: fallback });
-  }
-  return densify(groups);
+  return densify([
+    { category: "Technical Skills", items: jdSkillTokens.slice(0, 16) },
+  ]);
 }
 
 function normalizeResume(
