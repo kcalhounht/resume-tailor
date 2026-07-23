@@ -15,35 +15,26 @@ import { sanitizePlainText } from "./validate-resume";
 import { sanitizeKeywords } from "./keywords";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
-Create a HIGH-QUALITY tailored resume that maximizes ATS keyword match — dense summary, strong skills, ZERO repetition.
+Create a tailored resume and cover letter that maximize ATS keyword match for the target role.
 
 Hard rules:
 1. Resume sections: Summary, Skills, Experience, Education.
-2. SUMMARY (critical — do not write a weak summary):
-   - 60-95 words, 3-4 dense sentences.
-   - FIRST words = exact target job title/seniority from the JD.
-   - Name 6-10 DISTINCT hard skills from the JD (never repeat the same skill twice, e.g. never "Python, Python").
-   - State domain + measurable impact (systems, data, users, products, scale).
-   - Ban filler: passionate, results-driven, team player, leveraging, proven track record, highly motivated, dedicated professional.
-3. SKILLS (critical — do not write a weak skills section):
-   - Exactly 5-6 compact groups: Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices (adapt names to the JD).
-   - Each group: 6-10 DISTINCT items. No duplicates inside a group. No same item repeated across groups.
-   - Lead with JD hardTechnicalSkills / requiredSkills, then add adjacent high-signal tools.
-   - Never output a thin 2-4 item group. Never dump one giant unsorted list.
-4. EXPERIENCE (critical — must vary by JD, never look templated):
-   - overview: 25-45 words — company context + ownership, rewritten for THIS JD's domain (LLM vs data vs backend, etc.). UNIQUE per company.
-   - exactly 7 UNIQUE accomplishment bullets (~25-40 words).
-   - Each bullet must map to a different JD responsibility / must-have / skill theme — not the same formula 7 times.
-   - Ban rigid cookie-cutter patterns: do NOT start every bullet with the same verb; do NOT reuse the same metric shape (e.g. always "cut p95 by ~28%" / "8+ increments per quarter" / "10x peak volume") across roles or JDs.
-   - Vary sentence structure: mix owned/shipped/diagnosed/fine-tuned/designed/automated/partnered openings; change what is measured (latency, dataset size, model evals, tickets, services, cost, coverage) based on the JD.
-   - Prefer sourceResumeText achievements when present; rephrase them toward the target JD vocabulary.
-5. NO REPETITION: never clone bullets/overviews across roles; never swap only the company name in the same sentence.
-6. Hard numbers (counts, scale, latency, users, datasets, dollars) in most bullets, but NEVER invent unrealistic percentages (no 90%+ claims).
-7. Include slightly MORE relevant breadth than the JD strictly requires.
-8. Mirror JD terminology heavily for ATS. keywords: 15-25 important JD phrases (deduped).
-9. Keep company names, periods, locations, education exact. Slight title refinement OK if plausible.
-10. Do not invent employers or schools. Prefer sourceResumeText facts when provided.
-11. Return ONLY valid compact JSON for the RESUME (no cover letter). Escape quotes. No markdown. NEVER use **bold**, *italic*, backticks, or headings.
+2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
+   Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices.
+   Each group has a short category name and 4-10 comma-ready item strings.
+3. Each experience MUST include:
+   - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
+   - exactly 7 bullet points of accomplishments.
+4. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
+5. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
+6. Include slightly MORE relevant experience breadth than the JD strictly requires.
+7. Mirror JD terminology and hard skills heavily for ATS scoring.
+8. keywords: array of important JD keywords/phrases that should be bolded.
+9. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
+10. Keep the candidate's company names, periods, locations, and education exactly as given. You may refine job titles slightly if plausible.
+11. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
+12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
+13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
 
 JSON shape:
 {
@@ -53,18 +44,22 @@ JSON shape:
     "experiences": [{ "company": string, "title": string, "period": string, "location": string, "overview": string, "bullets": string[] }],
     "education": [{ "school": string, "degree": string, "discipline": string, "period": string, "location": string }],
     "keywords": string[]
-  }
+  },
+  "coverLetter": string
 }`;
 
 const COVER_LETTER_PROMPT = `You are an expert ATS resume writer and career coach.
-Create a tailored cover letter that maximizes fit for the target role.
+Create a tailored cover letter that maximize ATS keyword match for the target role.
 
 Hard rules:
 1. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
-2. Mirror JD terminology and hard skills. Tie 2-3 concrete achievements to the target company/role.
-3. Do not invent employers or schools. Ground claims in the candidate profile / resume summary / bullets provided.
-4. Return ONLY valid compact JSON: { "coverLetter": string }
-5. Escape all double quotes inside strings. NEVER use markdown (**bold**, *italic*, backticks, headings). Plain text only.`;
+2. Mirror JD terminology and hard skills heavily for ATS scoring.
+3. Keep claims grounded in the candidate profile / resume summary / bullets provided. Do not invent employers or schools.
+4. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
+5. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only.
+
+JSON shape:
+{ "coverLetter": string }`;
 
 /** Abort hung calls, but allow enough time for a real quality completion. */
 const GENERATE_TIMEOUT_MS = 90_000;
@@ -329,10 +324,9 @@ export async function generateTailoredPackage(
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
     qualityBar:
-      "Experience must be UNIQUE to this JD — not a recycled template. Strong summary/skills. Zero bullet clones. Vary verbs, metrics, and themes per responsibility.",
-    instructions: options?.sourceResumeText
-      ? "STRONG ATS TAILOR from uploaded resume: rewrite experience toward THIS JD's responsibilities/must-haves with varied sentence shapes (not the same Built/Led/Scaled formula). Strong summary + dense unique skills. No cross-role clones."
-      : "STRONG ATS TAILOR: invent JD-specific experience stories grounded in each company — map bullets to different JD themes. Vary structure per bullet. Strong summary + dense unique skills. Never ship cookie-cutter metrics across roles.",
+      "Follow the system hard rules exactly: 4-6 skill groups (4-10 items), 7 specific bullets/role with hard numbers (no unrealistic %), JD terminology mirrored, cover letter 3-4 paragraphs.",
+    instructions:
+      "Follow the system prompt hard rules exactly. Maximize ATS keyword match. Return valid compact JSON only (resume + coverLetter). No markdown.",
   });
 
   const baseMessages: Array<{
@@ -369,7 +363,7 @@ export async function generateTailoredPackage(
             {
               role: "user",
               content:
-                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid resume JSON (no coverLetter). Requirements: 55-90 word summary opening with target title + JD skills, 4-6 skill groups with 4-10 items each, exactly 7 DISTINCT specific bullets per role (~25-40 words) with realistic hard numbers (no unrealistic %), dense JD keyword mirror. No markdown.",
+                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid JSON matching the system prompt hard rules: Summary/Skills/Experience/Education, 4-6 skill groups with 4-10 items each, exactly 7 specific bullets per role (~25-40 words) with hard numbers (never unrealistic %), keywords array, coverLetter as 3-4 paragraphs with \\n\\n. No markdown.",
             },
           ],
           Math.min(temperature, 0.35),
@@ -410,6 +404,8 @@ export async function generateTailoredPackage(
               resumeSummary: resume.summary,
               topSkills: resume.skills.flatMap((g) => g.items).slice(0, 12),
               recentBullets: resume.experiences[0]?.bullets?.slice(0, 3) || [],
+              instructions:
+                "Follow hard rule: 3-4 short paragraphs in ONE string with \\n\\n between paragraphs. Mirror JD terminology. No markdown.",
             }),
           },
         ],
@@ -427,20 +423,19 @@ export async function generateTailoredPackage(
     }
   }
 
-  const rewritePrompt = `REWRITE the FULL resume JSON (no coverLetter). Previous draft FAILED: experience looked TEMPLATED/REPEATED and/or summary/skills were weak for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
-Mandatory upgrades:
-- SUMMARY: 60-95 words, START with "${extracted.jobTitle || extracted.type}". DISTINCT skills once each: ${[...new Set([...extracted.hardTechnicalSkills, ...extracted.requiredSkills])].slice(0, 12).join(", ") || "JD hard skills"}.
-- SKILLS: 5-6 groups × 6-10 UNIQUE items; no cross-group duplicates.
-- EXPERIENCE must be different for THIS JD: map 7 bullets/role to different themes from: ${[...extracted.responsibilities, ...extracted.mustHave].slice(0, 8).join(" | ") || "JD responsibilities"}.
-  Vary verbs and metrics. Ban cookie-cutter lines like "Built and shipped production features…" / always "~28% latency" / "8+ increments per quarter".
-  Overviews UNIQUE per company and rewritten for this JD domain.
-- keywords: deduped JD phrases.
-Return complete resume JSON only. No markdown.`;
+  const rewritePrompt = `REWRITE the FULL JSON to better follow the system hard rules for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
+Mandatory:
+1. Skills: 4-6 compact groups (Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices), 4-10 items each. Mirror JD hard skills heavily.
+2. Experience: overview 25-45 words + exactly 7 specific bullets (~25-40 words) per role with hard numbers (never unrealistic percentages). Slightly MORE breadth than the JD requires.
+3. keywords: important JD phrases for bolding.
+4. coverLetter: 3-4 short paragraphs in ONE string with \\n\\n between paragraphs.
+5. Keep company names, periods, locations, education exact. No markdown.
+Return complete valid JSON only.`;
 
   try {
     let draft = await runOnce(baseMessages, 0.5);
 
-    // Up to two strong ATS rewrites when keyword/skill/bullet quality is weak.
+    // Up to two rewrites when the package is still weak vs the hard rules.
     for (let pass = 0; pass < 2; pass++) {
       if (draft && !isWeakModelPackage(draft, profile, extracted)) break;
       draft =
@@ -462,6 +457,7 @@ Return complete resume JSON only. No markdown.`;
     }
 
     const coverLetter =
+      String(draft.coverLetter || "").trim() ||
       (await generateCoverLetter(draft.resume)) ||
       buildFallbackCoverLetter(profile, extracted);
 
