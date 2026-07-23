@@ -14,21 +14,14 @@ import {
 import { sanitizePlainText } from "./validate-resume";
 import { sanitizeKeywords } from "./keywords";
 import { scoreResumePackage } from "./resume-score";
+import {
+  COVER_LETTER_ARCHITECT_PROMPT,
+  IMPROVE_RESUME_PROMPT,
+  PRINCIPAL_RESUME_ARCHITECT_PROMPT,
+} from "./prompts/principal-resume-architect";
 
-const SYSTEM_PROMPT = `Return ONLY valid compact JSON (no markdown):
-{
-  "resume": {
-    "summary": string,
-    "skills": [{ "category": string, "items": string[] }],
-    "experiences": [{ "company": string, "title": string, "period": string, "location": string, "overview": string, "bullets": string[] }],
-    "education": [{ "school": string, "degree": string, "discipline": string, "period": string, "location": string }],
-    "keywords": string[]
-  },
-  "coverLetter": string
-}`;
-
-const COVER_LETTER_PROMPT = `Return ONLY valid compact JSON (no markdown):
-{ "coverLetter": string }`;
+const SYSTEM_PROMPT = PRINCIPAL_RESUME_ARCHITECT_PROMPT;
+const COVER_LETTER_PROMPT = COVER_LETTER_ARCHITECT_PROMPT;
 
 /** Abort hung calls, but allow enough time for a real quality completion. */
 const GENERATE_TIMEOUT_MS = 90_000;
@@ -201,27 +194,23 @@ function failsResumeWordedChecks(
       : [];
     allBullets.push(...bullets);
   }
-  if (allBullets.length < Math.max(4, profile.experiences.length * 5)) {
+  if (allBullets.length < Math.max(4, profile.experiences.length * 4)) {
     return true;
   }
 
   let weakHits = 0;
-  let missingMetrics = 0;
   let badLength = 0;
   for (const b of allBullets) {
     const words = b.split(/\s+/).filter(Boolean).length;
-    if (words < 18 || words > 42) badLength += 1;
-    if (!bulletHasMetric(b)) missingMetrics += 1;
+    if (words < 12 || words > 45) badLength += 1;
+    // Do NOT require metrics — inventing numbers is forbidden.
     if (weakVerb.test(b) || buzz.test(b) || pronoun.test(b) || dutyOnly.test(b)) {
       weakHits += 1;
     }
   }
 
-  if (missingMetrics > Math.max(1, Math.floor(allBullets.length * 0.2))) {
-    return true;
-  }
   if (weakHits >= 2) return true;
-  if (badLength > Math.max(2, Math.floor(allBullets.length * 0.35))) {
+  if (badLength > Math.max(2, Math.floor(allBullets.length * 0.4))) {
     return true;
   }
 
@@ -231,7 +220,7 @@ function failsResumeWordedChecks(
   const verbCounts = new Map<string, number>();
   for (const v of verbs) verbCounts.set(v, (verbCounts.get(v) || 0) + 1);
   const maxVerb = Math.max(...verbCounts.values(), 0);
-  if (maxVerb >= 3) return true;
+  if (maxVerb >= 4) return true;
 
   const summary = String(draft.resume?.summary || "");
   if (buzz.test(summary) || pronoun.test(summary)) return true;
@@ -239,7 +228,7 @@ function failsResumeWordedChecks(
   return false;
 }
 
-/** True when the model returned thin summary/skills or low-impact / repetitive bullets. */
+/** True when the model returned thin summary/skills or low JD alignment. */
 function isWeakModelPackage(
   draft: TailoredPackage,
   profile: CandidateProfile,
@@ -251,7 +240,8 @@ function isWeakModelPackage(
   const { groups, items, minGroupSize, duplicateItems } = countSkillItems(
     draft.resume?.skills,
   );
-  if (groups < 5 || items < 30 || minGroupSize < 5 || duplicateItems >= 2) {
+  // Prefer quality over stuffing; only verified skills should appear.
+  if (groups < 3 || items < 12 || minGroupSize < 2 || duplicateItems >= 3) {
     return true;
   }
 
@@ -265,7 +255,7 @@ function isWeakModelPackage(
   if (uniqueJd.length >= 3) {
     const hay = `${summary} ${JSON.stringify(draft.resume?.skills || [])}`.toLowerCase();
     const hits = uniqueJd.filter((s) => hay.includes(s)).length;
-    if (hits < Math.min(6, uniqueJd.length)) return true;
+    if (hits < Math.min(4, uniqueJd.length)) return true;
   }
 
   if (hasCrossRoleRepetition(draft.resume?.experiences)) return true;
@@ -285,15 +275,9 @@ function isWeakModelPackage(
       ? exp!.bullets.map((b) => String(b || "").trim()).filter(Boolean)
       : [];
     const unique = countUniqueBullets(bullets);
-    if (unique < 7) return true;
-    const withMetrics = bullets.filter(bulletHasMetric).length;
-    if (withMetrics < 5) return true;
-    const shortOrVague = bullets.filter(
-      (b) => b.split(/\s+/).length < 22 || isVagueBullet(b),
-    ).length;
-    if (shortOrVague >= 2) return true;
+    if (unique < 5) return true;
     const overview = String(exp?.overview || "").trim();
-    if (overview.split(/\s+/).filter(Boolean).length < 22) return true;
+    if (overview.split(/\s+/).filter(Boolean).length < 12) return true;
   }
   return false;
 }
@@ -337,22 +321,28 @@ export async function generateTailoredPackage(
   const client = getLlmClient();
   const model = getLlmModel();
   const userPayload = JSON.stringify({
-    candidate: profile,
-    extractedJd: extracted,
-    rawJobDescription: rawJd.slice(0, 10_000),
-    sourceResumeText: options?.sourceResumeText
-      ? options.sourceResumeText.slice(0, 12_000)
-      : undefined,
-    mustIncludeSkills: [
-      ...extracted.hardTechnicalSkills,
-      ...extracted.requiredSkills,
-    ].slice(0, 28),
-    jdExperienceThemes: [
-      ...extracted.responsibilities,
-      ...extracted.mustHave,
-    ].slice(0, 12),
-    targetRole: extracted.jobTitle || extracted.type,
-    targetCompany: extracted.company,
+    JOB_DESCRIPTION: {
+      raw: rawJd.slice(0, 10_000),
+      extracted,
+      targetRole: extracted.jobTitle || extracted.type,
+      targetCompany: extracted.company,
+      mustIncludeSkills: [
+        ...extracted.hardTechnicalSkills,
+        ...extracted.requiredSkills,
+      ].slice(0, 28),
+      jdExperienceThemes: [
+        ...extracted.responsibilities,
+        ...extracted.mustHave,
+      ].slice(0, 12),
+    },
+    ORIGINAL_RESUME_CANDIDATE_EXPERIENCE: {
+      candidate: profile,
+      sourceResumeText: options?.sourceResumeText
+        ? options.sourceResumeText.slice(0, 12_000)
+        : undefined,
+    },
+    instructions:
+      "Follow the Principal Resume Architect steps. Use ONLY these two inputs. Return complete JSON.",
   });
 
   const baseMessages: Array<{
@@ -388,7 +378,7 @@ export async function generateTailoredPackage(
             { role: "assistant", content },
             {
               role: "user",
-              content: '{"error":"invalid_json"}',
+              content: '{"error":"invalid_json","require":"complete_architect_resume_json"}',
             },
           ],
           Math.min(temperature, 0.35),
@@ -449,31 +439,42 @@ export async function generateTailoredPackage(
   try {
     let draft = await runOnce(baseMessages, 0.5);
 
-    // Up to two score-driven rewrites until internal score >= 90.
-    for (let pass = 0; pass < 2; pass++) {
+    // Up to 5 score-driven improvement iterations until >= 90.
+    for (let pass = 0; pass < 5; pass++) {
       if (draft && !isWeakModelPackage(draft, profile, extracted)) break;
       const scored = draft
         ? scoreResumePackage({ package: draft, extracted, profile })
         : null;
-      const dynamicRewrite = scored
-        ? JSON.stringify({
-            score: scored.overall_score,
-            category_scores: scored.category_scores,
-            missing_keywords: scored.missing_keywords.slice(0, 12),
-            suggestions: scored.improvement_suggestions.slice(0, 8),
-          })
-        : "{}";
+      const lowest = scored
+        ? Object.entries(scored.category_scores).sort((a, b) => a[1] - b[1])[0]
+        : null;
+      const improvePayload = JSON.stringify({
+        action: "improve",
+        prompt: IMPROVE_RESUME_PROMPT,
+        current_score: scored?.overall_score ?? 0,
+        category_scores: scored?.category_scores ?? {},
+        lowest_category: lowest?.[0] ?? null,
+        missing_keywords: scored?.missing_keywords?.slice(0, 16) ?? [],
+        suggestions: scored?.improvement_suggestions?.slice(0, 10) ?? [],
+        weak_sections: scored?.weak_sections?.slice(0, 8) ?? [],
+        iteration: pass + 1,
+        max_iterations: 5,
+      });
 
       draft =
         (await runOnce(
           [
             ...baseMessages,
             {
+              role: "assistant",
+              content: JSON.stringify(draft),
+            },
+            {
               role: "user",
-              content: dynamicRewrite,
+              content: improvePayload,
             },
           ],
-          0.55 + pass * 0.05,
+          0.45 + pass * 0.04,
         )) || draft;
     }
 
