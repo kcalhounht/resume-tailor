@@ -40,7 +40,12 @@ Strength coach rules (make the resume MUCH stronger):
 14. Increase impact with numbers and metrics in nearly every bullet (scale, volume, latency, users, datasets, dollars, tickets, services). Never invent unrealistic percentages.
 15. Compare against what hiring managers expect for THIS target role — prioritize the JD's must-haves, seniority, and stack.
 16. Fix weak experience: rewrite thin/responsibility-only bullets into strong accomplishment bullets that show ownership and results.
-17. Summary is REQUIRED and must be effective: open with the target role title, name distinct JD hard skills, state domain impact; no fluff. Keep it tight (about 55-90 words).
+17. Resume summary — decide and make it effective:
+   - For this product, ALWAYS include a Summary (it is not optional in output).
+   - Make it earn its space: 55-90 words, open with the target role title/seniority from the JD, name 5-10 DISTINCT hard skills from the JD (never repeat a skill), state domain + measurable impact.
+   - An effective summary answers: who you are for THIS role, what stack you bring, and what outcomes you deliver — not a generic career objective.
+   - Ban fluff: passionate, results-driven, team player, seeking opportunities, proven track record.
+   - Optional-summary test: if the Summary would only be generic filler beyond Skills + Experience, rewrite until it is role-specific and high-signal. Never leave a weak/placeholder Summary.
 18. Remove vague buzzwords that add little value (passionate, results-driven, team player, synergy, go-getter, self-motivated, detail-oriented as empty claims).
 19. Remove superfluous words; keep bullets crisp and high-signal (~25-40 words each).
 20. Eliminate careless errors: no typos, broken grammar, duplicated skills ("Python, Python"), or leftover markdown.
@@ -49,20 +54,24 @@ Strength coach rules (make the resume MUCH stronger):
 23. Show communication: clear collaboration with stakeholders, teammates, or clients when relevant to the JD.
 24. Show analytical skill: break down complex problems, evaluate options, deliver appropriate solutions.
 25. Show teamwork: effective collaboration to achieve shared goals when relevant.
-26. Swap weak language for strong action verbs (Built, Led, Designed, Owned, Shipped, Automated, Optimized, Diagnosed, Migrated, Fine-tuned). Avoid repeating the same verb/phrase across bullets.
-27. Focus on accomplishments, not bare responsibilities.
-28. Remove personal pronouns (I, me, my, we, our) from the resume body.
-29. Keep bullet length consistent and scannable; use bullets only — never paragraphs in Experience.
-30. Keep periods/dates exactly as given; do not invent or reformat into inconsistent styles.
-31. Do NOT add outdated sections (References, Objective, Hobbies, Soft-skills essay, "Responsible for" blocks).
-32. Skills section must be effective: compact grouped skills, JD-first, no one-skill-per-line dumps, no duplicates across groups.
-33. Avoid unnecessary personal details — only name/contact from the profile, plus role content. No age, photo, marital status, etc.
-34. Avoid passive voice ("was responsible for", "tasks were completed"); write active voice.
-35. Keep punctuation and formatting consistent across bullets (same style, no trailing clutter).
-36. Provide enough detail for a strong 1-page technical resume — dense, not sparse; do not cram filler.
-37. Use correct tense: past roles in past tense; current role can use present/past mix for ongoing vs completed work.
-38. Show growth across roles (increasing scope, ownership, complexity) when the profile supports it.
-39. Keep the whole resume tightly focused on the target role and JD language for ATS screeners — key sections must be easy to scan (Summary, Skills, Experience, Education).
+26. Swap weak language for strong action verbs (Built, Led, Designed, Owned, Shipped, Automated, Optimized, Diagnosed, Migrated, Fine-tuned, Delivered, Spearheaded, Implemented, Accelerated).
+27. Avoid repeating action verbs and phrases on the resume (critical):
+   - Do NOT start multiple bullets with the same verb (e.g. Built… Built… Built…).
+   - Do NOT reuse the same opening phrase or near-identical clause across roles.
+   - Rotate verbs and sentence shapes so each bullet reads distinct; scan the full resume before finishing and rewrite repeats.
+28. Focus on accomplishments, not bare responsibilities.
+29. Remove personal pronouns (I, me, my, we, our) from the resume body.
+30. Keep bullet length consistent and scannable; use bullets only — never paragraphs in Experience.
+31. Keep periods/dates exactly as given; do not invent or reformat into inconsistent styles.
+32. Do NOT add outdated sections (References, Objective, Hobbies, Soft-skills essay, "Responsible for" blocks).
+33. Skills section must be effective: compact grouped skills, JD-first, no one-skill-per-line dumps, no duplicates across groups.
+34. Avoid unnecessary personal details — only name/contact from the profile, plus role content. No age, photo, marital status, etc.
+35. Avoid passive voice ("was responsible for", "tasks were completed"); write active voice.
+36. Keep punctuation and formatting consistent across bullets (same style, no trailing clutter).
+37. Provide enough detail for a strong 1-page technical resume — dense, not sparse; do not cram filler.
+38. Use correct tense: past roles in past tense; current role can use present/past mix for ongoing vs completed work.
+39. Show growth across roles (increasing scope, ownership, complexity) when the profile supports it.
+40. Keep the whole resume tightly focused on the target role and JD language for ATS screeners — key sections must be easy to scan (Summary, Skills, Experience, Education).
 
 JSON shape:
 {
@@ -455,8 +464,8 @@ export async function generateTailoredPackage(
   const rewritePrompt = `REWRITE the FULL JSON to better follow the system hard rules AND strength coach rules for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
 Mandatory:
 1. Skills: 4-6 compact groups, 4-10 items each; JD-first; no duplicates; effective for ATS screeners.
-2. Experience: overview 25-45 words + exactly 7 accomplishment bullets (~25-40 words) with metrics; strong varied action verbs; active voice; no pronouns; no buzzwords; ownership/initiative/collaboration/analytical impact where relevant.
-3. Summary: effective, target-role focused, distinct JD skills, no fluff.
+2. Experience: overview 25-45 words + exactly 7 accomplishment bullets (~25-40 words) with metrics; strong VARIED action verbs (do NOT repeat the same verb/phrase); active voice; no pronouns; no buzzwords; ownership/initiative/collaboration/analytical impact where relevant.
+3. Summary: effective and role-specific (55-90 words). Open with target title + distinct JD skills + impact. If it reads like generic filler, rewrite until it earns its place.
 4. keywords: important JD phrases for bolding.
 5. coverLetter: 3-4 short paragraphs with \\n\\n; concrete fit, not vague praise.
 6. Keep company names, periods, locations, education exact. No markdown. No outdated sections.
