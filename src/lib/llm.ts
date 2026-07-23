@@ -17,7 +17,7 @@ function envMax(name: string, fallback: number): number {
 export const LLM_MAX_TOKENS = {
   extract: envMax("OPENROUTER_MAX_TOKENS_EXTRACT", 2_048),
   /** Resume JSON only (cover letter is a separate cheaper call). */
-  generate: envMax("OPENROUTER_MAX_TOKENS_GENERATE", 5_500),
+  generate: envMax("OPENROUTER_MAX_TOKENS_GENERATE", 6_500),
   coverLetter: envMax("OPENROUTER_MAX_TOKENS_COVER", 1_200),
   split: envMax("OPENROUTER_MAX_TOKENS_SPLIT", 3_000),
   label: envMax("OPENROUTER_MAX_TOKENS_LABEL", 1_024),

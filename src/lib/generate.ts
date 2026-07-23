@@ -15,27 +15,34 @@ import { sanitizePlainText } from "./validate-resume";
 import { sanitizeKeywords } from "./keywords";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
-Create a tailored resume that maximize ATS keyword match for the target role.
+Create a HIGH-QUALITY tailored resume that maximizes ATS keyword match — dense summary, strong skills, ZERO repetition.
 
 Hard rules:
 1. Resume sections: Summary, Skills, Experience, Education.
-2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
-   Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices.
-   Each group has a short category name and 4-10 comma-ready item strings.
-3. Each experience MUST include:
-   - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
-   - exactly 7 bullet points of accomplishments.
-4. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
-5. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
-6. Include slightly MORE relevant experience breadth than the JD strictly requires.
-7. Mirror JD terminology and hard skills heavily for ATS scoring.
-8. keywords: array of important JD keywords/phrases that should be bolded.
-9. Keep the candidate's company names, periods, locations, and education exactly as given. You may refine job titles slightly if plausible.
-10. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
-11. When sourceResumeText is provided, prefer real achievements and skills from it; do not invent major claims absent from source/profile.
-12. SUMMARY: 55-90 words. Open with the target job title / seniority from the JD. Name 5-10 hard skills from the JD. State domain impact. Senior, concrete voice — no vague soft filler.
-13. Return ONLY valid compact JSON for the RESUME (no cover letter in this response). Escape all double quotes inside strings. Do not wrap in markdown.
-14. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
+2. SUMMARY (critical — do not write a weak summary):
+   - 60-95 words, 3-4 dense sentences.
+   - FIRST words = exact target job title/seniority from the JD.
+   - Name 6-10 DISTINCT hard skills from the JD (never repeat the same skill twice, e.g. never "Python, Python").
+   - State domain + measurable impact (systems, data, users, products, scale).
+   - Ban filler: passionate, results-driven, team player, leveraging, proven track record, highly motivated, dedicated professional.
+3. SKILLS (critical — do not write a weak skills section):
+   - Exactly 5-6 compact groups: Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices (adapt names to the JD).
+   - Each group: 6-10 DISTINCT items. No duplicates inside a group. No same item repeated across groups.
+   - Lead with JD hardTechnicalSkills / requiredSkills, then add adjacent high-signal tools.
+   - Never output a thin 2-4 item group. Never dump one giant unsorted list.
+4. Each experience MUST include:
+   - overview: 25-45 words — company context + ownership, JD-tailored, UNIQUE per company (never clone overviews).
+   - exactly 7 UNIQUE accomplishment bullets (~25-40 words).
+5. NO REPETITION (critical):
+   - Never reuse the same bullet (or near-duplicate opening clause) across roles.
+   - Never reuse the same metric sentence with only the company name swapped.
+   - Vary verbs and outcomes per role (Built/Led/Designed/Fine-tuned/Scaled/Automated/Migrated/Optimized…).
+6. Hard numbers (counts, scale, latency, users, datasets, dollars) are required in most bullets, but NEVER invent unrealistic percentages (no 90%+ claims).
+7. Include slightly MORE relevant breadth than the JD strictly requires.
+8. Mirror JD terminology heavily for ATS. keywords: 15-25 important JD phrases (deduped).
+9. Keep company names, periods, locations, education exact. Slight title refinement OK if plausible.
+10. Do not invent employers or schools. Prefer sourceResumeText facts when provided.
+11. Return ONLY valid compact JSON for the RESUME (no cover letter). Escape quotes. No markdown. NEVER use **bold**, *italic*, backticks, or headings.
 
 JSON shape:
 {
@@ -102,33 +109,103 @@ function isVagueBullet(text: string): boolean {
   return !bulletHasMetric(text) || text.trim().split(/\s+/).length < 22;
 }
 
-function countSkillItems(skills: unknown): { groups: number; items: number } {
-  if (!Array.isArray(skills) || !skills.length) return { groups: 0, items: 0 };
+function countSkillItems(skills: unknown): {
+  groups: number;
+  items: number;
+  minGroupSize: number;
+  duplicateItems: number;
+} {
+  if (!Array.isArray(skills) || !skills.length) {
+    return { groups: 0, items: 0, minGroupSize: 0, duplicateItems: 0 };
+  }
   let items = 0;
+  let minGroupSize = Infinity;
+  const seen = new Set<string>();
+  let duplicateItems = 0;
   for (const group of skills) {
     if (group && typeof group === "object" && Array.isArray((group as { items?: unknown }).items)) {
-      items += (group as { items: unknown[] }).items.filter(Boolean).length;
+      const list = (group as { items: unknown[] }).items
+        .map((i) => String(i || "").trim())
+        .filter(Boolean);
+      items += list.length;
+      minGroupSize = Math.min(minGroupSize, list.length);
+      for (const item of list) {
+        const key = item.toLowerCase();
+        if (seen.has(key)) duplicateItems += 1;
+        else seen.add(key);
+      }
     } else if (typeof group === "string" && group.trim()) {
       items += 1;
     }
   }
   const groups =
     typeof skills[0] === "object" && skills[0] !== null ? skills.length : items > 0 ? 1 : 0;
-  return { groups, items };
+  return {
+    groups,
+    items,
+    minGroupSize: Number.isFinite(minGroupSize) ? minGroupSize : 0,
+    duplicateItems,
+  };
 }
 
-/** True when the model returned thin summary/skills or low-impact bullets. */
+function summaryLooksWeak(summary: string, extracted: ExtractedJD): boolean {
+  const words = summary.trim().split(/\s+/).filter(Boolean);
+  if (words.length < 60 || summary.length < 320) return true;
+  if (
+    /passionate|results-driven|team player|leveraging|proven track record|highly motivated|dedicated professional|as engineer at company/i.test(
+      summary,
+    )
+  ) {
+    return true;
+  }
+  // Detect immediate word repeats: "Python, Python"
+  if (/\b([A-Za-z][A-Za-z0-9+.#-]{1,24})\b(?:\s*[,/|]\s*|\s+)\1\b/i.test(summary)) {
+    return true;
+  }
+  const title = (extracted.jobTitle || extracted.type || "").trim().toLowerCase();
+  if (title.length >= 4 && !summary.toLowerCase().startsWith(title.slice(0, Math.min(12, title.length)))) {
+    // Allow near-start if title appears in first 8 words
+    const head = words.slice(0, 8).join(" ").toLowerCase();
+    if (!head.includes(title.split(/\s+/)[0] || title)) return true;
+  }
+  return false;
+}
+
+function hasCrossRoleRepetition(experiences: TailoredResume["experiences"] | undefined): boolean {
+  if (!Array.isArray(experiences) || experiences.length < 2) return false;
+  const prefixes: string[] = [];
+  for (const exp of experiences) {
+    for (const raw of exp?.bullets || []) {
+      const key = String(raw || "")
+        .toLowerCase()
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 56);
+      if (key.length < 28) continue;
+      if (prefixes.some((p) => p === key || p.slice(0, 40) === key.slice(0, 40))) {
+        return true;
+      }
+      prefixes.push(key);
+    }
+  }
+  return false;
+}
+
+/** True when the model returned thin summary/skills or low-impact / repetitive bullets. */
 function isWeakModelPackage(
   draft: TailoredPackage,
   profile: CandidateProfile,
   extracted: ExtractedJD,
 ): boolean {
   const summary = String(draft.resume?.summary || "").trim();
-  const summaryWords = summary.split(/\s+/).filter(Boolean).length;
-  if (summaryWords < 55 || summary.length < 280) return true;
+  if (summaryLooksWeak(summary, extracted)) return true;
 
-  const { groups, items } = countSkillItems(draft.resume?.skills);
-  if (groups < 4 || items < 20) return true;
+  const { groups, items, minGroupSize, duplicateItems } = countSkillItems(
+    draft.resume?.skills,
+  );
+  if (groups < 5 || items < 30 || minGroupSize < 5 || duplicateItems >= 2) {
+    return true;
+  }
 
   const jdSkills = [
     ...extracted.hardTechnicalSkills,
@@ -140,9 +217,10 @@ function isWeakModelPackage(
   if (uniqueJd.length >= 3) {
     const hay = `${summary} ${JSON.stringify(draft.resume?.skills || [])}`.toLowerCase();
     const hits = uniqueJd.filter((s) => hay.includes(s)).length;
-    // Strong ATS: require most JD hard skills to appear in summary/skills.
-    if (hits < Math.min(5, uniqueJd.length)) return true;
+    if (hits < Math.min(6, uniqueJd.length)) return true;
   }
+
+  if (hasCrossRoleRepetition(draft.resume?.experiences)) return true;
 
   for (let i = 0; i < profile.experiences.length; i++) {
     const exp = draft.resume?.experiences?.[i];
@@ -156,7 +234,7 @@ function isWeakModelPackage(
     const shortOrVague = bullets.filter(
       (b) => b.split(/\s+/).length < 22 || isVagueBullet(b),
     ).length;
-    if (shortOrVague >= 3) return true;
+    if (shortOrVague >= 2) return true;
     const overview = String(exp?.overview || "").trim();
     if (overview.split(/\s+/).filter(Boolean).length < 22) return true;
   }
@@ -173,15 +251,15 @@ function finalizePackage(
 
   resume = {
     ...resume,
-    summary: sanitizePlainText(resume.summary),
-    experiences: resume.experiences.map((exp) => ({
-      ...exp,
-      overview: sanitizePlainText(exp.overview || ""),
-      bullets: exp.bullets.map((b) => sanitizePlainText(b)),
-    })),
+    summary: collapseRepeatedTokens(sanitizePlainText(resume.summary)),
+    experiences: dedupeExperienceBullets(resume.experiences, profile, extracted),
   };
 
-  if (!resume.summary || resume.summary.length < 120) {
+  if (
+    !resume.summary ||
+    resume.summary.length < 200 ||
+    summaryLooksWeak(resume.summary, extracted)
+  ) {
     resume = {
       ...resume,
       summary: buildFallbackSummary(profile, extracted),
@@ -215,10 +293,10 @@ export async function generateTailoredPackage(
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
     qualityBar:
-      "Maximize ATS keyword match: mirror JD terms heavily, 4-6 dense skill groups, 7 specific bullets/role with realistic hard numbers (no unrealistic %), slightly MORE breadth than the JD requires.",
+      "NO repetition. STRONG 60-95 word summary opening with target title + 6-10 DISTINCT JD skills. STRONG 5-6 skill groups × 6-10 UNIQUE items each (no cross-group duplicates). 7 UNIQUE bullets/role with realistic hard numbers.",
     instructions: options?.sourceResumeText
-      ? "STRONG ATS TAILOR from uploaded resume: resume JSON only (no cover letter). 4-6 skill groups × 4-10 items. Summary 55-90 words opening with target title + JD hard skills. Exactly 7 UNIQUE specific bullets/role (~25-40 words) with hard numbers; never invent unrealistic percentages. Mirror JD terminology heavily."
-      : "STRONG ATS TAILOR: resume JSON only (no cover letter). 4-6 skill groups × 4-10 items. Summary 55-90 words opening with target title + JD hard skills. Exactly 7 UNIQUE specific bullets/role (~25-40 words) with hard numbers; never invent unrealistic percentages. Mirror JD terminology heavily; include slightly more relevant breadth than the JD requires.",
+      ? "STRONG ATS TAILOR from uploaded resume: resume JSON only. Fix weak summary/skills. Zero bullet cloning across roles. 5-6 dense skill groups with DISTINCT items. Summary 60-95 words, no filler, no repeated skill names."
+      : "STRONG ATS TAILOR: resume JSON only. Fix weak summary/skills. Zero bullet cloning across roles. 5-6 dense skill groups with DISTINCT items. Summary 60-95 words opening with target title + DISTINCT JD skills; never write Python, Python.",
   });
 
   const baseMessages: Array<{
@@ -313,13 +391,12 @@ export async function generateTailoredPackage(
     }
   }
 
-  const rewritePrompt = `REWRITE the FULL resume JSON (no coverLetter). Previous draft was NOT strong enough for ATS keyword match for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
+  const rewritePrompt = `REWRITE the FULL resume JSON (no coverLetter). Previous draft FAILED because of REPETITION and/or WEAK SUMMARY / WEAK SKILLS for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
 Mandatory upgrades:
-- Summary: 55-90 words, START with "${extracted.jobTitle || extracted.type}", weave in: ${[...extracted.hardTechnicalSkills, ...extracted.requiredSkills].slice(0, 12).join(", ") || "JD hard skills"}.
-- Skills: 4-6 compact groups (Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices), 4-10 items EACH; maximize overlap with JD hard/required skills; add slightly MORE adjacent relevant tools than the JD lists.
-- Experience: overview 25-45 words (company + ownership, JD-tailored). Exactly 7 UNIQUE bullets per role (~25-40 words each); include hard numbers (counts, scale, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
-- Mirror JD terminology heavily throughout for ATS.
-- keywords: important JD phrases for later bolding.
+- SUMMARY: 60-95 words, START with "${extracted.jobTitle || extracted.type}". Weave in DISTINCT skills only once each: ${[...new Set([...extracted.hardTechnicalSkills, ...extracted.requiredSkills])].slice(0, 12).join(", ") || "JD hard skills"}. No filler. No "Python, Python".
+- SKILLS: exactly 5-6 groups, 6-10 UNIQUE items EACH. No duplicate items across groups. Maximize JD overlap, then add adjacent tools.
+- EXPERIENCE: overview 25-45 words UNIQUE per company. Exactly 7 UNIQUE bullets/role (~25-40 words). Do NOT clone bullets across roles. Hard numbers OK; NEVER unrealistic %.
+- keywords: deduped JD phrases.
 Return complete resume JSON only. No markdown.`;
 
   try {
@@ -446,13 +523,81 @@ function buildFallbackSummary(
   const roleBit =
     latest && !badCompany
       ? `${latest.title} at ${latest.company}`
-      : "shipping production systems across product engineering teams";
+      : "shipping production ML and platform systems";
   const company =
     extracted.company &&
     !/^(unknown company|company|unknown)$/i.test(extracted.company)
       ? extracted.company
-      : "high-growth employers";
-  return `${title} with hands-on depth across ${skillBit}. Recent work as ${roleBit} focused on measurable delivery — reliability, performance, and product velocity. Brings end-to-end ownership from design through production for ${extracted.workMode || "hybrid"} teams, with a track record of shipping systems that scale for ${company}.`;
+      : "product and platform engineering teams";
+  return `${title} specializing in ${skillBit}. Recent work as ${roleBit} focused on production delivery — model/system quality, latency, and reliable rollout. Combines hands-on implementation with clear ownership from design through monitoring for ${extracted.workMode || "hybrid"} environments supporting ${company}.`;
+}
+
+function collapseRepeatedTokens(text: string): string {
+  return text
+    .replace(/\b([A-Za-z][A-Za-z0-9+.#-]{1,24})\b(?:\s*[,/|]\s*|\s+)\1\b/gi, "$1")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+function dedupeExperienceBullets(
+  experiences: TailoredResume["experiences"],
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): TailoredResume["experiences"] {
+  const usedPrefixes = new Set<string>();
+
+  return experiences.map((exp, index) => {
+    const kept: string[] = [];
+    for (const bullet of exp.bullets || []) {
+      const clean = collapseRepeatedTokens(sanitizePlainText(bullet));
+      const prefix = clean.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 56);
+      if (!clean || prefix.length < 24) continue;
+      if ([...usedPrefixes].some((p) => p.slice(0, 40) === prefix.slice(0, 40))) {
+        continue;
+      }
+      usedPrefixes.add(prefix);
+      kept.push(clean);
+    }
+
+    const filled = buildVariedExperienceBullets(
+      {
+        company: exp.company || profile.experiences[index]?.company || "Company",
+        title: exp.title || profile.experiences[index]?.title || "Engineer",
+        location: exp.location || profile.experiences[index]?.location || "Remote",
+      },
+      extracted,
+      kept,
+      7,
+    ).filter((b) => {
+      const prefix = b.toLowerCase().replace(/\s+/g, " ").trim().slice(0, 56);
+      if ([...usedPrefixes].some((p) => p.slice(0, 40) === prefix.slice(0, 40))) {
+        return false;
+      }
+      usedPrefixes.add(prefix);
+      return true;
+    });
+
+    // If filters removed too many, keep role-local unique fills
+    const bullets =
+      filled.length >= 7
+        ? filled.slice(0, 7)
+        : buildVariedExperienceBullets(
+            {
+              company: exp.company,
+              title: exp.title,
+              location: exp.location,
+            },
+            extracted,
+            kept,
+            7,
+          );
+
+    return {
+      ...exp,
+      overview: collapseRepeatedTokens(sanitizePlainText(exp.overview || "")),
+      bullets,
+    };
+  });
 }
 
 function buildFallbackCoverLetter(
@@ -619,7 +764,7 @@ function normalizeSkills(
       ],
     },
     {
-      category: isMl || isData ? "Data/AI/ML" : "Data/Platform",
+      category: isMl || isData ? "Data/AI" : "Data/Platform",
       seeds: isMl
         ? [
             "LLMs",
@@ -665,62 +810,92 @@ function normalizeSkills(
   ];
 
   const densify = (groups: SkillGroup[]): SkillGroup[] => {
-    const merged = groups.map((g) => ({
-      category: g.category,
-      items: [...g.items],
-    }));
-
-    const ensure = (category: string, seeds: string[]) => {
-      const idx = merged.findIndex(
-        (g) => g.category.toLowerCase() === category.toLowerCase(),
-      );
-      const existing =
-        idx >= 0 ? merged[idx].items.map((i) => i.toLowerCase()) : [];
-      const fromJd = jdSkills.filter(
-        (s) => s && !existing.includes(s.toLowerCase()),
-      );
-      const add = [...fromJd.slice(0, 4), ...seeds].filter(
-        (s) => s && !existing.includes(s.toLowerCase()),
-      );
-      if (idx >= 0) {
-        merged[idx] = {
-          ...merged[idx],
-          items: [...merged[idx].items, ...add].slice(0, 10),
-        };
-      } else if (merged.length < 6) {
-        merged.push({
-          category,
-          items: Array.from(new Set([...fromJd.slice(0, 3), ...seeds])).slice(
-            0,
-            10,
-          ),
-        });
+    const classify = (skill: string): string => {
+      const s = skill.toLowerCase();
+      if (
+        /python|java|typescript|javascript|go\b|rust|c\+\+|c#|kotlin|swift|scala|sql|bash|r\b/.test(
+          s,
+        )
+      ) {
+        return "Languages";
       }
+      if (
+        /aws|gcp|azure|docker|kubernetes|terraform|ci\/?cd|devops|github actions|gitlab/.test(
+          s,
+        )
+      ) {
+        return "Cloud/DevOps";
+      }
+      if (
+        /postgres|mysql|mongo|redis|dynamo|cassandra|snowflake|s3|kafka|elasticsearch/.test(
+          s,
+        )
+      ) {
+        return "Databases";
+      }
+      if (
+        /ml|ai|llm|nlp|pytorch|tensor|spark|etl|rag|vector|pandas|sklearn|scikit|huggingface|langchain|airflow|feature store/.test(
+          s,
+        ) ||
+        isMl ||
+        isData
+      ) {
+        return isMl || isData ? "Data/AI" : "Data/Platform";
+      }
+      if (
+        /react|node|fastapi|django|flask|spring|express|graphql|langgraph|vllm|transformers/.test(
+          s,
+        )
+      ) {
+        return "Frameworks/Libraries";
+      }
+      return "Tools/Practices";
     };
 
+    const byCategory = new Map<string, string[]>();
+    const used = new Set<string>();
+
+    const push = (category: string, item: string) => {
+      const clean = sanitizePlainText(item);
+      const key = clean.toLowerCase();
+      if (!clean || used.has(key)) return;
+      used.add(key);
+      const list = byCategory.get(category) || [];
+      if (list.length >= 10) return;
+      list.push(clean);
+      byCategory.set(category, list);
+    };
+
+    // Preserve model groups first (deduped globally).
+    for (const group of groups) {
+      for (const item of group.items) push(group.category, item);
+    }
+
+    // Place each JD skill in ONE best category only.
+    for (const skill of jdSkills) {
+      push(classify(skill), skill);
+    }
+
+    // Fill thin groups with adjacent seeds (still globally unique).
     for (const row of adjacentRows) {
-      ensure(row.category, row.seeds.slice(0, isMl ? 5 : 4));
+      for (const seed of row.seeds) {
+        const list = byCategory.get(row.category) || [];
+        if (list.length >= 6) break;
+        push(row.category, seed);
+      }
     }
 
-    const all = new Set(
-      merged.flatMap((g) => g.items.map((i) => i.toLowerCase())),
-    );
-    const missing = jdSkills.filter((s) => !all.has(s.toLowerCase()));
-    if (missing.length && merged.length) {
-      merged[0] = {
-        ...merged[0],
-        items: [...merged[0].items, ...missing].slice(0, 10),
-      };
+    // Ensure we have 5-6 named groups.
+    for (const row of adjacentRows) {
+      if (byCategory.size >= 6) break;
+      if (!byCategory.has(row.category)) {
+        for (const seed of row.seeds.slice(0, 6)) push(row.category, seed);
+      }
     }
 
-    return merged
-      .map((g) => ({
-        ...g,
-        items: Array.from(
-          new Set(g.items.map((i) => i.trim()).filter(Boolean)),
-        ).slice(0, 10),
-      }))
-      .filter((g) => g.items.length >= 4)
+    return [...byCategory.entries()]
+      .map(([category, items]) => ({ category, items }))
+      .filter((g) => g.items.length >= 5)
       .slice(0, 6);
   };
 
