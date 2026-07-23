@@ -13,6 +13,7 @@ import {
 } from "./resume-fallbacks";
 import { sanitizePlainText } from "./validate-resume";
 import { sanitizeKeywords } from "./keywords";
+import { scoreResumePackage } from "./resume-score";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach optimized for Resume Worded / Score My Resume.
 TARGET: produce a tailored resume that would score 90+ on Resume Worded (Impact, Brevity, Style, soft-skill signals).
@@ -38,15 +39,16 @@ Hard rules:
 12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
 13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
 
-Resume Worded 90+ checklist (must pass):
-A. IMPACT — every bullet = strong action verb + task/project + measurable result. Accomplishments over responsibilities. Show growth, ownership, and leadership/mentoring signals where plausible.
-B. BREVITY — no filler, no paragraphs in Experience, no superfluous words; each line earns its place; resume stays focused on the target role.
-C. STYLE — active voice only; no personal pronouns (I/me/my/we/our); consistent punctuation; correct tense (past for past roles); clean ATS-parseable wording; no careless errors or duplicated skills ("Python, Python").
-D. VERBS — strong verbs only; NEVER repeat the same opening verb or near-identical phrase across bullets/roles. Rotate: Built, Led, Designed, Owned, Shipped, Automated, Optimized, Diagnosed, Migrated, Fine-tuned, Delivered, Spearheaded, Implemented, Accelerated, Drove, Established, Streamlined.
-E. BAN weak/vague language: helped, assisted, worked on, responsible for, tasked with, participated in, various, several, passionate, results-driven, team player, synergy, go-getter, self-motivated, detail-oriented, proven track record, seeking opportunities.
-F. SUMMARY — required and effective (55-90 words): open with target job title, name 5-10 DISTINCT JD hard skills once each, state domain impact. Must beat the "optional summary" test (not generic filler).
-G. SOFT SKILLS via RESULTS — demonstrate initiative, communication, analytical problem-solving, and teamwork through concrete bullets — never as empty soft-skill lists.
-H. TARGET ROLE FOCUS — compare content to what hiring managers expect for THIS JD; prioritize must-haves, seniority, and stack; make experience unique to this JD (not a recycled template).
+Resume Worded scoring engine target (maximize to 90-100):
+Total 100 points — optimize every bullet/section for these weighted categories:
+1) Impact and Achievements (35): quantified metrics; Action+Tech+Result bullets; strong action verbs; >70% achievement density.
+2) Skills and Keyword Alignment (20): match important JD keywords (>75%); skills evidenced in Experience; contextual tech+outcome usage (no stuffing).
+3) Experience Quality (20): ownership/leadership language; production/scale complexity; career growth; direct relevance to target role.
+4) Writing Quality (15): mostly 15-30 word bullets; no filler (responsible for/worked on/various); no buzzwords; no pronouns; active voice; consistent tense/punctuation.
+5) ATS Compatibility (10): Summary+Skills+Experience+Education; complete contact; plain single-column text (no tables/images/graphics).
+
+Ban weak verbs: Helped, Assisted, Worked on, Responsible for, Participated, Supported, Handled.
+Prefer strong verbs: Built, Developed, Designed, Architected, Implemented, Optimized, Automated, Delivered, Improved, Reduced, Increased, Scaled, Led, Created, Deployed, Integrated (rotate — do not repeat openers).
 
 JSON shape:
 {
@@ -316,6 +318,13 @@ function isWeakModelPackage(
   if (looksTemplatedExperience(draft.resume?.experiences)) return true;
   if (failsResumeWordedChecks(draft, profile)) return true;
 
+  const scored = scoreResumePackage({
+    package: draft,
+    extracted,
+    profile,
+  });
+  if (scored.overall_score < 90) return true;
+
   for (let i = 0; i < profile.experiences.length; i++) {
     const exp = draft.resume?.experiences?.[i];
     const bullets = Array.isArray(exp?.bullets)
@@ -391,9 +400,9 @@ export async function generateTailoredPackage(
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
     qualityBar:
-      "Resume Worded 90+ target: quantified impact bullets, varied strong verbs, no buzzwords/pronouns/passive/duty language, effective summary, dense JD skills, scannable brevity.",
+      "Hit internal Resume Worded-style score >= 90 (Impact 35, Keywords 20, Experience 20, Writing 15, ATS 10).",
     instructions:
-      "Optimize for Resume Worded Score My Resume 90+. Follow system hard rules + Resume Worded 90+ checklist exactly. Return valid compact JSON only (resume + coverLetter). No markdown.",
+      "Optimize for the Resume Worded scoring engine rules in the system prompt. Maximize quantified achievements, JD keyword match, ownership, and clean writing. Return valid compact JSON only. No markdown.",
   });
 
   const baseMessages: Array<{
@@ -490,31 +499,40 @@ export async function generateTailoredPackage(
     }
   }
 
-  const rewritePrompt = `REWRITE the FULL JSON to hit Resume Worded 90+ (Impact + Brevity + Style) for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
-Mandatory:
-1. IMPACT: every bullet = strong UNIQUE action verb + work + hard metric. Accomplishments only. No helped/assisted/worked on/responsible for.
-2. VERBS: never repeat the same opening verb 3+ times across the resume; rotate verbs.
-3. STYLE: no pronouns, no buzzwords, active voice, ~22-38 words/bullet, consistent punctuation.
-4. SUMMARY: 55-90 words, target title first, DISTINCT JD skills, domain impact — not filler.
-5. SKILLS: 4-6 groups × 4-10 items, JD-first, no duplicates.
-6. EXPERIENCE: overview 25-45 words + exactly 7 bullets/role; unique to this JD.
-7. coverLetter: 3-4 paragraphs with \\n\\n; concrete quantified fit.
-8. Keep company names, periods, locations, education exact. No markdown.
-Return complete valid JSON only.`;
-
   try {
     let draft = await runOnce(baseMessages, 0.5);
 
-    // Up to two rewrites when the package is still weak vs the hard rules.
+    // Up to two rewrites until internal Resume Worded-style score >= 90.
     for (let pass = 0; pass < 2; pass++) {
       if (draft && !isWeakModelPackage(draft, profile, extracted)) break;
+      const scored = draft
+        ? scoreResumePackage({ package: draft, extracted, profile })
+        : null;
+      const dynamicRewrite = `REWRITE the FULL JSON to score 90+ on the Resume Worded-style scoring engine for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
+${
+  scored
+    ? `Current score: ${scored.overall_score}/100 (impact ${scored.category_scores.impact}/35, keywords ${scored.category_scores.keyword_alignment}/20, experience ${scored.category_scores.experience_quality}/20, writing ${scored.category_scores.writing_quality}/15, ATS ${scored.category_scores.ats_compatibility}/10).
+Weak sections: ${scored.weak_sections.join(", ") || "none"}.
+Fix: ${scored.improvement_suggestions.slice(0, 6).join(" | ") || "raise quantified impact and JD keyword evidence"}.
+Missing keywords: ${scored.missing_keywords.slice(0, 10).join(", ") || "none"}.`
+    : "Raise Impact, Keyword Alignment, Experience Quality, Writing Quality, and ATS Compatibility."
+}
+Mandatory:
+1. Quantify most bullets; Action + Tech + Result; strong rotated verbs (no Helped/Assisted/Worked on/Responsible for).
+2. Mirror JD keywords in Summary/Skills/Experience with contextual outcomes.
+3. Show ownership/scale/relevance to the target role.
+4. Writing: ~15-30 words/bullet, no filler/buzzwords/pronouns, active voice.
+5. Keep Summary, Skills, Experience, Education; company names/dates/education exact.
+6. coverLetter: 3-4 paragraphs with \\n\\n.
+No markdown. Return complete valid JSON only.`;
+
       draft =
         (await runOnce(
           [
             ...baseMessages,
             {
               role: "user",
-              content: rewritePrompt,
+              content: dynamicRewrite,
             },
           ],
           0.55 + pass * 0.05,
