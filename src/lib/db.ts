@@ -387,7 +387,7 @@ const globalForDb = globalThis as unknown as {
  * Normalize SSL query params so `pg` stops warning about sslmode aliases.
  * Prefer explicit libpq-compatible `require` (typical for Neon / Vercel Postgres).
  */
-function getPostgresConnectionString(): string | undefined {
+export function getPostgresConnectionString(): string | undefined {
   const raw =
     process.env.CUSTOM_DATABASE_URL || process.env.DATABASE_URL || undefined;
   if (!raw) return undefined;

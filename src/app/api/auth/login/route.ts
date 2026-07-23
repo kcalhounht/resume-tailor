@@ -1,19 +1,30 @@
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import {
   SESSION_COOKIE,
   createSessionToken,
   sessionCookieOptions,
 } from "@/lib/auth";
-import { db } from "@/lib/db";
+import { db, getPostgresConnectionString } from "@/lib/db";
+import { verifyPassword } from "@/lib/password";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   try {
+    if (!getPostgresConnectionString()) {
+      return NextResponse.json(
+        {
+          ok: false,
+          error:
+            "Database is not configured (DATABASE_URL missing). Add it in Vercel env and redeploy.",
+        },
+        { status: 503 },
+      );
+    }
+
     const body = await request.json();
-    const username = body.username?.trim();
-    const password = body.password;
+    const username = String(body.username || "").trim();
+    const password = String(body.password || "");
 
     if (!username || !password) {
       return NextResponse.json(
@@ -42,7 +53,7 @@ export async function POST(request: Request) {
       password_hash: string;
     };
 
-    const passwordMatches = await bcrypt.compare(password, user.password_hash);
+    const passwordMatches = await verifyPassword(password, user.password_hash);
     if (!passwordMatches) {
       return NextResponse.json(
         { ok: false, error: "Invalid username or password" },
@@ -60,8 +71,18 @@ export async function POST(request: Request) {
     return response;
   } catch (error) {
     console.error("Login error:", error);
+    const message = error instanceof Error ? error.message : String(error);
+    const isDb =
+      /DATABASE_URL|ECONNREFUSED|ENOTFOUND|password authentication failed|SSL|does not exist|connection/i.test(
+        message,
+      );
     return NextResponse.json(
-      { ok: false, error: "Unable to log in" },
+      {
+        ok: false,
+        error: isDb
+          ? "Unable to reach the database. Check DATABASE_URL / Postgres and try again."
+          : "Unable to log in",
+      },
       { status: 500 },
     );
   }
