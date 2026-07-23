@@ -15,18 +15,7 @@ import { sanitizePlainText } from "./validate-resume";
 import { sanitizeKeywords } from "./keywords";
 import { scoreResumePackage } from "./resume-score";
 
-const SYSTEM_PROMPT = `You are a Resume Scoring Engine–optimized ATS resume writer.
-Maximize an internal 0–100 score with these category weights:
-1) Impact and Achievements (35): quantified metrics; Action+Tech+Problem+Result bullets; strong action verbs; >70% achievement density.
-2) Skills and Keyword Alignment (20): match important JD keywords (>75%); skills evidenced in Experience; contextual tech+outcome usage (no stuffing).
-3) Experience Quality (20): ownership/leadership; production/scale complexity; career growth; relevance to target role.
-4) Writing Quality (15): 15–30 word bullets; no filler (responsible for/worked on/various); no buzzwords; no first-person; consistent grammar/tense.
-5) ATS Compatibility (10): Summary+Skills+Experience+Education; complete contact; plain single-column text (no tables/images/graphics).
-
-Strong verbs: Built, Developed, Designed, Architected, Implemented, Optimized, Automated, Scaled, Delivered, Improved, Reduced, Increased, Led, Created, Deployed, Integrated.
-Ban weak verbs: Helped, Assisted, Worked on, Responsible for, Supported, Participated, Handled.
-
-Return ONLY valid compact JSON (no markdown):
+const SYSTEM_PROMPT = `Return ONLY valid compact JSON (no markdown):
 {
   "resume": {
     "summary": string,
@@ -36,13 +25,10 @@ Return ONLY valid compact JSON (no markdown):
     "keywords": string[]
   },
   "coverLetter": string
-}
-Keep company names, periods, locations, and education exact. Do not invent employers or schools. Plain text only.`;
+}`;
 
-const COVER_LETTER_PROMPT = `Write a cover letter optimized for the Resume Scoring Engine rubric (impact, JD keywords, ownership, evidence-based writing).
-Return ONLY valid compact JSON (no markdown):
-{ "coverLetter": string }
-coverLetter is 3-4 short paragraphs in ONE string with \\n\\n between paragraphs. Plain text only.`;
+const COVER_LETTER_PROMPT = `Return ONLY valid compact JSON (no markdown):
+{ "coverLetter": string }`;
 
 /** Abort hung calls, but allow enough time for a real quality completion. */
 const GENERATE_TIMEOUT_MS = 90_000;
@@ -402,8 +388,7 @@ export async function generateTailoredPackage(
             { role: "assistant", content },
             {
               role: "user",
-              content:
-                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid JSON matching the required schema. No markdown.",
+              content: '{"error":"invalid_json"}',
             },
           ],
           Math.min(temperature, 0.35),
@@ -444,8 +429,6 @@ export async function generateTailoredPackage(
               resumeSummary: resume.summary,
               topSkills: resume.skills.flatMap((g) => g.items).slice(0, 12),
               recentBullets: resume.experiences[0]?.bullets?.slice(0, 3) || [],
-              instructions:
-                "Return coverLetter as 3-4 short paragraphs in ONE string with \\n\\n between paragraphs. No markdown.",
             }),
           },
         ],
@@ -473,8 +456,13 @@ export async function generateTailoredPackage(
         ? scoreResumePackage({ package: draft, extracted, profile })
         : null;
       const dynamicRewrite = scored
-        ? `Rewrite the full JSON to raise the score above 90. Current: ${scored.overall_score}/100. Categories: ${JSON.stringify(scored.category_scores)}. Weak: ${scored.weak_sections.join(", ") || "none"}. Missing keywords: ${scored.missing_keywords.slice(0, 12).join(", ") || "none"}. Suggestions: ${scored.improvement_suggestions.slice(0, 8).join(" | ")}. Return complete valid JSON only.`
-        : "Rewrite the full JSON to improve resume quality. Return complete valid JSON only.";
+        ? JSON.stringify({
+            score: scored.overall_score,
+            category_scores: scored.category_scores,
+            missing_keywords: scored.missing_keywords.slice(0, 12),
+            suggestions: scored.improvement_suggestions.slice(0, 8),
+          })
+        : "{}";
 
       draft =
         (await runOnce(
