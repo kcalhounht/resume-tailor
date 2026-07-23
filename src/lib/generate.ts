@@ -133,7 +133,6 @@ function summaryLooksWeak(summary: string, extracted: ExtractedJD): boolean {
 function hasCrossRoleRepetition(experiences: TailoredResume["experiences"] | undefined): boolean {
   if (!Array.isArray(experiences) || experiences.length < 2) return false;
   const prefixes: string[] = [];
-  const structures: string[] = [];
   for (const exp of experiences) {
     for (const raw of exp?.bullets || []) {
       const key = String(raw || "")
@@ -142,30 +141,11 @@ function hasCrossRoleRepetition(experiences: TailoredResume["experiences"] | und
         .trim();
       if (key.length < 28) continue;
       const prefix = key.slice(0, 56);
-      if (prefixes.some((p) => p === prefix || p.slice(0, 40) === prefix.slice(0, 40))) {
+      // Exact/near-exact clones only — do not flag distinct bullets with similar shape.
+      if (prefixes.some((p) => p === prefix || p.slice(0, 48) === prefix.slice(0, 48))) {
         return true;
       }
       prefixes.push(prefix);
-
-      let structureSig = key
-        .replace(/\b\d+(\.\d+)?%?\b/g, "#")
-        .replace(/\b[a-z0-9+.#-]{2,24}(?:, [a-z0-9+.#-]{2,24}){1,4}\b/g, "TECH")
-        .slice(0, 70);
-      for (const company of experiences
-        .map((e) => String(e?.company || ""))
-        .filter((c) => c.length >= 2)) {
-        structureSig = structureSig.replace(
-          new RegExp(
-            `\\b${company.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
-            "gi",
-          ),
-          "CO",
-        );
-      }
-      if (structures.some((s) => s.slice(0, 45) === structureSig.slice(0, 45))) {
-        return true;
-      }
-      structures.push(structureSig);
     }
   }
   return false;
@@ -260,11 +240,11 @@ function isWeakModelPackage(
   const summary = String(draft.resume?.summary || "").trim();
   if (summaryLooksWeak(summary, extracted)) return true;
 
-  const { groups, items, minGroupSize, duplicateItems } = countSkillItems(
+  const { groups, items, duplicateItems } = countSkillItems(
     draft.resume?.skills,
   );
   // Prefer quality over stuffing; only verified skills should appear.
-  if (groups < 3 || items < 12 || minGroupSize < 2 || duplicateItems >= 3) {
+  if (groups < 2 || items < 6 || duplicateItems >= 4) {
     return true;
   }
 
@@ -276,12 +256,12 @@ function isWeakModelPackage(
     .filter((s) => s.length >= 2);
   const uniqueJd = [...new Set(jdSkills)].slice(0, 16);
   if (uniqueJd.length >= 3) {
-    const hay = `${summary} ${JSON.stringify(draft.resume?.skills || [])}`.toLowerCase();
+    const hay = `${summary} ${JSON.stringify(draft.resume?.skills || [])} ${JSON.stringify(draft.resume?.experiences || [])}`.toLowerCase();
     const hits = uniqueJd.filter((s) => hay.includes(s)).length;
-    if (hits < Math.min(4, uniqueJd.length)) return true;
+    if (hits < Math.min(3, uniqueJd.length)) return true;
   }
 
-  // Must-have / responsibility coverage across the whole resume package
+  // Must-have coverage across the whole resume package
   const corpus = [
     summary,
     JSON.stringify(draft.resume?.skills || []),
@@ -294,23 +274,19 @@ function isWeakModelPackage(
     ...(extracted.hardTechnicalSkills || []),
   ]
     .map((s) => String(s || "").toLowerCase().trim())
-    .filter((s) => s.length >= 3);
+    .filter((s) => s.length >= 3 && s.length <= 40);
   const uniqueCritical = [...new Set(criticalTerms)].slice(0, 12);
   if (uniqueCritical.length >= 3) {
     const covered = uniqueCritical.filter((t) => corpus.includes(t)).length;
-    if (covered < Math.ceil(uniqueCritical.length * 0.6)) return true;
+    if (covered < Math.ceil(uniqueCritical.length * 0.45)) return true;
   }
 
   if (hasCrossRoleRepetition(draft.resume?.experiences)) return true;
   if (looksTemplatedExperience(draft.resume?.experiences)) return true;
   if (failsResumeWordedChecks(draft, profile)) return true;
 
-  const scored = scoreResumePackage({
-    package: draft,
-    extracted,
-    profile,
-  });
-  if (scored.overall_score < 90) return true;
+  // Do NOT hard-fail on score < 90 (metric-heavy scorer conflicts with no-invent).
+  // Improve loop still receives score feedback separately.
 
   for (let i = 0; i < profile.experiences.length; i++) {
     const exp = draft.resume?.experiences?.[i];
@@ -318,9 +294,7 @@ function isWeakModelPackage(
       ? exp!.bullets.map((b) => String(b || "").trim()).filter(Boolean)
       : [];
     const unique = countUniqueBullets(bullets);
-    if (unique < 5) return true;
-    const overview = String(exp?.overview || "").trim();
-    if (overview.split(/\s+/).filter(Boolean).length < 12) return true;
+    if (unique < 3) return true;
   }
   return false;
 }
@@ -341,8 +315,8 @@ function finalizePackage(
 
   if (
     !resume.summary ||
-    resume.summary.length < 200 ||
-    summaryLooksWeak(resume.summary, extracted)
+    resume.summary.length < 120 ||
+    (summaryLooksWeak(resume.summary, extracted) && resume.summary.length < 180)
   ) {
     resume = {
       ...resume,
@@ -512,7 +486,7 @@ export async function generateTailoredPackage(
   }
 
   try {
-    let draft = await runOnce(baseMessages, 0.5);
+    let draft = await runOnce(baseMessages, 0.35);
 
     // Up to 5 score-driven improvement iterations until >= 90.
     for (let pass = 0; pass < 5; pass++) {
@@ -575,7 +549,7 @@ export async function generateTailoredPackage(
               content: improvePayload,
             },
           ],
-          0.45 + pass * 0.04,
+          0.35 + pass * 0.03,
         )) || draft;
     }
 
@@ -706,90 +680,78 @@ function dedupeExperienceBullets(
   profile: CandidateProfile,
   extracted: ExtractedJD,
 ): TailoredResume["experiences"] {
-  const usedPrefixes = new Set<string>();
-  const usedOpeners = new Set<string>();
-  const usedStructures = new Set<string>();
+  const usedExact = new Set<string>();
   const openerCounts = new Map<string, number>();
-  const allCompanies = experiences
-    .map((e) => e.company)
-    .concat(profile.experiences.map((e) => e.company))
-    .filter(Boolean);
 
   return experiences.map((exp, index) => {
     const kept: string[] = [];
     for (const bullet of exp.bullets || []) {
-      const clean = sanitizeExperienceBullet(
-        collapseRepeatedTokens(sanitizePlainText(bullet)),
-      );
-      if (!clean) continue;
+      const clean =
+        sanitizeExperienceBullet(
+          collapseRepeatedTokens(sanitizePlainText(bullet)),
+        ) || collapseRepeatedTokens(sanitizePlainText(bullet));
+      if (!clean || clean.length < 20) continue;
+
       const key = clean.toLowerCase().replace(/\s+/g, " ").trim();
-      const prefix = key.slice(0, 56);
+      // Only drop near-exact duplicates (first 64 chars), not "similar structure"
+      const fingerprint = key.slice(0, 64);
+      if ([...usedExact].some((p) => p === fingerprint)) continue;
+
       const opener = (clean.trim().split(/\s+/)[0] || "").toLowerCase();
-      let structure = key
-        .replace(/\b\d+(\.\d+)?%?\b/g, "#")
-        .replace(/\b[a-z0-9+.#-]{2,24}(?:, [a-z0-9+.#-]{2,24}){1,4}\b/g, "TECH")
-        .slice(0, 70);
-      for (const company of allCompanies.filter((c) => c.length >= 2)) {
-        structure = structure.replace(
-          new RegExp(
-            `\\b${company.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
-            "gi",
-          ),
-          "CO",
-        );
-      }
-
-      if (prefix.length < 24) continue;
-      if ([...usedPrefixes].some((p) => p.slice(0, 40) === prefix.slice(0, 40))) {
-        continue;
-      }
-      if (opener && (openerCounts.get(opener) || 0) >= 2) continue;
-      if (
-        [...usedStructures].some((s) => s.slice(0, 45) === structure.slice(0, 45))
-      ) {
+      if (opener && (openerCounts.get(opener) || 0) >= 2) {
+        // Keep bullet but don't count as duplicate wipe — skip only if 3rd+ same opener
         continue;
       }
 
-      usedPrefixes.add(prefix);
-      if (opener) {
-        usedOpeners.add(opener);
-        openerCounts.set(opener, (openerCounts.get(opener) || 0) + 1);
-      }
-      usedStructures.add(structure);
+      usedExact.add(fingerprint);
+      if (opener) openerCounts.set(opener, (openerCounts.get(opener) || 0) + 1);
       kept.push(clean);
     }
 
-    const filled = buildVariedExperienceBullets(
-      {
-        company: exp.company || profile.experiences[index]?.company || "Company",
-        title: exp.title || profile.experiences[index]?.title || "Engineer",
-        location: exp.location || profile.experiences[index]?.location || "Remote",
-      },
-      extracted,
-      kept,
-      7,
-      usedOpeners,
-      usedStructures,
-      allCompanies,
-      openerCounts,
-    );
-
-    return {
-      ...exp,
-      overview: collapseRepeatedTokens(
-        sanitizeExperienceBullet(sanitizePlainText(exp.overview || "")) ||
-          buildExperienceOverview(
+    // Only template-fill when the role has almost no usable bullets.
+    const bullets =
+      kept.length >= 3
+        ? kept.slice(0, 8)
+        : buildVariedExperienceBullets(
             {
-              company: exp.company || profile.experiences[index]?.company || "Company",
+              company:
+                exp.company || profile.experiences[index]?.company || "Company",
               title: exp.title || profile.experiences[index]?.title || "Engineer",
               location:
                 exp.location || profile.experiences[index]?.location || "Remote",
             },
             extracted,
-            index,
-          ),
-      ),
-      bullets: filled.slice(0, 7),
+            kept,
+            Math.max(5, kept.length),
+            undefined,
+            undefined,
+            undefined,
+            openerCounts,
+          ).slice(0, 8);
+
+    const overviewRaw = collapseRepeatedTokens(
+      sanitizePlainText(exp.overview || ""),
+    );
+    return {
+      ...exp,
+      overview:
+        overviewRaw.split(/\s+/).filter(Boolean).length >= 8
+          ? overviewRaw
+          : buildExperienceOverview(
+              {
+                company:
+                  exp.company || profile.experiences[index]?.company || "Company",
+                title:
+                  exp.title || profile.experiences[index]?.title || "Engineer",
+                location:
+                  exp.location ||
+                  profile.experiences[index]?.location ||
+                  "Remote",
+              },
+              extracted,
+              index,
+            ),
+      bullets,
     };
   });
 }
@@ -935,82 +897,6 @@ function normalizeSkills(
       jdHay,
     );
 
-  const adjacentRows: Array<{ category: string; seeds: string[] }> = [
-    {
-      category: "Languages",
-      seeds: ["Python", "TypeScript", "SQL", "Bash"],
-    },
-    {
-      category: "Frameworks/Libraries",
-      seeds: isMl
-        ? [
-            "PyTorch",
-            "Hugging Face",
-            "FastAPI",
-            "LangChain",
-            "scikit-learn",
-            "NumPy",
-            "Pandas",
-          ]
-        : ["React", "Node.js", "FastAPI", "REST APIs", "GraphQL", "Express"],
-    },
-    {
-      category: "Cloud/DevOps",
-      seeds: [
-        "AWS",
-        "Docker",
-        "Kubernetes",
-        "CI/CD",
-        "Terraform",
-        "GitHub Actions",
-      ],
-    },
-    {
-      category: isMl || isData ? "Data/AI" : "Data/Platform",
-      seeds: isMl
-        ? [
-            "LLMs",
-            "NLP",
-            "RAG",
-            "feature stores",
-            "model evaluation",
-            "vector search",
-            "ETL",
-          ]
-        : isData
-          ? [
-              "ETL",
-              "data pipelines",
-              "Spark",
-              "Kafka",
-              "warehousing",
-              "SQL analytics",
-            ]
-          : [
-              "PostgreSQL",
-              "Redis",
-              "caching",
-              "event-driven design",
-              "API design",
-            ],
-    },
-    {
-      category: "Databases",
-      seeds: ["PostgreSQL", "Redis", "MongoDB", "S3", "Kafka"],
-    },
-    {
-      category: "Tools/Practices",
-      seeds: [
-        "system design",
-        "observability",
-        "A/B testing",
-        "code review",
-        "Agile",
-        "on-call",
-      ],
-    },
-  ];
-
   const densify = (groups: SkillGroup[]): SkillGroup[] => {
     const classify = (skill: string): string => {
       const s = skill.toLowerCase();
@@ -1078,27 +964,11 @@ function normalizeSkills(
       push(classify(skill), skill);
     }
 
-    // Fill thin groups with adjacent seeds (still globally unique).
-    for (const row of adjacentRows) {
-      for (const seed of row.seeds) {
-        const list = byCategory.get(row.category) || [];
-        if (list.length >= 6) break;
-        push(row.category, seed);
-      }
-    }
-
-    // Ensure we have 5-6 named groups.
-    for (const row of adjacentRows) {
-      if (byCategory.size >= 6) break;
-      if (!byCategory.has(row.category)) {
-        for (const seed of row.seeds.slice(0, 6)) push(row.category, seed);
-      }
-    }
-
+    // Do NOT invent adjacent seed skills — only model + JD tokens.
     return [...byCategory.entries()]
       .map(([category, items]) => ({ category, items }))
-      .filter((g) => g.items.length >= 5)
-      .slice(0, 6);
+      .filter((g) => g.items.length >= 1)
+      .slice(0, 8);
   };
 
   const mergeJd = (groups: SkillGroup[]): SkillGroup[] => {
@@ -1243,14 +1113,14 @@ function normalizeResume(
     const incoming = (generated?.bullets || [])
       .map(String)
       .map((b) => sanitizePlainText(b))
-      .filter(Boolean);
+      .map((b) => sanitizeExperienceBullet(b) || b)
+      .filter((b) => b.length >= 20);
 
-    const bullets = buildVariedExperienceBullets(
-      exp,
-      extracted,
-      incoming,
-      7,
-    );
+    // Keep LLM bullets. Only template-fill when nearly empty.
+    const bullets =
+      incoming.length >= 3
+        ? incoming.slice(0, 8)
+        : buildVariedExperienceBullets(exp, extracted, incoming, 5);
 
     const overview = sanitizePlainText(
       String(
@@ -1266,7 +1136,9 @@ function normalizeResume(
       period: exp.period,
       location: exp.location,
       overview:
-        overview || buildExperienceOverview(exp, extracted, index),
+        overview.split(/\s+/).filter(Boolean).length >= 8
+          ? overview
+          : buildExperienceOverview(exp, extracted, index),
       bullets,
     };
   });

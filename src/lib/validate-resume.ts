@@ -184,33 +184,41 @@ export function validateAndFixResume(
       });
     }
 
-    if (!overview || overview.split(/\s+/).filter(Boolean).length < 12) {
+    if (!overview || overview.split(/\s+/).filter(Boolean).length < 8) {
       issues.push({
-        level: "fixed",
-        message: `Added company/responsibility overview for ${exp.company}.`,
+        level: "warning",
+        message: `Overview for ${exp.company} is thin; left as-is unless empty.`,
       });
-      overview = buildExperienceOverview(
-        { company: exp.company, title, location: exp.location },
+      if (!overview) {
+        overview = buildExperienceOverview(
+          { company: exp.company, title, location: exp.location },
+          extracted,
+          index,
+        );
+        issues.push({
+          level: "fixed",
+          message: `Added overview for ${exp.company}.`,
+        });
+      }
+    }
+
+    // Do NOT overwrite LLM bullets with templates. Only fill if empty.
+    if (bullets.length === 0) {
+      bullets = buildVariedExperienceBullets(
+        {
+          company: exp.company,
+          title: title || exp.title,
+          location: exp.location,
+        },
         extracted,
-        index,
+        [],
+        5,
       );
-    }
-
-    const beforeBullets = bullets.length;
-    bullets = buildVariedExperienceBullets(
-      { company: exp.company, title: title || exp.title, location: exp.location },
-      extracted,
-      bullets,
-      7,
-    );
-    if (bullets.length > beforeBullets) {
       issues.push({
         level: "fixed",
-        message: `Added varied bullets for ${exp.company} (need 7–8, no duplicates).`,
+        message: `Filled missing bullets for ${exp.company}.`,
       });
-    }
-
-    if (bullets.length > 8) {
+    } else if (bullets.length > 8) {
       issues.push({
         level: "fixed",
         message: `Trimmed ${exp.company} experience to 8 bullets.`,
