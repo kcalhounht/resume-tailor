@@ -281,6 +281,26 @@ function isWeakModelPackage(
     if (hits < Math.min(4, uniqueJd.length)) return true;
   }
 
+  // Must-have / responsibility coverage across the whole resume package
+  const corpus = [
+    summary,
+    JSON.stringify(draft.resume?.skills || []),
+    JSON.stringify(draft.resume?.experiences || []),
+  ]
+    .join(" ")
+    .toLowerCase();
+  const criticalTerms = [
+    ...(extracted.mustHave || []),
+    ...(extracted.hardTechnicalSkills || []),
+  ]
+    .map((s) => String(s || "").toLowerCase().trim())
+    .filter((s) => s.length >= 3);
+  const uniqueCritical = [...new Set(criticalTerms)].slice(0, 12);
+  if (uniqueCritical.length >= 3) {
+    const covered = uniqueCritical.filter((t) => corpus.includes(t)).length;
+    if (covered < Math.ceil(uniqueCritical.length * 0.6)) return true;
+  }
+
   if (hasCrossRoleRepetition(draft.resume?.experiences)) return true;
   if (looksTemplatedExperience(draft.resume?.experiences)) return true;
   if (failsResumeWordedChecks(draft, profile)) return true;
@@ -349,23 +369,51 @@ export async function generateTailoredPackage(
       extracted,
       targetRole: extracted.jobTitle || extracted.type,
       targetCompany: extracted.company,
+    },
+    JD_FIT_CHECKLIST: {
+      priority_order: [
+        "mustHave",
+        "hardTechnicalSkills",
+        "requiredSkills",
+        "responsibilities",
+        "yearsOfExperience",
+        "qualifications",
+        "educationRequirements",
+        "niceToHave",
+        "softSkills",
+        "workMode",
+        "locationRequirement",
+      ],
+      mustHave: extracted.mustHave || [],
+      hardTechnicalSkills: extracted.hardTechnicalSkills || [],
+      requiredSkills: extracted.requiredSkills || [],
+      responsibilities: (extracted.responsibilities || []).slice(0, 16),
+      yearsOfExperience: extracted.yearsOfExperience || "",
+      qualifications: extracted.qualifications || [],
+      educationRequirements: extracted.educationRequirements || "",
+      niceToHave: extracted.niceToHave || [],
+      softSkills: extracted.softSkills || [],
+      workMode: extracted.workMode || "",
+      locationRequirement: extracted.locationRequirement || "",
       mustIncludeSkills: [
         ...extracted.hardTechnicalSkills,
         ...extracted.requiredSkills,
       ].slice(0, 28),
-      jdExperienceThemes: [
-        ...extracted.responsibilities,
-        ...extracted.mustHave,
-      ].slice(0, 12),
     },
     ORIGINAL_RESUME_CANDIDATE_EXPERIENCE: {
       candidate: profile,
+      employment_periods: profile.experiences.map((e) => ({
+        company: e.company,
+        title: e.title,
+        period: e.period,
+        location: e.location,
+      })),
       sourceResumeText: options?.sourceResumeText
         ? options.sourceResumeText.slice(0, 12_000)
         : undefined,
     },
     instructions:
-      "Follow the Principal Resume Architect steps. Use ONLY these two inputs. Return complete JSON.",
+      "Maximize fit to EVERY JD field in JD_FIT_CHECKLIST. Mirror mustHave + required skills + responsibilities first. Keep periods exact. Never invent. Return complete JSON.",
   });
 
   const baseMessages: Array<{
@@ -435,9 +483,13 @@ export async function generateTailoredPackage(
               targetCompany: extracted.company,
               targetRole: extracted.jobTitle || extracted.type,
               mustIncludeSkills: [
+                ...extracted.mustHave,
                 ...extracted.hardTechnicalSkills,
                 ...extracted.requiredSkills,
-              ].slice(0, 12),
+              ].slice(0, 14),
+              niceToHave: (extracted.niceToHave || []).slice(0, 6),
+              yearsOfExperience: extracted.yearsOfExperience || "",
+              responsibilities: (extracted.responsibilities || []).slice(0, 6),
               jdSummary: extracted.summary,
               resumeSummary: resume.summary,
               topSkills: resume.skills.flatMap((g) => g.items).slice(0, 12),
@@ -471,6 +523,23 @@ export async function generateTailoredPackage(
       const lowest = scored
         ? Object.entries(scored.category_scores).sort((a, b) => a[1] - b[1])[0]
         : null;
+      const corpus = draft
+        ? [
+            draft.resume?.summary,
+            JSON.stringify(draft.resume?.skills || []),
+            JSON.stringify(draft.resume?.experiences || []),
+          ]
+            .join(" ")
+            .toLowerCase()
+        : "";
+      const uncoveredMust = [
+        ...(extracted.mustHave || []),
+        ...(extracted.hardTechnicalSkills || []),
+        ...(extracted.requiredSkills || []),
+      ]
+        .map((s) => String(s || "").trim())
+        .filter((s) => s.length >= 2 && !corpus.includes(s.toLowerCase()))
+        .slice(0, 16);
       const improvePayload = JSON.stringify({
         action: "improve",
         prompt: IMPROVE_RESUME_PROMPT,
@@ -478,8 +547,17 @@ export async function generateTailoredPackage(
         category_scores: scored?.category_scores ?? {},
         lowest_category: lowest?.[0] ?? null,
         missing_keywords: scored?.missing_keywords?.slice(0, 16) ?? [],
+        uncovered_must_have_or_required: uncoveredMust,
         suggestions: scored?.improvement_suggestions?.slice(0, 10) ?? [],
         weak_sections: scored?.weak_sections?.slice(0, 8) ?? [],
+        jd_fit_priority: [
+          "mustHave",
+          "hardTechnicalSkills",
+          "requiredSkills",
+          "responsibilities",
+          "yearsOfExperience",
+          "niceToHave",
+        ],
         iteration: pass + 1,
         max_iterations: 5,
       });
@@ -824,11 +902,19 @@ function normalizeSkills(
   extracted: ExtractedJD,
 ): SkillGroup[] {
   const jdSkills = [
+    ...extracted.mustHave,
     ...extracted.hardTechnicalSkills,
     ...extracted.requiredSkills,
+    ...extracted.niceToHave,
   ]
     .map((s) => sanitizePlainText(String(s)))
     .filter(Boolean);
+  // Prefer shorter skill tokens for skills section (drop long requirement sentences)
+  const jdSkillTokens = [
+    ...new Set(
+      jdSkills.filter((s) => s.length <= 40 && !/\s{3,}/.test(s)),
+    ),
+  ];
 
   const jdHay = [
     ...jdSkills,
@@ -987,8 +1073,8 @@ function normalizeSkills(
       for (const item of group.items) push(group.category, item);
     }
 
-    // Place each JD skill in ONE best category only.
-    for (const skill of jdSkills) {
+    // Place each JD skill in ONE best category only (mustHave → required → niceToHave order).
+    for (const skill of jdSkillTokens) {
       push(classify(skill), skill);
     }
 
@@ -1016,11 +1102,11 @@ function normalizeSkills(
   };
 
   const mergeJd = (groups: SkillGroup[]): SkillGroup[] => {
-    if (!jdSkills.length) return densify(groups);
+    if (!jdSkillTokens.length) return densify(groups);
     const existing = new Set(
       groups.flatMap((g) => g.items.map((i) => i.toLowerCase())),
     );
-    const missing = jdSkills.filter((s) => !existing.has(s.toLowerCase()));
+    const missing = jdSkillTokens.filter((s) => !existing.has(s.toLowerCase()));
     if (!missing.length) return densify(groups);
     if (!groups.length) {
       return densify([
@@ -1069,7 +1155,7 @@ function normalizeSkills(
     }
   }
 
-  const fallback = jdSkills;
+  const fallback = jdSkillTokens;
   if (!fallback.length) {
     return densify([
       {
