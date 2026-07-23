@@ -36,6 +36,34 @@ Hard rules:
 12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
 13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
 
+Strength coach rules (make the resume MUCH stronger):
+14. Increase impact with numbers and metrics in nearly every bullet (scale, volume, latency, users, datasets, dollars, tickets, services). Never invent unrealistic percentages.
+15. Compare against what hiring managers expect for THIS target role — prioritize the JD's must-haves, seniority, and stack.
+16. Fix weak experience: rewrite thin/responsibility-only bullets into strong accomplishment bullets that show ownership and results.
+17. Summary is REQUIRED and must be effective: open with the target role title, name distinct JD hard skills, state domain impact; no fluff. Keep it tight (about 55-90 words).
+18. Remove vague buzzwords that add little value (passionate, results-driven, team player, synergy, go-getter, self-motivated, detail-oriented as empty claims).
+19. Remove superfluous words; keep bullets crisp and high-signal (~25-40 words each).
+20. Eliminate careless errors: no typos, broken grammar, duplicated skills ("Python, Python"), or leftover markdown.
+21. Show ownership: project ownership, responsibility, and (when plausible) mentoring/leading — not just task lists.
+22. Show initiative: proactivity, self-starting delivery, persistence solving hard problems.
+23. Show communication: clear collaboration with stakeholders, teammates, or clients when relevant to the JD.
+24. Show analytical skill: break down complex problems, evaluate options, deliver appropriate solutions.
+25. Show teamwork: effective collaboration to achieve shared goals when relevant.
+26. Swap weak language for strong action verbs (Built, Led, Designed, Owned, Shipped, Automated, Optimized, Diagnosed, Migrated, Fine-tuned). Avoid repeating the same verb/phrase across bullets.
+27. Focus on accomplishments, not bare responsibilities.
+28. Remove personal pronouns (I, me, my, we, our) from the resume body.
+29. Keep bullet length consistent and scannable; use bullets only — never paragraphs in Experience.
+30. Keep periods/dates exactly as given; do not invent or reformat into inconsistent styles.
+31. Do NOT add outdated sections (References, Objective, Hobbies, Soft-skills essay, "Responsible for" blocks).
+32. Skills section must be effective: compact grouped skills, JD-first, no one-skill-per-line dumps, no duplicates across groups.
+33. Avoid unnecessary personal details — only name/contact from the profile, plus role content. No age, photo, marital status, etc.
+34. Avoid passive voice ("was responsible for", "tasks were completed"); write active voice.
+35. Keep punctuation and formatting consistent across bullets (same style, no trailing clutter).
+36. Provide enough detail for a strong 1-page technical resume — dense, not sparse; do not cram filler.
+37. Use correct tense: past roles in past tense; current role can use present/past mix for ongoing vs completed work.
+38. Show growth across roles (increasing scope, ownership, complexity) when the profile supports it.
+39. Keep the whole resume tightly focused on the target role and JD language for ATS screeners — key sections must be easy to scan (Summary, Skills, Experience, Education).
+
 JSON shape:
 {
   "resume": {
@@ -55,8 +83,9 @@ Hard rules:
 1. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
 2. Mirror JD terminology and hard skills heavily for ATS scoring.
 3. Keep claims grounded in the candidate profile / resume summary / bullets provided. Do not invent employers or schools.
-4. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
-5. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only.
+4. Emphasize ownership, initiative, communication, analytical problem-solving, and collaboration with concrete examples — not vague buzzwords.
+5. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
+6. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only.
 
 JSON shape:
 { "coverLetter": string }`;
@@ -324,9 +353,9 @@ export async function generateTailoredPackage(
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
     qualityBar:
-      "Follow the system hard rules exactly: 4-6 skill groups (4-10 items), 7 specific bullets/role with hard numbers (no unrealistic %), JD terminology mirrored, cover letter 3-4 paragraphs.",
+      "Follow system hard rules + strength coach rules: metrics in bullets, strong action verbs, accomplishments not duties, no buzzwords/pronouns/passive voice, effective summary + grouped skills, JD-focused.",
     instructions:
-      "Follow the system prompt hard rules exactly. Maximize ATS keyword match. Return valid compact JSON only (resume + coverLetter). No markdown.",
+      "Follow the system prompt hard rules AND strength coach rules exactly. Maximize ATS keyword match and hiring-manager impact. Return valid compact JSON only (resume + coverLetter). No markdown.",
   });
 
   const baseMessages: Array<{
@@ -423,13 +452,14 @@ export async function generateTailoredPackage(
     }
   }
 
-  const rewritePrompt = `REWRITE the FULL JSON to better follow the system hard rules for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
+  const rewritePrompt = `REWRITE the FULL JSON to better follow the system hard rules AND strength coach rules for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
 Mandatory:
-1. Skills: 4-6 compact groups (Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices), 4-10 items each. Mirror JD hard skills heavily.
-2. Experience: overview 25-45 words + exactly 7 specific bullets (~25-40 words) per role with hard numbers (never unrealistic percentages). Slightly MORE breadth than the JD requires.
-3. keywords: important JD phrases for bolding.
-4. coverLetter: 3-4 short paragraphs in ONE string with \\n\\n between paragraphs.
-5. Keep company names, periods, locations, education exact. No markdown.
+1. Skills: 4-6 compact groups, 4-10 items each; JD-first; no duplicates; effective for ATS screeners.
+2. Experience: overview 25-45 words + exactly 7 accomplishment bullets (~25-40 words) with metrics; strong varied action verbs; active voice; no pronouns; no buzzwords; ownership/initiative/collaboration/analytical impact where relevant.
+3. Summary: effective, target-role focused, distinct JD skills, no fluff.
+4. keywords: important JD phrases for bolding.
+5. coverLetter: 3-4 short paragraphs with \\n\\n; concrete fit, not vague praise.
+6. Keep company names, periods, locations, education exact. No markdown. No outdated sections.
 Return complete valid JSON only.`;
 
   try {
