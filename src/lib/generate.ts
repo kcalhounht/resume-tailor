@@ -15,42 +15,7 @@ import { sanitizePlainText } from "./validate-resume";
 import { sanitizeKeywords } from "./keywords";
 import { scoreResumePackage } from "./resume-score";
 
-const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach optimized for Resume Worded / Score My Resume.
-TARGET: produce a tailored resume that would score 90+ on Resume Worded (Impact, Brevity, Style, soft-skill signals).
-
-Create a tailored resume and cover letter that maximize ATS keyword match for the target role.
-
-Hard rules:
-1. Resume sections ONLY: Summary, Skills, Experience, Education (no References, Objective, Hobbies, Interests, "Responsible for" blocks).
-2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
-   Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices.
-   Each group has a short category name and 4-10 comma-ready item strings. JD-first, no duplicates across groups.
-3. Each experience MUST include:
-   - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
-   - exactly 7 bullet points of accomplishments (not duties).
-4. Each bullet must be professional, specific, and scannable (~22-38 words / about 1-2 lines). Describe concrete work done.
-5. QUANTIFY IMPACT: nearly every bullet needs a hard number (counts, scale, volume, latency, users, datasets, dollars, tickets, services). NEVER invent unrealistic percentages (avoid 80%+ claims).
-6. Include slightly MORE relevant experience breadth than the JD strictly requires.
-7. Mirror JD terminology and hard skills heavily for ATS scoring.
-8. keywords: array of important JD keywords/phrases that should be bolded.
-9. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
-10. Keep the candidate's company names, periods, locations, and education exactly as given. You may refine job titles slightly if plausible.
-11. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
-12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
-13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
-
-Resume Worded scoring engine target (maximize to 90-100):
-Total 100 points — optimize every bullet/section for these weighted categories:
-1) Impact and Achievements (35): quantified metrics; Action+Tech+Result bullets; strong action verbs; >70% achievement density.
-2) Skills and Keyword Alignment (20): match important JD keywords (>75%); skills evidenced in Experience; contextual tech+outcome usage (no stuffing).
-3) Experience Quality (20): ownership/leadership language; production/scale complexity; career growth; direct relevance to target role.
-4) Writing Quality (15): mostly 15-30 word bullets; no filler (responsible for/worked on/various); no buzzwords; no pronouns; active voice; consistent tense/punctuation.
-5) ATS Compatibility (10): Summary+Skills+Experience+Education; complete contact; plain single-column text (no tables/images/graphics).
-
-Ban weak verbs: Helped, Assisted, Worked on, Responsible for, Participated, Supported, Handled.
-Prefer strong verbs: Built, Developed, Designed, Architected, Implemented, Optimized, Automated, Delivered, Improved, Reduced, Increased, Scaled, Led, Created, Deployed, Integrated (rotate — do not repeat openers).
-
-JSON shape:
+const SYSTEM_PROMPT = `Return ONLY valid compact JSON (no markdown) matching:
 {
   "resume": {
     "summary": string,
@@ -60,21 +25,12 @@ JSON shape:
     "keywords": string[]
   },
   "coverLetter": string
-}`;
+}
+Keep company names, periods, locations, and education exact. Do not invent employers or schools. Plain text only.`;
 
-const COVER_LETTER_PROMPT = `You are an expert ATS resume writer and career coach (Resume Worded 90+ style).
-Create a tailored cover letter that maximize ATS keyword match for the target role.
-
-Hard rules:
-1. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
-2. Mirror JD terminology and hard skills heavily for ATS scoring.
-3. Keep claims grounded in the candidate profile / resume summary / bullets provided. Do not invent employers or schools.
-4. Emphasize quantified impact, ownership, initiative, communication, analytical problem-solving, and collaboration — not vague buzzwords.
-5. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
-6. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only.
-
-JSON shape:
-{ "coverLetter": string }`;
+const COVER_LETTER_PROMPT = `Return ONLY valid compact JSON (no markdown):
+{ "coverLetter": string }
+coverLetter is 3-4 short paragraphs in ONE string with \\n\\n between paragraphs. Plain text only.`;
 
 /** Abort hung calls, but allow enough time for a real quality completion. */
 const GENERATE_TIMEOUT_MS = 90_000;
@@ -399,10 +355,6 @@ export async function generateTailoredPackage(
     ].slice(0, 12),
     targetRole: extracted.jobTitle || extracted.type,
     targetCompany: extracted.company,
-    qualityBar:
-      "Hit internal Resume Worded-style score >= 90 (Impact 35, Keywords 20, Experience 20, Writing 15, ATS 10).",
-    instructions:
-      "Optimize for the Resume Worded scoring engine rules in the system prompt. Maximize quantified achievements, JD keyword match, ownership, and clean writing. Return valid compact JSON only. No markdown.",
   });
 
   const baseMessages: Array<{
@@ -439,7 +391,7 @@ export async function generateTailoredPackage(
             {
               role: "user",
               content:
-                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid JSON matching the system prompt hard rules: Summary/Skills/Experience/Education, 4-6 skill groups with 4-10 items each, exactly 7 specific bullets per role (~25-40 words) with hard numbers (never unrealistic %), keywords array, coverLetter as 3-4 paragraphs with \\n\\n. No markdown.",
+                "Your previous reply was invalid or truncated JSON. Return ONLY complete repaired valid JSON matching the required schema. No markdown.",
             },
           ],
           Math.min(temperature, 0.35),
@@ -481,7 +433,7 @@ export async function generateTailoredPackage(
               topSkills: resume.skills.flatMap((g) => g.items).slice(0, 12),
               recentBullets: resume.experiences[0]?.bullets?.slice(0, 3) || [],
               instructions:
-                "Follow hard rule: 3-4 short paragraphs in ONE string with \\n\\n between paragraphs. Mirror JD terminology. No markdown.",
+                "Return coverLetter as 3-4 short paragraphs in ONE string with \\n\\n between paragraphs. No markdown.",
             }),
           },
         ],
@@ -502,29 +454,15 @@ export async function generateTailoredPackage(
   try {
     let draft = await runOnce(baseMessages, 0.5);
 
-    // Up to two rewrites until internal Resume Worded-style score >= 90.
+    // Up to two score-driven rewrites until internal score >= 90.
     for (let pass = 0; pass < 2; pass++) {
       if (draft && !isWeakModelPackage(draft, profile, extracted)) break;
       const scored = draft
         ? scoreResumePackage({ package: draft, extracted, profile })
         : null;
-      const dynamicRewrite = `REWRITE the FULL JSON to score 90+ on the Resume Worded-style scoring engine for ${extracted.jobTitle || extracted.type} at ${extracted.company || "the employer"}.
-${
-  scored
-    ? `Current score: ${scored.overall_score}/100 (impact ${scored.category_scores.impact}/35, keywords ${scored.category_scores.keyword_alignment}/20, experience ${scored.category_scores.experience_quality}/20, writing ${scored.category_scores.writing_quality}/15, ATS ${scored.category_scores.ats_compatibility}/10).
-Weak sections: ${scored.weak_sections.join(", ") || "none"}.
-Fix: ${scored.improvement_suggestions.slice(0, 6).join(" | ") || "raise quantified impact and JD keyword evidence"}.
-Missing keywords: ${scored.missing_keywords.slice(0, 10).join(", ") || "none"}.`
-    : "Raise Impact, Keyword Alignment, Experience Quality, Writing Quality, and ATS Compatibility."
-}
-Mandatory:
-1. Quantify most bullets; Action + Tech + Result; strong rotated verbs (no Helped/Assisted/Worked on/Responsible for).
-2. Mirror JD keywords in Summary/Skills/Experience with contextual outcomes.
-3. Show ownership/scale/relevance to the target role.
-4. Writing: ~15-30 words/bullet, no filler/buzzwords/pronouns, active voice.
-5. Keep Summary, Skills, Experience, Education; company names/dates/education exact.
-6. coverLetter: 3-4 paragraphs with \\n\\n.
-No markdown. Return complete valid JSON only.`;
+      const dynamicRewrite = scored
+        ? `Rewrite the full JSON to raise the score above 90. Current: ${scored.overall_score}/100. Categories: ${JSON.stringify(scored.category_scores)}. Weak: ${scored.weak_sections.join(", ") || "none"}. Missing keywords: ${scored.missing_keywords.slice(0, 12).join(", ") || "none"}. Suggestions: ${scored.improvement_suggestions.slice(0, 8).join(" | ")}. Return complete valid JSON only.`
+        : "Rewrite the full JSON to improve resume quality. Return complete valid JSON only.";
 
       draft =
         (await runOnce(
