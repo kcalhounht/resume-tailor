@@ -99,31 +99,19 @@ export async function saveJobPackage(options: {
 
   const zipName = buildZipFileName(extracted.company, extracted.jobTitle);
   const zipPath = path.join(outputRoot, zipName);
-  const coverLetterTxtBase64 = Buffer.from(tailored.coverLetter, "utf8").toString(
+  const coverLetterTxtBase64 = Buffer.from(tailored.coverLetter || "", "utf8").toString(
     "base64",
   );
 
-  if (ephemeral) {
-    // No disk I/O on Vercel — stream base64 only. Client builds the zip.
-    return {
-      folderPath,
-      zipPath,
-      zipName,
-      folderName,
-      company: extracted.company,
-      resumeDocxName: files.resumeDocx,
-      resumePdfName: files.resumePdf,
-      coverLetterDocxName: files.coverLetterDocx,
-      coverLetterTxtName: files.coverLetterTxt,
-      downloads: {
-        resumeDocxBase64: resumeDocx.toString("base64"),
-        resumePdfBase64: resumePdf.toString("base64"),
-        coverLetterDocxBase64: coverDocx.toString("base64"),
-        coverLetterTxtBase64,
-      },
-    };
-  }
+  const downloads = {
+    resumeDocxBase64: resumeDocx.toString("base64"),
+    resumePdfBase64: resumePdf.toString("base64"),
+    coverLetterDocxBase64: coverDocx.toString("base64"),
+    coverLetterTxtBase64,
+  };
 
+  // Always write under outputRoot (local ./output or Vercel /tmp). Disk is best-effort
+  // on serverless; clients must use `downloads` base64 / blob URLs for reliable saves.
   await mkdir(folderPath, { recursive: true });
   await Promise.all([
     writeFile(path.join(folderPath, files.resumeDocx), resumeDocx),
@@ -131,11 +119,13 @@ export async function saveJobPackage(options: {
     writeFile(path.join(folderPath, files.coverLetterDocx), coverDocx),
     writeFile(
       path.join(folderPath, files.coverLetterTxt),
-      tailored.coverLetter,
+      tailored.coverLetter || "",
       "utf8",
     ),
   ]);
-  await zipDirectory(folderPath, zipPath);
+  if (!ephemeral) {
+    await zipDirectory(folderPath, zipPath);
+  }
 
   return {
     folderPath,
@@ -147,5 +137,7 @@ export async function saveJobPackage(options: {
     resumePdfName: files.resumePdf,
     coverLetterDocxName: files.coverLetterDocx,
     coverLetterTxtName: files.coverLetterTxt,
+    // Always return bytes so the UI never depends on /api/download disk paths.
+    downloads,
   };
 }

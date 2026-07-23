@@ -12,7 +12,7 @@ const repackageSchema = z.object({
   company: z.string().min(1),
   jobTitle: z.string().min(1),
   personal: draftProfileSchema.shape.personal,
-  coverLetter: z.string().min(1),
+  coverLetter: z.string().default(""),
   resume: z.object({
     summary: z.string(),
     skills: z.array(
@@ -27,7 +27,7 @@ const repackageSchema = z.object({
         title: z.string(),
         period: z.string(),
         location: z.string(),
-        overview: z.string(),
+        overview: z.string().optional().default(""),
         bullets: z.array(z.string()),
       }),
     ),

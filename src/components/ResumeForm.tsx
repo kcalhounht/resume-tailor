@@ -1019,7 +1019,7 @@ export default function ResumeForm() {
       coverLetterTxtName?: string;
     };
   } | null> {
-    if (!job.resume || !job.personal || !job.coverLetter) return null;
+    if (!job.resume || !job.personal) return null;
     const response = await fetch("/api/repackage", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1028,8 +1028,14 @@ export default function ResumeForm() {
         company: job.company || "Company",
         jobTitle: job.jobTitle || "Role",
         personal: job.personal,
-        resume: job.resume,
-        coverLetter: job.coverLetter,
+        resume: {
+          ...job.resume,
+          experiences: (job.resume.experiences || []).map((exp) => ({
+            ...exp,
+            overview: exp.overview ?? "",
+          })),
+        },
+        coverLetter: job.coverLetter || " ",
       }),
     });
     const data = await response.json().catch(() => null);
@@ -1067,7 +1073,7 @@ export default function ResumeForm() {
   }
 
   async function updateDownloadsFromPreview(job: JobProgress) {
-    if (!job.resume || !job.personal || !job.coverLetter) return;
+    if (!job.resume || !job.personal) return;
     setRepackaging(true);
     setRepackageMessage(null);
     setError(null);
@@ -1142,14 +1148,89 @@ export default function ResumeForm() {
     }
   }
 
+  async function ensureJobDownloadUrls(
+    job: JobProgress,
+  ): Promise<NonNullable<JobProgress["downloadUrls"]> | null> {
+    if (
+      job.downloadUrls?.resumeDocx &&
+      job.downloadUrls?.resumePdf &&
+      job.downloadUrls?.coverLetterDocx &&
+      job.downloadUrls?.zip
+    ) {
+      return job.downloadUrls;
+    }
+    if (!job.resume || !job.personal) {
+      setError("Resume data missing — regenerate the package first.");
+      return null;
+    }
+    try {
+      const packed = await fetchPackageDownloads({
+        index: job.index,
+        company: job.company,
+        jobTitle: job.jobTitle,
+        resume: job.resume,
+        personal: job.personal,
+        coverLetter: job.coverLetter,
+        resumeDocxName: job.resumeDocxName,
+        resumePdfName: job.resumePdfName,
+        coverLetterDocxName: job.coverLetterDocxName,
+        coverLetterTxtName: job.coverLetterTxtName,
+      });
+      if (!packed) return null;
+      patchJob(job.index, (current) => ({
+        ...current,
+        company: packed.meta.company || current.company,
+        zipName: packed.meta.zipName || current.zipName,
+        folderName: packed.meta.folderName || current.folderName,
+        resumeDocxName: packed.meta.resumeDocxName || current.resumeDocxName,
+        resumePdfName: packed.meta.resumePdfName || current.resumePdfName,
+        coverLetterDocxName:
+          packed.meta.coverLetterDocxName || current.coverLetterDocxName,
+        coverLetterTxtName:
+          packed.meta.coverLetterTxtName || current.coverLetterTxtName,
+        downloadUrls: packed.downloadUrls,
+      }));
+      return packed.downloadUrls;
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to prepare downloads",
+      );
+      return null;
+    }
+  }
+
   async function downloadJobFile(
-    url: string,
+    url: string | null | undefined,
     fileName: string,
     folderName?: string,
+    job?: JobProgress,
+    kind?: keyof NonNullable<JobProgress["downloadUrls"]>,
   ) {
     try {
+      let finalUrl = url || "";
+      // Prefer in-memory blob URLs. /api/download 404s on Vercel (no shared disk).
+      if (job && (!finalUrl || finalUrl.startsWith("/api/download"))) {
+        if (kind === "coverLetterTxt" && job.coverLetter != null) {
+          finalUrl = URL.createObjectURL(
+            new Blob([job.coverLetter], {
+              type: "text/plain;charset=utf-8",
+            }),
+          );
+        } else {
+          const urls = await ensureJobDownloadUrls(job);
+          if (urls && kind) {
+            const ready = urls[kind];
+            if (ready) finalUrl = ready;
+          }
+        }
+      }
+      if (!finalUrl || finalUrl.startsWith("/api/download")) {
+        throw new Error(
+          "Download link unavailable — click Update downloads, then retry.",
+        );
+      }
       await downloadFile(
-        url,
+        finalUrl,
         fileName,
         downloadFolderRef.current,
         downloadFolderRef.current && folderName ? folderName : undefined,
@@ -1389,7 +1470,29 @@ export default function ResumeForm() {
       }
     }
 
-    // Success was recorded but file bytes never arrived — rebuild via repackage.
+    // Success was recorded but blob URLs never landed — rebuild via /api/repackage.
+    // This is the Vercel path: disk /api/download will 404 across instances.
+    if (ok && doneEvent && doneEvent.downloads && !gotFiles) {
+      // Legacy payload: downloads embedded in job_done
+      patchJob(doneEvent.index, (job) =>
+        job.downloadUrls
+          ? job
+          : {
+              ...job,
+              downloadUrls: buildDownloadUrls(
+                doneEvent.downloads!,
+                {
+                  resumeDocxName: doneEvent.resumeDocxName,
+                  resumePdfName: doneEvent.resumePdfName,
+                  coverLetterDocxName: doneEvent.coverLetterDocxName,
+                  coverLetterTxtName: doneEvent.coverLetterTxtName,
+                },
+                doneEvent.coverLetter,
+              ),
+            },
+      );
+    }
+
     if (ok && doneEvent && !gotFiles && !doneEvent.downloads) {
       try {
         const packed = await fetchPackageDownloads({
@@ -1402,6 +1505,7 @@ export default function ResumeForm() {
           resumeDocxName: doneEvent.resumeDocxName,
           resumePdfName: doneEvent.resumePdfName,
           coverLetterDocxName: doneEvent.coverLetterDocxName,
+          coverLetterTxtName: doneEvent.coverLetterTxtName,
         });
         if (packed) {
           patchJob(doneEvent.index, (job) => ({
@@ -1419,27 +1523,8 @@ export default function ResumeForm() {
           }));
         }
       } catch (err) {
-        console.warn("Auto-repackage after missing job_files failed:", err);
+        console.warn("Auto-repackage after job_done failed:", err);
       }
-    } else if (ok && doneEvent?.downloads && !gotFiles) {
-      // Legacy payload: downloads embedded in job_done
-      patchJob(doneEvent.index, (job) =>
-        job.downloadUrls
-          ? job
-          : {
-              ...job,
-              downloadUrls: buildDownloadUrls(
-                doneEvent!.downloads!,
-                {
-                  resumeDocxName: doneEvent!.resumeDocxName,
-                  resumePdfName: doneEvent!.resumePdfName,
-                  coverLetterDocxName: doneEvent!.coverLetterDocxName,
-                  coverLetterTxtName: doneEvent!.coverLetterTxtName,
-                },
-                doneEvent!.coverLetter,
-              ),
-            },
-      );
     }
 
     if (!sawTerminal) {
@@ -2091,8 +2176,7 @@ export default function ResumeForm() {
                     {job.error && <p className="job-error">{job.error}</p>}
 
                     {job.status === "done" &&
-                      job.folderName &&
-                      job.zipName &&
+                      (job.downloadUrls || job.resume) &&
                       job.resumeDocxName &&
                       job.resumePdfName &&
                       job.coverLetterDocxName && (
@@ -2103,12 +2187,12 @@ export default function ResumeForm() {
                             type="button"
                             className="download-btn"
                             onClick={() => {
-                              const url = resumeDocxUrl(job);
-                              if (!url || !job.resumeDocxName) return;
                               void downloadJobFile(
-                                url,
-                                job.resumeDocxName,
+                                resumeDocxUrl(job),
+                                job.resumeDocxName || "resume.docx",
                                 job.folderName,
+                                job,
+                                "resumeDocx",
                               );
                             }}
                           >
@@ -2119,12 +2203,12 @@ export default function ResumeForm() {
                             type="button"
                             className="download-btn"
                             onClick={() => {
-                              const url = resumePdfUrl(job);
-                              if (!url || !job.resumePdfName) return;
                               void downloadJobFile(
-                                url,
-                                job.resumePdfName,
+                                resumePdfUrl(job),
+                                job.resumePdfName || "resume.pdf",
                                 job.folderName,
+                                job,
+                                "resumePdf",
                               );
                             }}
                           >
@@ -2135,12 +2219,12 @@ export default function ResumeForm() {
                             type="button"
                             className="download-btn"
                             onClick={() => {
-                              const url = coverLetterDocxUrl(job);
-                              if (!url || !job.coverLetterDocxName) return;
                               void downloadJobFile(
-                                url,
-                                job.coverLetterDocxName,
+                                coverLetterDocxUrl(job),
+                                job.coverLetterDocxName || "cover-letter.docx",
                                 job.folderName,
+                                job,
+                                "coverLetterDocx",
                               );
                             }}
                           >
@@ -2151,29 +2235,13 @@ export default function ResumeForm() {
                             type="button"
                             className="download-btn"
                             onClick={() => {
-                              const fileName =
-                                job.coverLetterTxtName || "cover-letter.txt";
-                              if (job.downloadUrls?.coverLetterTxt) {
-                                void downloadJobFile(
-                                  job.downloadUrls.coverLetterTxt,
-                                  fileName,
-                                  job.folderName,
-                                );
-                                return;
-                              }
-                              if (!job.coverLetter?.trim()) return;
-                              const url = URL.createObjectURL(
-                                new Blob([job.coverLetter], {
-                                  type: "text/plain;charset=utf-8",
-                                }),
-                              );
                               void downloadJobFile(
-                                url,
-                                fileName,
+                                coverLetterTxtUrl(job),
+                                job.coverLetterTxtName || "cover-letter.txt",
                                 job.folderName,
-                              ).finally(() => {
-                                URL.revokeObjectURL(url);
-                              });
+                                job,
+                                "coverLetterTxt",
+                              );
                             }}
                           >
                             <DownloadIcon />
@@ -2183,12 +2251,12 @@ export default function ResumeForm() {
                             type="button"
                             className="download-btn zip"
                             onClick={() => {
-                              const url = zipUrl(job);
-                              if (!url || !job.zipName) return;
                               void downloadJobFile(
-                                url,
-                                job.zipName,
+                                zipUrl(job),
+                                job.zipName || "package.zip",
                                 job.folderName,
+                                job,
+                                "zip",
                               );
                             }}
                           >

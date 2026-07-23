@@ -227,6 +227,17 @@ export async function forceBrowserDownload(
   url: string,
   fileName: string,
 ): Promise<void> {
+  // blob:/data: can be triggered directly — no network round-trip.
+  if (url.startsWith("blob:") || url.startsWith("data:")) {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    return;
+  }
+
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`Download failed (${response.status})`);
