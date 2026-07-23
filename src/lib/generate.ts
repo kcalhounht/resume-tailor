@@ -355,11 +355,23 @@ export async function generateTailoredPackage(
   const client = getLlmClient();
   const model = getLlmModel();
   const userPayload = JSON.stringify({
-    JOB_DESCRIPTION: {
+    INPUT_1_JOB_DESCRIPTION: {
       raw: rawJd.slice(0, 10_000),
       extracted,
       targetRole: extracted.jobTitle || extracted.type,
       targetCompany: extracted.company,
+    },
+    INPUT_2_CANDIDATE_RESUME: {
+      candidate: profile,
+      employment_periods: profile.experiences.map((e) => ({
+        company: e.company,
+        title: e.title,
+        period: e.period,
+        location: e.location,
+      })),
+      sourceResumeText: options?.sourceResumeText
+        ? options.sourceResumeText.slice(0, 12_000)
+        : undefined,
     },
     JD_FIT_CHECKLIST: {
       priority_order: [
@@ -386,25 +398,9 @@ export async function generateTailoredPackage(
       softSkills: extracted.softSkills || [],
       workMode: extracted.workMode || "",
       locationRequirement: extracted.locationRequirement || "",
-      mustIncludeSkills: [
-        ...extracted.hardTechnicalSkills,
-        ...extracted.requiredSkills,
-      ].slice(0, 28),
-    },
-    ORIGINAL_RESUME_CANDIDATE_EXPERIENCE: {
-      candidate: profile,
-      employment_periods: profile.experiences.map((e) => ({
-        company: e.company,
-        title: e.title,
-        period: e.period,
-        location: e.location,
-      })),
-      sourceResumeText: options?.sourceResumeText
-        ? options.sourceResumeText.slice(0, 12_000)
-        : undefined,
     },
     instructions:
-      "Maximize fit to EVERY JD field in JD_FIT_CHECKLIST. Mirror mustHave + required skills + responsibilities first. Keep periods exact. Never invent. Return complete JSON.",
+      "Follow Principal Resume Strategist steps 1–11. Use ONLY INPUT_1_JOB_DESCRIPTION + INPUT_2_CANDIDATE_RESUME. No invention. Return complete JSON.",
   });
 
   const baseMessages: Array<{
@@ -535,7 +531,7 @@ export async function generateTailoredPackage(
         action: "improve",
         prompt: IMPROVE_RESUME_PROMPT,
         critical:
-          "Previous draft used FORBIDDEN filler/template shells or was too thin. Rewrite every experience bullet uniquely per company in Ivan template voice. Expand Skills to 4–6 rich groups. Profile must be 2–3 paragraphs starting with exact JD title. Never reuse sentence skeletons across Visa/HP/Plutora-style roles.",
+          "Rewrite for JD fit and score >= 90 using Principal Resume Strategist rules. Fix lowest scoring category and missing requirements. Unique bullets per company; no filler shells; no invented metrics.",
         current_score: scored?.overall_score ?? 0,
         category_scores: scored?.category_scores ?? {},
         lowest_category: lowest?.[0] ?? null,
