@@ -1,0 +1,1 @@
+export const MIN_JOB_DESCRIPTION_CHARS = 80;
