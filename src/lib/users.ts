@@ -5,6 +5,7 @@ import type { CandidateProfile } from "./types";
 import { emptyProfile, parseProfileDraft } from "./profile";
 import {
   asIsoDate,
+  assertJsonStoreAllowed,
   hasDatabase,
   isUniqueViolation,
   withDatabase,
@@ -104,6 +105,7 @@ async function readStore(): Promise<UserStore> {
 }
 
 async function writeStore(store: UserStore) {
+  assertJsonStoreAllowed();
   const dir = path.dirname(storePath());
   await mkdir(dir, { recursive: true });
   const { store: normalized } = normalizeStore(store);

@@ -1,18 +1,56 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { isEphemeralFilesystem } from "./runtime";
+
+const POSTGRES_URL_RE = /^(postgres|postgresql):\/\//i;
+
+const DATABASE_URL_ENV_KEYS = [
+  "DATABASE_URL",
+  "POSTGRES_URL",
+  "POSTGRES_PRISMA_URL",
+  "STORAGE_URL",
+  "STORAGE_DATABASE_URL",
+  "NEON_DATABASE_URL",
+] as const;
+
+function isPostgresUrl(value: string) {
+  return POSTGRES_URL_RE.test(value);
+}
+
+/** Neon / Vercel may inject DATABASE_URL, POSTGRES_URL, or a custom prefix like STORAGE_URL. */
+export function getDatabaseUrl() {
+  for (const key of DATABASE_URL_ENV_KEYS) {
+    const value = process.env[key]?.trim();
+    if (value && isPostgresUrl(value)) return value;
+  }
+  return "";
+}
 
 export function hasDatabase() {
-  return Boolean(process.env.DATABASE_URL?.trim());
+  return Boolean(getDatabaseUrl());
+}
+
+export function assertJsonStoreAllowed() {
+  if (isEphemeralFilesystem()) {
+    throw new Error(
+      "Cannot save accounts on Vercel without Postgres. Set DATABASE_URL to your Neon connection string in the project environment variables. POSTGRES_URL and STORAGE_URL are also accepted.",
+    );
+  }
 }
 
 let sql: NeonQueryFunction<false, false> | null = null;
 let ready: Promise<void> | null = null;
+let sqlUrl: string | null = null;
 
 export function getSql() {
-  const url = process.env.DATABASE_URL?.trim();
+  const url = getDatabaseUrl();
   if (!url) {
     throw new Error("DATABASE_URL is not set. Add your Neon connection string.");
   }
-  if (!sql) sql = neon(url);
+  if (!sql || sqlUrl !== url) {
+    sql = neon(url);
+    sqlUrl = url;
+    ready = null;
+  }
   return sql;
 }
 

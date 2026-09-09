@@ -15,13 +15,9 @@ import {
   buildZipFileName,
   sanitizeCompanyFolderName,
 } from "./filenames";
+import { isEphemeralFilesystem } from "./runtime";
 
-/** Vercel/Lambda only allow writes under /tmp — cwd (/var/task) is read-only. */
-export function isEphemeralFilesystem() {
-  return Boolean(
-    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME,
-  );
-}
+export { isEphemeralFilesystem };
 
 export function getOutputRoot() {
   if (isEphemeralFilesystem()) {

@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
 import type { ExtractedJD } from "./types";
-import { asIsoDate, hasDatabase, withDatabase } from "./db";
+import { asIsoDate, assertJsonStoreAllowed, hasDatabase, withDatabase } from "./db";
 
 export type TailorRecordStatus = "done" | "error";
 
@@ -73,6 +73,7 @@ async function readStore(): Promise<RecordStore> {
 }
 
 async function writeStore(store: RecordStore) {
+  assertJsonStoreAllowed();
   const dir = path.dirname(storePath());
   await mkdir(dir, { recursive: true });
   await writeFile(storePath(), JSON.stringify(store, null, 2), "utf8");
