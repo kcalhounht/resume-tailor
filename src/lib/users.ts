@@ -5,11 +5,11 @@ import type { CandidateProfile } from "./types";
 import { emptyProfile, parseProfileDraft } from "./profile";
 import {
   asIsoDate,
-  assertJsonStoreAllowed,
   hasDatabase,
   isUniqueViolation,
   withDatabase,
 } from "./db";
+import { getDataRoot } from "./runtime";
 
 export type UserRole = "admin" | "user";
 export type UserPriority = "able" | "disable";
@@ -51,7 +51,7 @@ type UserRow = {
 };
 
 function storePath() {
-  return path.join(process.cwd(), "data", "users.json");
+  return path.join(getDataRoot(), "users.json");
 }
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -105,7 +105,6 @@ async function readStore(): Promise<UserStore> {
 }
 
 async function writeStore(store: UserStore) {
-  assertJsonStoreAllowed();
   const dir = path.dirname(storePath());
   await mkdir(dir, { recursive: true });
   const { store: normalized } = normalizeStore(store);

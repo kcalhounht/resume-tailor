@@ -2,7 +2,8 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
 import type { ExtractedJD } from "./types";
-import { asIsoDate, assertJsonStoreAllowed, hasDatabase, withDatabase } from "./db";
+import { asIsoDate, hasDatabase, withDatabase } from "./db";
+import { getDataRoot } from "./runtime";
 
 export type TailorRecordStatus = "done" | "error";
 
@@ -47,7 +48,7 @@ type RecordRow = {
 };
 
 function storePath() {
-  return path.join(process.cwd(), "data", "tailor-records.json");
+  return path.join(getDataRoot(), "tailor-records.json");
 }
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -73,7 +74,6 @@ async function readStore(): Promise<RecordStore> {
 }
 
 async function writeStore(store: RecordStore) {
-  assertJsonStoreAllowed();
   const dir = path.dirname(storePath());
   await mkdir(dir, { recursive: true });
   await writeFile(storePath(), JSON.stringify(store, null, 2), "utf8");

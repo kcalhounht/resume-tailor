@@ -1,40 +1,52 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import { isEphemeralFilesystem } from "./runtime";
 
 const POSTGRES_URL_RE = /^(postgres|postgresql):\/\//i;
-
-const DATABASE_URL_ENV_KEYS = [
-  "DATABASE_URL",
-  "POSTGRES_URL",
-  "POSTGRES_PRISMA_URL",
-  "STORAGE_URL",
-  "STORAGE_DATABASE_URL",
-  "NEON_DATABASE_URL",
-] as const;
 
 function isPostgresUrl(value: string) {
   return POSTGRES_URL_RE.test(value);
 }
 
-/** Neon / Vercel may inject DATABASE_URL, POSTGRES_URL, or a custom prefix like STORAGE_URL. */
-export function getDatabaseUrl() {
-  for (const key of DATABASE_URL_ENV_KEYS) {
-    const value = process.env[key]?.trim();
-    if (value && isPostgresUrl(value)) return value;
+function firstPostgresUrl(values: Array<string | undefined>) {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed && isPostgresUrl(trimmed)) return trimmed;
   }
   return "";
 }
 
-export function hasDatabase() {
-  return Boolean(getDatabaseUrl());
+function assembleUrlFromPgEnv() {
+  const host = process.env.PGHOST?.trim() || process.env.POSTGRES_HOST?.trim();
+  const user = process.env.PGUSER?.trim() || process.env.POSTGRES_USER?.trim();
+  const password =
+    process.env.PGPASSWORD?.trim() || process.env.POSTGRES_PASSWORD?.trim();
+  const database =
+    process.env.PGDATABASE?.trim() || process.env.POSTGRES_DATABASE?.trim();
+  if (!host || !user || !database) return "";
+  const auth = password
+    ? `${encodeURIComponent(user)}:${encodeURIComponent(password)}`
+    : encodeURIComponent(user);
+  return `postgresql://${auth}@${host}/${encodeURIComponent(database)}?sslmode=require`;
 }
 
-export function assertJsonStoreAllowed() {
-  if (isEphemeralFilesystem()) {
-    throw new Error(
-      "Cannot save accounts on Vercel without Postgres. Set DATABASE_URL to your Neon connection string in the project environment variables. POSTGRES_URL and STORAGE_URL are also accepted.",
-    );
-  }
+/**
+ * Neon / Vercel may inject DATABASE_URL, POSTGRES_URL, or a custom prefix
+ * like STORAGE_URL. Keys are read statically so Next.js includes them.
+ */
+export function getDatabaseUrl() {
+  return (
+    firstPostgresUrl([
+      process.env.DATABASE_URL,
+      process.env.POSTGRES_URL,
+      process.env.POSTGRES_PRISMA_URL,
+      process.env.STORAGE_URL,
+      process.env.STORAGE_DATABASE_URL,
+      process.env.NEON_DATABASE_URL,
+    ]) || assembleUrlFromPgEnv()
+  );
+}
+
+export function hasDatabase() {
+  return Boolean(getDatabaseUrl());
 }
 
 let sql: NeonQueryFunction<false, false> | null = null;
