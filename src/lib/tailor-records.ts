@@ -3,6 +3,7 @@ import path from "path";
 import { randomUUID } from "crypto";
 import type { ExtractedJD } from "./types";
 import { asIsoDate, hasDatabase, withDatabase } from "./db";
+import { getDataRoot } from "./runtime";
 
 export type TailorRecordStatus = "done" | "error";
 
@@ -47,7 +48,7 @@ type RecordRow = {
 };
 
 function storePath() {
-  return path.join(process.cwd(), "data", "tailor-records.json");
+  return path.join(getDataRoot(), "tailor-records.json");
 }
 
 let queue: Promise<unknown> = Promise.resolve();
