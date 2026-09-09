@@ -239,8 +239,9 @@ export default function AdminPanel({
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState<UserRole>("user");
-  const [newPriority, setNewPriority] = useState<UserPriority>("able");
+  const [newRole, setNewRole] = useState<UserRole | "">("");
+  const [newPriority, setNewPriority] = useState<UserPriority | "">("");
+  const [createFieldsLocked, setCreateFieldsLocked] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -312,90 +313,129 @@ export default function AdminPanel({
             </p>
           </div>
         </div>
-        <div className="field-grid">
-          <div className="field">
-            <label htmlFor="new-name">Name</label>
-            <input
-              id="new-name"
-              value={newName}
-              disabled={busy}
-              onChange={(event) => setNewName(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="new-email">Email</label>
-            <input
-              id="new-email"
-              type="email"
-              value={newEmail}
-              disabled={busy}
-              onChange={(event) => setNewEmail(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="new-password">Password</label>
-            <input
-              id="new-password"
-              type="password"
-              value={newPassword}
-              disabled={busy}
-              onChange={(event) => setNewPassword(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="new-role">Role</label>
-            <select
-              id="new-role"
-              value={newRole}
-              disabled={busy}
-              onChange={(event) => setNewRole(event.target.value as UserRole)}
-            >
-              <option value="user">user</option>
-              <option value="admin">admin</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="new-priority">Priority</label>
-            <select
-              id="new-priority"
-              value={newPriority}
-              disabled={busy}
-              onChange={(event) =>
-                setNewPriority(event.target.value as UserPriority)
-              }
-            >
-              <option value="able">able</option>
-              <option value="disable">disable</option>
-            </select>
-          </div>
-        </div>
-        <div className="composer-footer">
-          <button
-            type="button"
-            className="primary"
-            disabled={busy}
-            onClick={() => {
-              void run("Account created.", async () => {
-                const created = await createAccount({
-                  name: newName,
-                  email: newEmail,
-                  password: newPassword,
-                  role: newRole,
-                  priority: newPriority,
-                });
-                changeUsers((current) => [...current, created], created.id);
-                setUserTab("account");
-                setNewName("");
-                setNewEmail("");
-                setNewPassword("");
-                setNewRole("user");
-                setNewPriority("able");
+        <form
+          autoComplete="off"
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (!newRole) {
+              setError("Select a role.");
+              setMessage(null);
+              return;
+            }
+            if (!newPriority) {
+              setError("Select a priority.");
+              setMessage(null);
+              return;
+            }
+            void run("Account created.", async () => {
+              const created = await createAccount({
+                name: newName,
+                email: newEmail,
+                password: newPassword,
+                role: newRole,
+                priority: newPriority,
               });
-            }}
-          >
-            Create account
-          </button>
-        </div>
+              changeUsers((current) => [...current, created], created.id);
+              setUserTab("account");
+              setNewName("");
+              setNewEmail("");
+              setNewPassword("");
+              setNewRole("");
+              setNewPriority("");
+              setCreateFieldsLocked(true);
+            });
+          }}
+        >
+          <div aria-hidden className="autofill-trap">
+            <input type="text" name="username" autoComplete="username" tabIndex={-1} />
+            <input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              tabIndex={-1}
+            />
+          </div>
+          <div className="field-grid">
+            <div className="field">
+              <label htmlFor="new-name">Name</label>
+              <input
+                id="new-name"
+                name="create-account-name"
+                autoComplete="off"
+                value={newName}
+                disabled={busy}
+                readOnly={createFieldsLocked}
+                onFocus={() => setCreateFieldsLocked(false)}
+                onChange={(event) => setNewName(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="new-email">Email</label>
+              <input
+                id="new-email"
+                name="create-account-email"
+                type="email"
+                autoComplete="off"
+                value={newEmail}
+                disabled={busy}
+                readOnly={createFieldsLocked}
+                onFocus={() => setCreateFieldsLocked(false)}
+                onChange={(event) => setNewEmail(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="new-password">Password</label>
+              <input
+                id="new-password"
+                name="create-account-password"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                disabled={busy}
+                readOnly={createFieldsLocked}
+                onFocus={() => setCreateFieldsLocked(false)}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="new-role">Role</label>
+              <select
+                id="new-role"
+                name="create-account-role"
+                value={newRole}
+                disabled={busy}
+                onChange={(event) =>
+                  setNewRole(event.target.value as UserRole | "")
+                }
+              >
+                <option value=""></option>
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="new-priority">Priority</label>
+              <select
+                id="new-priority"
+                name="create-account-priority"
+                value={newPriority}
+                disabled={busy}
+                onChange={(event) =>
+                  setNewPriority(event.target.value as UserPriority | "")
+                }
+              >
+                <option value=""></option>
+                <option value="able">able</option>
+                <option value="disable">disable</option>
+              </select>
+            </div>
+          </div>
+          <div className="composer-footer">
+            <button type="submit" className="primary" disabled={busy}>
+              Create account
+            </button>
+          </div>
+        </form>
       </section>
 
       <div className="admin-layout">
