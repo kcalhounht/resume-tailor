@@ -4,6 +4,7 @@ import { listAdminTailorRecords } from "@/app/actions/admin";
 import { requireAdmin } from "@/app/actions/auth";
 import { getSettings } from "@/lib/settings";
 import { listPublicUsers } from "@/lib/users";
+import { parsePageStyle } from "@/lib/appearance";
 
 export const metadata = {
   title: "Database | Resume Tailor",
@@ -26,6 +27,7 @@ export default async function AdminPage() {
         email={session.email}
         isAdmin
         current="admin"
+        pageStyle={parsePageStyle(user.pageStyle)}
       />
       <main className="main admin-main">
         <AdminPanel

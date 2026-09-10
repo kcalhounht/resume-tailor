@@ -3,6 +3,7 @@ import SiteHeader from "@/components/SiteHeader";
 import { requireAdmin } from "@/app/actions/auth";
 import { getDefaultLlmModel } from "@/lib/llm";
 import { getSettings, toPublicSettings } from "@/lib/settings";
+import { parsePageStyle } from "@/lib/appearance";
 
 export const metadata = {
   title: "Settings | Resume Tailor",
@@ -10,7 +11,7 @@ export const metadata = {
 };
 
 export default async function AdminSettingsPage() {
-  const { session } = await requireAdmin();
+  const { session, user } = await requireAdmin();
   const settings = await getSettings();
 
   return (
@@ -21,6 +22,7 @@ export default async function AdminSettingsPage() {
         email={session.email}
         isAdmin
         current="settings"
+        pageStyle={parsePageStyle(user.pageStyle)}
       />
       <main className="main admin-main">
         <AdminSettings

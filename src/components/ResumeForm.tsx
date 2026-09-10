@@ -16,9 +16,11 @@ import {
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
 import { AccountPanel } from "@/components/AccountPanel";
+import { UserSettingsPanel } from "@/components/UserSettingsPanel";
 import type { CandidateProfile } from "@/lib/types";
 import type { SessionPayload } from "@/lib/session";
 import { saveProfile } from "@/app/actions/profile";
+import { DEFAULT_PAGE_STYLE, type PageStyle } from "@/lib/appearance";
 
 type StepStatus = "pending" | "active" | "done" | "error";
 
@@ -209,11 +211,15 @@ function StatusBadge({ status }: { status: JobProgress["status"] }) {
 export default function ResumeForm({
   initialProfile,
   session,
+  initialPageStyle = DEFAULT_PAGE_STYLE,
 }: {
   initialProfile?: CandidateProfile;
   session: SessionPayload;
+  initialPageStyle?: PageStyle;
 }) {
-  const [tab, setTab] = useState<"profile" | "generate" | "account">("profile");
+  const [tab, setTab] = useState<
+    "profile" | "generate" | "account" | "settings"
+  >("profile");
   const [profile, setProfile] = useState<CandidateProfile>(
     () => initialProfile ?? emptyProfile(),
   );
@@ -481,6 +487,17 @@ export default function ResumeForm({
         >
           Account
         </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-settings"
+          aria-selected={tab === "settings"}
+          aria-controls="panel-settings"
+          className={`tab${tab === "settings" ? " active" : ""}`}
+          onClick={() => setTab("settings")}
+        >
+          Settings
+        </button>
       </div>
 
       {tab === "profile" && (
@@ -539,6 +556,9 @@ export default function ResumeForm({
       )}
 
       {tab === "account" && <AccountPanel session={session} />}
+      {tab === "settings" && (
+        <UserSettingsPanel initialStyle={initialPageStyle} />
+      )}
 
       {tab === "generate" && (
         <>

@@ -10,6 +10,7 @@ import {
   withDatabase,
 } from "./db";
 import { getDataRoot } from "./runtime";
+import { parsePageStyle, type PageStyle } from "./appearance";
 
 export type UserRole = "admin" | "user";
 export type UserPriority = "able" | "disable";
@@ -23,6 +24,7 @@ export type StoredUser = {
   role: UserRole;
   priority: UserPriority;
   profile?: CandidateProfile;
+  pageStyle?: PageStyle;
 };
 
 export type PublicUser = {
@@ -48,6 +50,7 @@ type UserRow = {
   role: string;
   priority: string;
   profile: unknown;
+  page_style?: string | null;
 };
 
 function storePath() {
@@ -133,6 +136,7 @@ function rowToUser(row: UserRow): StoredUser {
     role: asRole(row.role),
     priority: asPriority(row.priority),
     profile: parseProfileDraft(row.profile) ?? undefined,
+    pageStyle: parsePageStyle(row.page_style),
   };
 }
 
@@ -263,11 +267,12 @@ export async function createUser(input: {
       role,
       priority,
       profile,
+      pageStyle: "forest",
     };
     try {
       await sql`
         INSERT INTO users (
-          id, name, email, password_hash, created_at, role, priority, profile
+          id, name, email, password_hash, created_at, role, priority, profile, page_style
         ) VALUES (
           ${user.id},
           ${user.name},
@@ -276,7 +281,8 @@ export async function createUser(input: {
           ${user.createdAt},
           ${user.role},
           ${user.priority},
-          ${user.profile ?? null}
+          ${user.profile ?? null},
+          ${user.pageStyle}
         )
       `;
     } catch (err) {
@@ -312,6 +318,7 @@ export async function createUser(input: {
           ? "disable"
           : "able",
       profile,
+      pageStyle: "forest",
     };
     store.users.push(user);
     await writeStore(store);
@@ -469,6 +476,28 @@ export async function deleteUser(userId: string): Promise<void> {
       }
     }
     store.users = store.users.filter((entry) => entry.id !== userId);
+    await writeStore(store);
+  });
+}
+
+export async function updateUserPageStyle(
+  userId: string,
+  pageStyle: PageStyle,
+): Promise<void> {
+  const next = parsePageStyle(pageStyle);
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const exists = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`;
+    if (!exists.length) throw new Error("Account not found.");
+    await sql`UPDATE users SET page_style = ${next} WHERE id = ${userId}`;
+    return;
+  }
+
+  await enqueue(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.id === userId);
+    if (!user) throw new Error("Account not found.");
+    user.pageStyle = next;
     await writeStore(store);
   });
 }

@@ -13,6 +13,11 @@ import {
 } from "@/lib/session";
 import { getSettings } from "@/lib/settings";
 import {
+  PAGE_STYLE_COOKIE,
+  parsePageStyle,
+  pageStyleCookieOptions,
+} from "@/lib/appearance";
+import {
   createUser,
   findUserByEmail,
   findUserById,
@@ -53,6 +58,7 @@ async function setSessionCookie(user: {
   id: string;
   email: string;
   name: string;
+  pageStyle?: string;
 }) {
   const jar = await cookies();
   jar.set(
@@ -63,6 +69,11 @@ async function setSessionCookie(user: {
       name: user.name,
     }),
     sessionCookieOptions(),
+  );
+  jar.set(
+    PAGE_STYLE_COOKIE,
+    parsePageStyle(user.pageStyle),
+    pageStyleCookieOptions(),
   );
 }
 
@@ -78,6 +89,7 @@ export async function requireSession(): Promise<SessionPayload> {
   if (!user || !isUserAble(user)) {
     const jar = await cookies();
     jar.delete(SESSION_COOKIE);
+    jar.delete(PAGE_STYLE_COOKIE);
     redirect("/signin");
   }
   return session;
@@ -172,5 +184,6 @@ export async function signin(
 export async function signout() {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
+  jar.delete(PAGE_STYLE_COOKIE);
   redirect("/signin");
 }

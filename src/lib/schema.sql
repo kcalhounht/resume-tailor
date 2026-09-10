@@ -9,7 +9,8 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   role TEXT NOT NULL CHECK (role IN ('admin', 'user')),
   priority TEXT NOT NULL CHECK (priority IN ('able', 'disable')),
-  profile JSONB
+  profile JSONB,
+  page_style TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tailor_records (

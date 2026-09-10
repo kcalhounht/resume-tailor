@@ -1,5 +1,10 @@
 import Link from "next/link";
 import SignOutButton from "@/components/SignOutButton";
+import { PageStyleSync } from "@/components/PageStyleSync";
+import {
+  DEFAULT_PAGE_STYLE,
+  type PageStyle,
+} from "@/lib/appearance";
 
 function NavItem({
   href,
@@ -25,14 +30,17 @@ export default function SiteHeader({
   email,
   isAdmin = false,
   current = "home",
+  pageStyle = DEFAULT_PAGE_STYLE,
 }: {
   name: string;
   email: string;
   isAdmin?: boolean;
   current?: "home" | "admin" | "settings";
+  pageStyle?: PageStyle;
 }) {
   return (
     <header className="topbar">
+      <PageStyleSync style={pageStyle} />
       <div className="topbar-inner">
         <div className="brand-block">
           <p className="brand">Resume Tailor</p>
