@@ -13,10 +13,13 @@ export async function getLlmModel() {
   return settings.llmModel || getDefaultLlmModel();
 }
 
-export async function getLlmClient() {
+export async function getLlmApiKey() {
   const settings = await getSettings();
-  const apiKey =
-    settings.openRouterApiKey || process.env.OPENROUTER_API_KEY?.trim() || "";
+  return settings.openRouterApiKey || process.env.OPENROUTER_API_KEY?.trim() || "";
+}
+
+export async function getLlmClient() {
+  const apiKey = await getLlmApiKey();
   if (!apiKey) {
     throw new Error(
       "OpenRouter API key is not set. Add it on Admin → Settings, or set OPENROUTER_API_KEY.",

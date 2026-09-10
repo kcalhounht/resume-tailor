@@ -11,11 +11,13 @@ import { MIN_JOB_DESCRIPTION_CHARS } from "@/lib/limits";
 import {
   emptyProfile,
   isProfileReady,
+  mergeImportedProfile,
   normalizeProfile,
   profileBlockReason,
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
 import { AccountPanel } from "@/components/AccountPanel";
+import { ResumePdfImport } from "@/components/ResumePdfImport";
 import { UserSettingsPanel } from "@/components/UserSettingsPanel";
 import type { CandidateProfile } from "@/lib/types";
 import type { SessionPayload } from "@/lib/session";
@@ -512,9 +514,26 @@ export default function ResumeForm({
               <h2>Your profile</h2>
               <p className="hint">
                 Required before generate: name plus one experience with company,
-                title, period, and location.
+                title, period, and location. Or upload a resume PDF to fill
+                these fields.
               </p>
             </div>
+            <ResumePdfImport
+              disabled={saving || batchBusy}
+              onImported={(imported) => {
+                setError(null);
+                setProfile((current) =>
+                  mergeImportedProfile(current, imported),
+                );
+                setSaveMessage(
+                  "Filled from your resume. Review the fields, then Save.",
+                );
+              }}
+              onError={(message) => {
+                setSaveMessage(null);
+                setError(message);
+              }}
+            />
           </div>
 
           <CandidateForm

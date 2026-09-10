@@ -157,6 +157,32 @@ export function isProfileReady(profile: CandidateProfile): boolean {
   );
 }
 
+export function mergeImportedProfile(
+  current: CandidateProfile,
+  imported: CandidateProfile,
+): CandidateProfile {
+  const next = parseProfileDraft(imported) ?? emptyProfile();
+  const personal: PersonalInfo = {
+    name: next.personal.name || current.personal.name,
+    phone: next.personal.phone || current.personal.phone,
+    linkedin: next.personal.linkedin || current.personal.linkedin,
+    portfolio: next.personal.portfolio || current.personal.portfolio,
+    email: next.personal.email || current.personal.email,
+    location: next.personal.location || current.personal.location,
+  };
+  const experiences = next.experiences.filter(
+    (exp) => exp.company.trim() || exp.title.trim(),
+  );
+  const education = next.education.filter(
+    (edu) => edu.school.trim() || edu.degree.trim(),
+  );
+  return {
+    personal,
+    experiences: experiences.length ? experiences : current.experiences,
+    education: education.length ? education : current.education,
+  };
+}
+
 export function profileBlockReason(profile: CandidateProfile): string | null {
   const normalized = normalizeProfile(profile);
   const missing: string[] = [];
