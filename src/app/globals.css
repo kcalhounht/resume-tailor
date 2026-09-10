@@ -356,10 +356,6 @@ a {
   gap: 0.7rem 0.75rem;
 }
 
-.field-grid > .field:nth-child(5) {
-  grid-column: 1 / -1;
-}
-
 .field {
   display: grid;
   gap: 0.28rem;
@@ -415,10 +411,6 @@ select:focus {
 @media (max-width: 640px) {
   .field-grid {
     grid-template-columns: 1fr;
-  }
-
-  .field-grid > .field:nth-child(5) {
-    grid-column: auto;
   }
 }
 

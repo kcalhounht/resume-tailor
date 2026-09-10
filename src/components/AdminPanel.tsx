@@ -41,6 +41,8 @@ function AccountTab({
   const [role, setRole] = useState<UserRole>(selected.role);
   const [priority, setPriority] = useState<UserPriority>(selected.priority);
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordFieldsLocked, setPasswordFieldsLocked] = useState(true);
 
   return (
     <>
@@ -103,11 +105,30 @@ function AccountTab({
           <label htmlFor="account-password">New password</label>
           <input
             id="account-password"
+            name="account-new-password"
             type="password"
+            autoComplete="new-password"
             value={password}
             disabled={busy}
             placeholder="Leave blank to keep"
+            readOnly={passwordFieldsLocked}
+            onFocus={() => setPasswordFieldsLocked(false)}
             onChange={(event) => setPassword(event.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="account-confirm-password">Confirm new password</label>
+          <input
+            id="account-confirm-password"
+            name="account-confirm-password"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            disabled={busy}
+            placeholder="Required if changing password"
+            readOnly={passwordFieldsLocked}
+            onFocus={() => setPasswordFieldsLocked(false)}
+            onChange={(event) => setConfirmPassword(event.target.value)}
           />
         </div>
       </div>
@@ -119,6 +140,17 @@ function AccountTab({
           disabled={busy}
           onClick={() => {
             void onBusy("Account saved.", async () => {
+              if (password || confirmPassword) {
+                if (password.length < 8) {
+                  throw new Error("Password must be at least 8 characters.");
+                }
+                if (!confirmPassword) {
+                  throw new Error("Confirm the new password.");
+                }
+                if (password !== confirmPassword) {
+                  throw new Error("Passwords do not match.");
+                }
+              }
               const updated = await updateAccount(selected.id, {
                 name,
                 email,
@@ -134,6 +166,8 @@ function AccountTab({
                 ),
               );
               setPassword("");
+              setConfirmPassword("");
+              setPasswordFieldsLocked(true);
             });
           }}
         >
@@ -239,6 +273,7 @@ export default function AdminPanel({
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [newConfirmPassword, setNewConfirmPassword] = useState("");
   const [newRole, setNewRole] = useState<UserRole | "">("");
   const [newPriority, setNewPriority] = useState<UserPriority | "">("");
   const [createFieldsLocked, setCreateFieldsLocked] = useState(true);
@@ -327,6 +362,16 @@ export default function AdminPanel({
               setMessage(null);
               return;
             }
+            if (!newConfirmPassword) {
+              setError("Confirm the password.");
+              setMessage(null);
+              return;
+            }
+            if (newPassword !== newConfirmPassword) {
+              setError("Passwords do not match.");
+              setMessage(null);
+              return;
+            }
             void run("Account created.", async () => {
               const created = await createAccount({
                 name: newName,
@@ -340,6 +385,7 @@ export default function AdminPanel({
               setNewName("");
               setNewEmail("");
               setNewPassword("");
+              setNewConfirmPassword("");
               setNewRole("");
               setNewPriority("");
               setCreateFieldsLocked(true);
@@ -395,6 +441,20 @@ export default function AdminPanel({
                 readOnly={createFieldsLocked}
                 onFocus={() => setCreateFieldsLocked(false)}
                 onChange={(event) => setNewPassword(event.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="new-confirm-password">Confirm password</label>
+              <input
+                id="new-confirm-password"
+                name="create-account-confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={newConfirmPassword}
+                disabled={busy}
+                readOnly={createFieldsLocked}
+                onFocus={() => setCreateFieldsLocked(false)}
+                onChange={(event) => setNewConfirmPassword(event.target.value)}
               />
             </div>
             <div className="field">
