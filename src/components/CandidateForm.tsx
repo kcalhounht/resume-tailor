@@ -39,15 +39,7 @@ function Field({
   required?: boolean;
 }) {
   return (
-    <div
-      className={[
-        "field",
-        required ? "required" : "",
-        className ?? "",
-      ]
-        .filter(Boolean)
-        .join(" ")}
-    >
+    <div className={className ? `field ${className}` : "field"}>
       <label htmlFor={id}>{label}</label>
       <input
         id={id}

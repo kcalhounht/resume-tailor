@@ -563,11 +563,6 @@ a {
   letter-spacing: 0.02em;
 }
 
-.field.required label::after {
-  content: " *";
-  color: var(--accent);
-}
-
 input {
   width: 100%;
   border: 1px solid var(--line-strong);
