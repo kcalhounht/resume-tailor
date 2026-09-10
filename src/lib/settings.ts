@@ -17,6 +17,7 @@ export type PublicSettings = {
   defaultPriority: UserPriority;
   allowSignup: boolean;
   llmModel: string;
+  openRouterApiKey: string;
   hasOpenRouterKey: boolean;
 };
 
@@ -67,14 +68,15 @@ export function parseSettings(value: unknown): AppSettings {
 }
 
 export function toPublicSettings(settings: AppSettings): PublicSettings {
+  const openRouterApiKey =
+    settings.openRouterApiKey || process.env.OPENROUTER_API_KEY?.trim() || "";
   return {
     defaultRole: settings.defaultRole,
     defaultPriority: settings.defaultPriority,
     allowSignup: settings.allowSignup,
     llmModel: settings.llmModel,
-    hasOpenRouterKey: Boolean(
-      settings.openRouterApiKey || process.env.OPENROUTER_API_KEY?.trim(),
-    ),
+    openRouterApiKey,
+    hasOpenRouterKey: Boolean(openRouterApiKey),
   };
 }
 

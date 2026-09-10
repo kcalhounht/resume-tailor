@@ -20,9 +20,8 @@ export default function AdminSettings({
   );
   const [allowSignup, setAllowSignup] = useState(initialSettings.allowSignup);
   const [llmModel, setLlmModel] = useState(initialSettings.llmModel);
-  const [openRouterApiKey, setOpenRouterApiKey] = useState("");
-  const [hasOpenRouterKey, setHasOpenRouterKey] = useState(
-    initialSettings.hasOpenRouterKey,
+  const [openRouterApiKey, setOpenRouterApiKey] = useState(
+    initialSettings.openRouterApiKey,
   );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -55,8 +54,7 @@ export default function AdminSettings({
             openRouterApiKey,
           })
             .then((saved) => {
-              setHasOpenRouterKey(saved.hasOpenRouterKey);
-              setOpenRouterApiKey("");
+              setOpenRouterApiKey(saved.openRouterApiKey);
               setMessage("Settings saved.");
             })
             .catch((err) =>
@@ -102,22 +100,21 @@ export default function AdminSettings({
             </p>
           </div>
           <div className="field field-span">
-            <label htmlFor="setting-openrouter-key">OpenRouter API key</label>
+            <label htmlFor="openRouterkey-input">OpenRouter API key</label>
             <input
-              id="setting-openrouter-key"
-              name="setting-openrouter-key"
-              type="password"
-              autoComplete="new-password"
+              id="openRouterkey-input"
+              name="openRouterkey-input"
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
               value={openRouterApiKey}
               disabled={busy}
-              placeholder={
-                hasOpenRouterKey ? "Leave blank to keep the saved key" : ""
-              }
+              placeholder="sk-or-…"
               onChange={(event) => setOpenRouterApiKey(event.target.value)}
             />
             <p className="hint">
-              {hasOpenRouterKey
-                ? "A key is already set. Paste a new one only if you want to replace it."
+              {openRouterApiKey.trim()
+                ? "This key is used for extraction and generation. Save after you change it."
                 : "Get a key at openrouter.ai/keys. After you save, you can generate resumes."}
             </p>
           </div>
