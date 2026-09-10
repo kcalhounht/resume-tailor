@@ -146,7 +146,7 @@ export default function CandidateForm({
         </div>
         <div className="profile-list">
           {profile.experiences.map((exp, index) => (
-            <div key={exp.id} className="profile-card">
+            <div key={exp.id || `experience-${index}`} className="profile-card">
               <div className="jd-item-head">
                 <label htmlFor={`exp-company-${index}`}>Role {index + 1}</label>
                 {profile.experiences.length > 1 && (
@@ -213,7 +213,10 @@ export default function CandidateForm({
           onClick={() =>
             onChange({
               ...profile,
-              experiences: [...profile.experiences, emptyExperience()],
+              experiences: [
+                ...(profile.experiences ?? []),
+                emptyExperience(),
+              ],
             })
           }
         >
@@ -227,7 +230,7 @@ export default function CandidateForm({
         </div>
         <div className="profile-list">
           {profile.education.map((edu, index) => (
-            <div key={edu.id} className="profile-card">
+            <div key={edu.id || `education-${index}`} className="profile-card">
               <div className="jd-item-head">
                 <label htmlFor={`edu-school-${index}`}>
                   School {index + 1}
@@ -294,7 +297,7 @@ export default function CandidateForm({
           onClick={() =>
             onChange({
               ...profile,
-              education: [...profile.education, emptyEducation()],
+              education: [...(profile.education ?? []), emptyEducation()],
             })
           }
         >

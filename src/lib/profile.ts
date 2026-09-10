@@ -1,10 +1,17 @@
-import { randomUUID } from "crypto";
 import type {
   CandidateProfile,
   EducationInput,
   ExperienceInput,
   PersonalInfo,
 } from "./types";
+
+function newItemId(): string {
+  const webCrypto = globalThis.crypto;
+  if (webCrypto && typeof webCrypto.randomUUID === "function") {
+    return webCrypto.randomUUID();
+  }
+  return `id-${Date.now().toString(16)}-${Math.random().toString(16).slice(2)}`;
+}
 
 export function emptyPersonal(): PersonalInfo {
   return {
@@ -19,7 +26,7 @@ export function emptyPersonal(): PersonalInfo {
 
 export function emptyExperience(): ExperienceInput {
   return {
-    id: randomUUID(),
+    id: newItemId(),
     company: "",
     title: "",
     period: "",
@@ -29,7 +36,7 @@ export function emptyExperience(): ExperienceInput {
 
 export function emptyEducation(): EducationInput {
   return {
-    id: randomUUID(),
+    id: newItemId(),
     school: "",
     discipline: "",
     degree: "",
@@ -60,7 +67,7 @@ export function parseProfileDraft(value: unknown): CandidateProfile | null {
     ? value.experiences.map((item) => {
         if (!isRecord(item)) return emptyExperience();
         return {
-          id: asString(item.id) || randomUUID(),
+          id: asString(item.id) || newItemId(),
           company: asString(item.company),
           title: asString(item.title),
           period: asString(item.period),
@@ -72,7 +79,7 @@ export function parseProfileDraft(value: unknown): CandidateProfile | null {
     ? value.education.map((item) => {
         if (!isRecord(item)) return emptyEducation();
         return {
-          id: asString(item.id) || randomUUID(),
+          id: asString(item.id) || newItemId(),
           school: asString(item.school),
           discipline: asString(item.discipline),
           degree: asString(item.degree),
@@ -107,7 +114,7 @@ export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
 
   const experiences = profile.experiences
     .map((exp) => ({
-      id: exp.id || randomUUID(),
+      id: exp.id || newItemId(),
       company: exp.company.trim(),
       title: exp.title.trim(),
       period: exp.period.trim(),
@@ -117,7 +124,7 @@ export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
 
   const education = profile.education
     .map((edu) => ({
-      id: edu.id || randomUUID(),
+      id: edu.id || newItemId(),
       school: edu.school.trim(),
       discipline: edu.discipline.trim(),
       degree: edu.degree.trim(),
