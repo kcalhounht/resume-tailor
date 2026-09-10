@@ -50,7 +50,7 @@ export default function SiteHeader({
             {isAdmin ? (
               <>
                 <NavItem href="/admin" current={current === "admin"}>
-                  Admin
+                  Database
                 </NavItem>
                 <NavItem href="/admin/settings" current={current === "settings"}>
                   Settings

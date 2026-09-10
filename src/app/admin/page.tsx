@@ -6,7 +6,7 @@ import { getSettings } from "@/lib/settings";
 import { listPublicUsers } from "@/lib/users";
 
 export const metadata = {
-  title: "Admin | Resume Tailor",
+  title: "Database | Resume Tailor",
   description: "Administrator database for accounts, profiles, and tailoring records.",
 };
 
