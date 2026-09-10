@@ -274,8 +274,8 @@ export default function AdminPanel({
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newConfirmPassword, setNewConfirmPassword] = useState("");
-  const [newRole, setNewRole] = useState<UserRole | "">("");
-  const [newPriority, setNewPriority] = useState<UserPriority | "">("");
+  const [newRole, setNewRole] = useState<UserRole>("user");
+  const [newPriority, setNewPriority] = useState<UserPriority>("disable");
   const [createFieldsLocked, setCreateFieldsLocked] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -352,16 +352,6 @@ export default function AdminPanel({
           autoComplete="off"
           onSubmit={(event) => {
             event.preventDefault();
-            if (!newRole) {
-              setError("Select a role.");
-              setMessage(null);
-              return;
-            }
-            if (!newPriority) {
-              setError("Select a priority.");
-              setMessage(null);
-              return;
-            }
             if (!newConfirmPassword) {
               setError("Confirm the password.");
               setMessage(null);
@@ -386,8 +376,8 @@ export default function AdminPanel({
               setNewEmail("");
               setNewPassword("");
               setNewConfirmPassword("");
-              setNewRole("");
-              setNewPriority("");
+              setNewRole("user");
+              setNewPriority("disable");
               setCreateFieldsLocked(true);
             });
           }}
@@ -465,10 +455,9 @@ export default function AdminPanel({
                 value={newRole}
                 disabled={busy}
                 onChange={(event) =>
-                  setNewRole(event.target.value as UserRole | "")
+                  setNewRole(event.target.value as UserRole)
                 }
               >
-                <option value=""></option>
                 <option value="user">user</option>
                 <option value="admin">admin</option>
               </select>
@@ -481,10 +470,9 @@ export default function AdminPanel({
                 value={newPriority}
                 disabled={busy}
                 onChange={(event) =>
-                  setNewPriority(event.target.value as UserPriority | "")
+                  setNewPriority(event.target.value as UserPriority)
                 }
               >
-                <option value=""></option>
                 <option value="able">able</option>
                 <option value="disable">disable</option>
               </select>
