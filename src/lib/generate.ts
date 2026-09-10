@@ -29,7 +29,7 @@ Hard rules:
 7. Mirror JD terminology and hard skills heavily for ATS scoring.
 8. keywords: array of important JD keywords/phrases that should be bolded.
 9. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
-10. Keep the candidate's company names, periods, locations, and education exactly as given. You may refine job titles slightly if plausible.
+10. Keep the candidate's company names, periods, job locations, schools, disciplines, degrees, and education periods exactly as given. You may refine job titles slightly if plausible.
 11. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
 12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
 13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
@@ -41,7 +41,7 @@ JSON shape:
     "summary": string,
     "skills": [{ "category": string, "items": string[] }],
     "experiences": [{ "company": string, "title": string, "period": string, "location": string, "overview": string, "bullets": string[] }],
-    "education": [{ "school": string, "degree": string, "period": string, "location": string }],
+    "education": [{ "school": string, "discipline": string, "degree": string, "period": string }],
     "keywords": string[]
   },
   "coverLetter": string
@@ -251,9 +251,9 @@ function normalizeResume(
       Array.isArray(safe.education) && safe.education.length
         ? safe.education.map((edu) => ({
             school: sanitizePlainText(edu.school),
+            discipline: sanitizePlainText(edu.discipline),
             degree: sanitizePlainText(edu.degree),
             period: sanitizePlainText(edu.period),
-            location: sanitizePlainText(edu.location),
           }))
         : profile.education,
     keywords: keywords.map((k) => sanitizePlainText(k)).filter(Boolean),

@@ -25,6 +25,7 @@ function Field({
   placeholder,
   type = "text",
   disabled,
+  className,
 }: {
   id: string;
   label: string;
@@ -33,9 +34,10 @@ function Field({
   placeholder?: string;
   type?: string;
   disabled?: boolean;
+  className?: string;
 }) {
   return (
-    <div className="field">
+    <div className={className ? `field ${className}` : "field"}>
       <label htmlFor={id}>{label}</label>
       <input
         id={id}
@@ -127,6 +129,7 @@ export default function CandidateForm({
           onChange={(value) => setPersonal("linkedin", value)}
           placeholder="https://www.linkedin.com/in/…"
           disabled={disabled}
+          className="field-span"
         />
       </div>
 
@@ -248,11 +251,21 @@ export default function CandidateForm({
                   disabled={disabled}
                 />
                 <Field
+                  id={`edu-discipline-${index}`}
+                  label="Discipline"
+                  value={edu.discipline}
+                  onChange={(value) =>
+                    setEducation(index, { discipline: value })
+                  }
+                  placeholder="Computer Science"
+                  disabled={disabled}
+                />
+                <Field
                   id={`edu-degree-${index}`}
                   label="Degree"
                   value={edu.degree}
                   onChange={(value) => setEducation(index, { degree: value })}
-                  placeholder="B.S. Computer Science"
+                  placeholder="B.S."
                   disabled={disabled}
                 />
                 <Field
@@ -261,16 +274,6 @@ export default function CandidateForm({
                   value={edu.period}
                   onChange={(value) => setEducation(index, { period: value })}
                   placeholder="2016 – 2020"
-                  disabled={disabled}
-                />
-                <Field
-                  id={`edu-location-${index}`}
-                  label="Location"
-                  value={edu.location}
-                  onChange={(value) =>
-                    setEducation(index, { location: value })
-                  }
-                  placeholder="City, Country"
                   disabled={disabled}
                 />
               </div>

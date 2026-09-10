@@ -9,7 +9,7 @@ import {
   UnderlineType,
 } from "docx";
 import PDFDocument from "pdfkit";
-import type { PersonalInfo, TailoredResume } from "./types";
+import type { EducationInput, PersonalInfo, TailoredResume } from "./types";
 import { segmentWithKeywords } from "./keywords";
 
 const LINK_COLOR = "1F4E79";
@@ -36,6 +36,10 @@ function linkedInHref(url: string): string {
 function phoneHref(phone: string): string {
   const digits = phone.replace(/[^\d+]/g, "");
   return `tel:${digits}`;
+}
+
+function educationSubline(edu: EducationInput): string {
+  return [edu.school, edu.discipline, edu.period].filter(Boolean).join("  |  ");
 }
 
 function emailHref(email: string): string {
@@ -299,7 +303,7 @@ export async function buildResumeDocx(
         spacing: { after: 100 },
         children: [
           new TextRun({
-            text: `${edu.school}  |  ${edu.location}  |  ${edu.period}`,
+            text: educationSubline(edu),
             italics: true,
             size: 20,
             font: "Calibri",
@@ -657,7 +661,7 @@ export async function buildResumePdf(
       doc
         .font("Helvetica-Oblique")
         .fontSize(10)
-        .text(`${edu.school}  |  ${edu.location}  |  ${edu.period}`);
+        .text(educationSubline(edu));
     }
 
     doc.end();

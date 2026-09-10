@@ -24,9 +24,9 @@ export interface ExperienceInput {
 
 export interface EducationInput {
   school: string;
+  discipline: string;
   degree: string;
   period: string;
-  location: string;
 }
 
 export interface CandidateProfile {

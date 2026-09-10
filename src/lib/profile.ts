@@ -27,9 +27,9 @@ export function emptyExperience(): ExperienceInput {
 export function emptyEducation(): EducationInput {
   return {
     school: "",
+    discipline: "",
     degree: "",
     period: "",
-    location: "",
   };
 }
 
@@ -68,9 +68,9 @@ export function parseProfileDraft(value: unknown): CandidateProfile | null {
         if (!isRecord(item)) return emptyEducation();
         return {
           school: asString(item.school),
+          discipline: asString(item.discipline),
           degree: asString(item.degree),
           period: asString(item.period),
-          location: asString(item.location),
         };
       })
     : [];
@@ -109,9 +109,9 @@ export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
   const education = profile.education
     .map((edu) => ({
       school: edu.school.trim(),
+      discipline: edu.discipline.trim(),
       degree: edu.degree.trim(),
       period: edu.period.trim(),
-      location: edu.location.trim(),
     }))
     .filter(isEducationComplete);
 
@@ -129,10 +129,7 @@ export function isExperienceComplete(exp: ExperienceInput): boolean {
 
 export function isEducationComplete(edu: EducationInput): boolean {
   return Boolean(
-    edu.school.trim() &&
-      edu.degree.trim() &&
-      edu.period.trim() &&
-      edu.location.trim(),
+    edu.school.trim() && edu.degree.trim() && edu.period.trim(),
   );
 }
 

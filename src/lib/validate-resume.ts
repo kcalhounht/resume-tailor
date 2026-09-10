@@ -249,12 +249,12 @@ export function validateAndFixResume(
     Array.isArray(resume.education) && resume.education.length
       ? resume.education.map((edu) => ({
           school: sanitizePlainText(edu.school) || profile.education[0]?.school || "",
+          discipline:
+            sanitizePlainText(edu.discipline) ||
+            profile.education[0]?.discipline ||
+            "",
           degree: sanitizePlainText(edu.degree) || profile.education[0]?.degree || "",
           period: sanitizePlainText(edu.period) || profile.education[0]?.period || "",
-          location:
-            sanitizePlainText(edu.location) ||
-            profile.education[0]?.location ||
-            "",
         }))
       : profile.education;
 
@@ -270,9 +270,9 @@ export function validateAndFixResume(
     }
     return {
       school: edu.school,
+      discipline: edu.discipline,
       degree: generated.degree || edu.degree,
       period: edu.period,
-      location: edu.location,
     };
   });
 
