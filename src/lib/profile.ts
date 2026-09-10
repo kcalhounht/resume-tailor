@@ -60,6 +60,18 @@ function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isValidProfileEmail(value: string): boolean {
+  return EMAIL_RE.test(value.trim());
+}
+
+function joinList(items: string[]): string {
+  if (items.length <= 1) return items[0] ?? "";
+  if (items.length === 2) return `${items[0]} and ${items[1]}`;
+  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
+}
+
 export function parseProfileDraft(value: unknown): CandidateProfile | null {
   if (!isRecord(value) || !isRecord(value.personal)) return null;
 
@@ -146,14 +158,29 @@ export function isExperienceComplete(exp: ExperienceInput): boolean {
 
 export function isEducationComplete(edu: EducationInput): boolean {
   return Boolean(
-    edu.school.trim() && edu.degree.trim() && edu.period.trim(),
+    edu.school.trim() &&
+      edu.discipline.trim() &&
+      edu.degree.trim() &&
+      edu.period.trim(),
+  );
+}
+
+export function isPersonalComplete(personal: PersonalInfo): boolean {
+  return Boolean(
+    personal.name.trim().length >= 2 &&
+      isValidProfileEmail(personal.email) &&
+      personal.location.trim() &&
+      personal.phone.trim() &&
+      personal.linkedin.trim(),
   );
 }
 
 export function isProfileReady(profile: CandidateProfile): boolean {
   const normalized = normalizeProfile(profile);
   return (
-    normalized.personal.name.length >= 2 && normalized.experiences.length > 0
+    isPersonalComplete(normalized.personal) &&
+    normalized.experiences.length > 0 &&
+    normalized.education.length > 0
   );
 }
 
@@ -186,12 +213,19 @@ export function mergeImportedProfile(
 export function profileBlockReason(profile: CandidateProfile): string | null {
   const normalized = normalizeProfile(profile);
   const missing: string[] = [];
-  if (normalized.personal.name.length < 2) missing.push("your name");
+  const personal = normalized.personal;
+  if (personal.name.length < 2) missing.push("your name");
+  if (!personal.email.trim()) missing.push("email");
+  else if (!isValidProfileEmail(personal.email)) missing.push("a valid email");
+  if (!personal.location.trim()) missing.push("location");
+  if (!personal.phone.trim()) missing.push("phone");
+  if (!personal.linkedin.trim()) missing.push("LinkedIn");
   if (normalized.experiences.length === 0) {
-    missing.push(
-      "one complete experience (company, title, period, and location)",
-    );
+    missing.push("at least one experience");
+  }
+  if (normalized.education.length === 0) {
+    missing.push("at least one education");
   }
   if (!missing.length) return null;
-  return `Fill ${missing.join(" and ")} in Your background, then generate.`;
+  return `Fill ${joinList(missing)}. Portfolio is optional.`;
 }

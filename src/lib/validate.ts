@@ -1,21 +1,19 @@
 import { z } from "zod";
 import { MIN_JOB_DESCRIPTION_CHARS } from "./limits";
-import { parseProfileDraft } from "./profile";
+import { isValidProfileEmail, parseProfileDraft } from "./profile";
 import type { CandidateProfile } from "./types";
 
 const personalSchema = z.object({
   name: z.string().trim().min(2, "Name is required"),
-  phone: z.string().trim(),
-  linkedin: z.string().trim(),
+  phone: z.string().trim().min(1, "Phone is required"),
+  linkedin: z.string().trim().min(1, "LinkedIn is required"),
   portfolio: z.string().trim().optional().default(""),
   email: z
     .string()
     .trim()
-    .refine(
-      (value) => value === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
-      "Enter a valid email",
-    ),
-  location: z.string().trim(),
+    .min(1, "Email is required")
+    .refine(isValidProfileEmail, "Enter a valid email"),
+  location: z.string().trim().min(1, "Location is required"),
 });
 
 const experienceSchema = z.object({
@@ -29,7 +27,7 @@ const experienceSchema = z.object({
 const educationSchema = z.object({
   id: z.string().optional(),
   school: z.string().trim().min(1, "School is required"),
-  discipline: z.string().trim(),
+  discipline: z.string().trim().min(1, "Discipline is required"),
   degree: z.string().trim().min(1, "Degree is required"),
   period: z.string().trim().min(1, "Education period is required"),
 });
@@ -39,7 +37,9 @@ export const candidateProfileSchema = z.object({
   experiences: z
     .array(experienceSchema)
     .min(1, "Add at least one work experience"),
-  education: z.array(educationSchema),
+  education: z
+    .array(educationSchema)
+    .min(1, "Add at least one education"),
 });
 
 export const tailorRequestSchema = z

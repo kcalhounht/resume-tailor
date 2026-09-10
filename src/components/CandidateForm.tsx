@@ -26,6 +26,7 @@ function Field({
   type = "text",
   disabled,
   className,
+  required = true,
 }: {
   id: string;
   label: string;
@@ -35,9 +36,18 @@ function Field({
   type?: string;
   disabled?: boolean;
   className?: string;
+  required?: boolean;
 }) {
   return (
-    <div className={className ? `field ${className}` : "field"}>
+    <div
+      className={[
+        "field",
+        required ? "required" : "",
+        className ?? "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
       <label htmlFor={id}>{label}</label>
       <input
         id={id}
@@ -45,6 +55,8 @@ function Field({
         value={value}
         disabled={disabled}
         placeholder={placeholder}
+        required={required}
+        aria-required={required}
         onChange={(e) => onChange(e.target.value)}
         autoComplete="off"
         spellCheck={false}
@@ -135,8 +147,9 @@ export default function CandidateForm({
           label="Portfolio"
           value={profile.personal.portfolio}
           onChange={(value) => setPersonal("portfolio", value)}
-          placeholder="https://your-site.com (optional)"
+          placeholder="https://your-site.com"
           disabled={disabled}
+          required={false}
         />
       </div>
 

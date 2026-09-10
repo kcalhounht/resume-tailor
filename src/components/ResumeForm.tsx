@@ -513,9 +513,9 @@ export default function ResumeForm({
             <div>
               <h2>Your profile</h2>
               <p className="hint">
-                Required before generate: name plus one experience with company,
-                title, period, and location. Or upload a resume PDF to fill
-                these fields.
+                All fields are required except Portfolio. Include at least one
+                experience and one education, or upload a resume PDF to fill
+                them.
               </p>
             </div>
             <ResumePdfImport
@@ -554,12 +554,21 @@ export default function ResumeForm({
                 void (async () => {
                   setError(null);
                   setSaveMessage(null);
+                  const reason = profileBlockReason(profile);
+                  if (reason) {
+                    setError(reason);
+                    return;
+                  }
                   setSaving(true);
                   try {
                     await saveProfile(profile);
                     setSaveMessage("Profile saved.");
-                  } catch {
-                    setError("Could not save your profile.");
+                  } catch (err) {
+                    setError(
+                      err instanceof Error
+                        ? err.message
+                        : "Could not save your profile.",
+                    );
                   } finally {
                     setSaving(false);
                   }
