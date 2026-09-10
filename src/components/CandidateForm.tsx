@@ -98,20 +98,20 @@ export default function CandidateForm({
           disabled={disabled}
         />
         <Field
-          id="candidate-location"
-          label="Location"
-          value={profile.personal.location}
-          onChange={(value) => setPersonal("location", value)}
-          placeholder="City, Country"
-          disabled={disabled}
-        />
-        <Field
           id="candidate-email"
           label="Email"
           type="email"
           value={profile.personal.email}
           onChange={(value) => setPersonal("email", value)}
           placeholder="you@email.com"
+          disabled={disabled}
+        />
+        <Field
+          id="candidate-location"
+          label="Location"
+          value={profile.personal.location}
+          onChange={(value) => setPersonal("location", value)}
+          placeholder="City, Country"
           disabled={disabled}
         />
         <Field
@@ -129,7 +129,14 @@ export default function CandidateForm({
           onChange={(value) => setPersonal("linkedin", value)}
           placeholder="https://www.linkedin.com/in/…"
           disabled={disabled}
-          className="field-span"
+        />
+        <Field
+          id="candidate-portfolio"
+          label="Portfolio"
+          value={profile.personal.portfolio}
+          onChange={(value) => setPersonal("portfolio", value)}
+          placeholder="https://your-site.com (optional)"
+          disabled={disabled}
         />
       </div>
 
@@ -145,7 +152,7 @@ export default function CandidateForm({
                 {profile.experiences.length > 1 && (
                   <button
                     type="button"
-                    className="text-btn"
+                    className="text-btn section-remove"
                     disabled={disabled}
                     onClick={() =>
                       onChange({
@@ -228,7 +235,7 @@ export default function CandidateForm({
                 {profile.education.length > 0 && (
                   <button
                     type="button"
-                    className="text-btn"
+                    className="text-btn section-remove"
                     disabled={disabled}
                     onClick={() =>
                       onChange({

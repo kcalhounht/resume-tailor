@@ -10,6 +10,7 @@ export function emptyPersonal(): PersonalInfo {
     name: "",
     phone: "",
     linkedin: "",
+    portfolio: "",
     email: "",
     location: "",
   };
@@ -80,6 +81,7 @@ export function parseProfileDraft(value: unknown): CandidateProfile | null {
       name: asString(value.personal.name),
       phone: asString(value.personal.phone),
       linkedin: asString(value.personal.linkedin),
+      portfolio: asString(value.personal.portfolio),
       email: asString(value.personal.email),
       location: asString(value.personal.location),
     },
@@ -93,6 +95,7 @@ export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
     name: profile.personal.name.trim(),
     phone: profile.personal.phone.trim(),
     linkedin: profile.personal.linkedin.trim(),
+    portfolio: profile.personal.portfolio.trim(),
     email: profile.personal.email.trim(),
     location: profile.personal.location.trim(),
   };

@@ -346,6 +346,7 @@ a {
 }
 
 .profile-card {
+  position: relative;
   border: 1px solid var(--line);
   background: var(--surface-2);
   padding: 0.75rem 0.85rem 0.9rem;
@@ -450,13 +451,17 @@ select:focus {
   gap: 0.9rem;
 }
 
+.jd-item {
+  position: relative;
+}
+
 .jd-item textarea {
   min-height: 11rem;
 }
 
 .jd-item-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.65rem;
   margin-bottom: 0.45rem;
 }
@@ -467,10 +472,34 @@ select:focus {
   letter-spacing: 0.02em;
 }
 
+.jd-item .jd-item-head,
+.profile-card .jd-item-head {
+  min-height: 1.75rem;
+  padding-right: 5.5rem;
+}
+
+.jd-item .section-remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin-left: 0;
+}
+
+.jd-item-head .section-remove,
+.profile-card .section-remove {
+  margin-left: auto;
+}
+
+.profile-card .section-remove {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.55rem;
+  margin-left: 0;
+}
+
 .jd-char-count {
   color: var(--muted);
   font-size: 0.75rem;
-  margin-right: auto;
 }
 
 .jd-char-count.short {

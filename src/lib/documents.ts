@@ -33,6 +33,20 @@ function linkedInHref(url: string): string {
   return `https://${url.replace(/^\/+/, "")}`;
 }
 
+function websiteDisplay(url: string): string {
+  try {
+    const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
+    const host = parsed.hostname.replace(/^www\./i, "");
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return path && path !== "/" ? `${host}${path}` : host;
+  } catch {
+    return url
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\/+$/, "");
+  }
+}
+
 function phoneHref(phone: string): string {
   const digits = phone.replace(/[^\d+]/g, "");
   return `tel:${digits}`;
@@ -109,6 +123,15 @@ function buildResumeHeader(
       hyperlinkRun(
         linkedInDisplay(personal.linkedin),
         linkedInHref(personal.linkedin),
+      ),
+    );
+  }
+  if (personal.portfolio) {
+    pushSep();
+    contactChildren.push(
+      hyperlinkRun(
+        websiteDisplay(personal.portfolio),
+        linkedInHref(personal.portfolio),
       ),
     );
   }
@@ -571,6 +594,12 @@ export async function buildResumePdf(
       contactParts.push({
         label: linkedInDisplay(personal.linkedin),
         href: linkedInHref(personal.linkedin),
+      });
+    }
+    if (personal.portfolio) {
+      contactParts.push({
+        label: websiteDisplay(personal.portfolio),
+        href: linkedInHref(personal.portfolio),
       });
     }
     if (personal.location) {

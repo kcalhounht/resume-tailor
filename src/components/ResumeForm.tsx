@@ -576,7 +576,7 @@ export default function ResumeForm({
                 {jobTexts.length > 1 && (
                   <button
                     type="button"
-                    className="text-btn"
+                    className="text-btn section-remove"
                     onClick={() => removeJob(slot)}
                   >
                     Remove
