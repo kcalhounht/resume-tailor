@@ -8,6 +8,15 @@ export type AppSettings = {
   defaultPriority: UserPriority;
   allowSignup: boolean;
   llmModel: string;
+  openRouterApiKey: string;
+};
+
+export type PublicSettings = {
+  defaultRole: UserRole;
+  defaultPriority: UserPriority;
+  allowSignup: boolean;
+  llmModel: string;
+  hasOpenRouterKey: boolean;
 };
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -15,6 +24,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   defaultPriority: "disable",
   allowSignup: true,
   llmModel: "",
+  openRouterApiKey: "",
 };
 
 const SETTINGS_ID = "app";
@@ -50,6 +60,20 @@ export function parseSettings(value: unknown): AppSettings {
     defaultPriority: asPriority(raw.defaultPriority),
     allowSignup: raw.allowSignup !== false,
     llmModel: typeof raw.llmModel === "string" ? raw.llmModel.trim() : "",
+    openRouterApiKey:
+      typeof raw.openRouterApiKey === "string" ? raw.openRouterApiKey.trim() : "",
+  };
+}
+
+export function toPublicSettings(settings: AppSettings): PublicSettings {
+  return {
+    defaultRole: settings.defaultRole,
+    defaultPriority: settings.defaultPriority,
+    allowSignup: settings.allowSignup,
+    llmModel: settings.llmModel,
+    hasOpenRouterKey: Boolean(
+      settings.openRouterApiKey || process.env.OPENROUTER_API_KEY?.trim(),
+    ),
   };
 }
 
@@ -79,8 +103,16 @@ export async function getSettings(): Promise<AppSettings> {
   return readJsonStore();
 }
 
-export async function saveSettings(input: AppSettings): Promise<AppSettings> {
-  const settings = parseSettings(input);
+export async function saveSettings(
+  input: Omit<AppSettings, "openRouterApiKey"> & { openRouterApiKey?: string },
+): Promise<AppSettings> {
+  const current = await getSettings();
+  const settings = parseSettings({
+    ...input,
+    openRouterApiKey: input.openRouterApiKey?.trim()
+      ? input.openRouterApiKey
+      : current.openRouterApiKey,
+  });
   if (hasDatabase()) {
     const sql = await withDatabase();
     await sql`

@@ -5,6 +5,7 @@ import type {
   TailoredPackage,
   TailoredResume,
 } from "./types";
+import type OpenAI from "openai";
 import { getLlmClient, getLlmModel } from "./llm";
 import { parseModelJson } from "./parse-json";
 import { buildResumeHeadline } from "./headline";
@@ -51,7 +52,7 @@ export async function generateTailoredPackage(
   extracted: ExtractedJD,
   rawJd: string,
 ): Promise<TailoredPackage> {
-  const client = getLlmClient();
+  const client = await getLlmClient();
   const model = await getLlmModel();
   const userPayload = JSON.stringify({
     candidate: profile,
@@ -101,7 +102,7 @@ export async function generateTailoredPackage(
 }
 
 async function requestJson(
-  client: ReturnType<typeof getLlmClient>,
+  client: OpenAI,
   model: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
 ): Promise<string> {

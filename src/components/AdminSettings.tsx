@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import { updateSettings } from "@/app/actions/settings";
-import type { AppSettings } from "@/lib/settings";
+import type { PublicSettings } from "@/lib/settings";
 import type { UserPriority, UserRole } from "@/lib/users";
 
 export default function AdminSettings({
   initialSettings,
   defaultLlmModel,
 }: {
-  initialSettings: AppSettings;
+  initialSettings: PublicSettings;
   defaultLlmModel: string;
 }) {
   const [defaultRole, setDefaultRole] = useState<UserRole>(
@@ -20,6 +20,10 @@ export default function AdminSettings({
   );
   const [allowSignup, setAllowSignup] = useState(initialSettings.allowSignup);
   const [llmModel, setLlmModel] = useState(initialSettings.llmModel);
+  const [openRouterApiKey, setOpenRouterApiKey] = useState("");
+  const [hasOpenRouterKey, setHasOpenRouterKey] = useState(
+    initialSettings.hasOpenRouterKey,
+  );
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -30,13 +34,14 @@ export default function AdminSettings({
         <div>
           <h2>Settings</h2>
           <p className="hint">
-            Defaults for new accounts, public sign-up, and the OpenRouter
-            model used for extraction and generation.
+            Defaults for new accounts, public sign-up, and OpenRouter for
+            extraction and generation.
           </p>
         </div>
       </div>
 
       <form
+        autoComplete="off"
         onSubmit={(event) => {
           event.preventDefault();
           setBusy(true);
@@ -47,8 +52,13 @@ export default function AdminSettings({
             defaultPriority,
             allowSignup,
             llmModel,
+            openRouterApiKey,
           })
-            .then(() => setMessage("Settings saved."))
+            .then((saved) => {
+              setHasOpenRouterKey(saved.hasOpenRouterKey);
+              setOpenRouterApiKey("");
+              setMessage("Settings saved.");
+            })
             .catch((err) =>
               setError(
                 err instanceof Error ? err.message : "Could not save settings.",
@@ -85,6 +95,26 @@ export default function AdminSettings({
               <option value="able">able</option>
               <option value="disable">disable</option>
             </select>
+          </div>
+          <div className="field field-span">
+            <label htmlFor="setting-openrouter-key">OpenRouter API key</label>
+            <input
+              id="setting-openrouter-key"
+              name="setting-openrouter-key"
+              type="password"
+              autoComplete="new-password"
+              value={openRouterApiKey}
+              disabled={busy}
+              placeholder={
+                hasOpenRouterKey ? "Leave blank to keep the saved key" : ""
+              }
+              onChange={(event) => setOpenRouterApiKey(event.target.value)}
+            />
+            <p className="hint">
+              {hasOpenRouterKey
+                ? "A key is already set. Paste a new one only if you want to replace it."
+                : "Get a key at openrouter.ai/keys. After you save, you can generate resumes."}
+            </p>
           </div>
           <div className="field field-span">
             <label htmlFor="setting-llm-model">OpenRouter model</label>

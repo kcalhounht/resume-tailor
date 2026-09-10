@@ -6,7 +6,8 @@ import { requireAdmin } from "@/app/actions/auth";
 import {
   getSettings,
   saveSettings,
-  type AppSettings,
+  toPublicSettings,
+  type PublicSettings,
 } from "@/lib/settings";
 
 const settingsSchema = z.object({
@@ -14,14 +15,21 @@ const settingsSchema = z.object({
   defaultPriority: z.enum(["able", "disable"]),
   allowSignup: z.boolean(),
   llmModel: z.string().trim().max(120),
+  openRouterApiKey: z.string().optional(),
 });
 
-export async function loadSettings(): Promise<AppSettings> {
+export async function loadSettings(): Promise<PublicSettings> {
   await requireAdmin();
-  return getSettings();
+  return toPublicSettings(await getSettings());
 }
 
-export async function updateSettings(input: AppSettings): Promise<AppSettings> {
+export async function updateSettings(input: {
+  defaultRole: "admin" | "user";
+  defaultPriority: "able" | "disable";
+  allowSignup: boolean;
+  llmModel: string;
+  openRouterApiKey?: string;
+}): Promise<PublicSettings> {
   await requireAdmin();
   const parsed = settingsSchema.safeParse(input);
   if (!parsed.success) {
@@ -31,5 +39,5 @@ export async function updateSettings(input: AppSettings): Promise<AppSettings> {
   revalidatePath("/admin");
   revalidatePath("/admin/settings");
   revalidatePath("/signup");
-  return saved;
+  return toPublicSettings(saved);
 }

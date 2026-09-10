@@ -36,7 +36,7 @@ function normalizeWorkMode(value: string): WorkMode {
 }
 
 export async function extractJobDescription(rawJd: string): Promise<ExtractedJD> {
-  const client = getLlmClient();
+  const client = await getLlmClient();
 
   const completion = await client.chat.completions.create({
     model: await getLlmModel(),

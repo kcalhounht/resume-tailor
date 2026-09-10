@@ -2,7 +2,7 @@ import AdminSettings from "@/components/AdminSettings";
 import SiteHeader from "@/components/SiteHeader";
 import { requireAdmin } from "@/app/actions/auth";
 import { getDefaultLlmModel } from "@/lib/llm";
-import { getSettings } from "@/lib/settings";
+import { getSettings, toPublicSettings } from "@/lib/settings";
 
 export const metadata = {
   title: "Settings | Resume Tailor",
@@ -24,7 +24,7 @@ export default async function AdminSettingsPage() {
       />
       <main className="main admin-main">
         <AdminSettings
-          initialSettings={settings}
+          initialSettings={toPublicSettings(settings)}
           defaultLlmModel={getDefaultLlmModel()}
         />
       </main>
