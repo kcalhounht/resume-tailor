@@ -469,9 +469,10 @@ export default function ResumeForm({
     <div className="workspace">
       {!canOperate ? (
         <p className="priority-banner" role="status">
-          This account is disabled. You can sign in and view your profile, but
-          you cannot save it, import a resume, or generate packages until an
-          administrator sets priority to able.
+          This account is disabled. You can sign in and look around, but you
+          cannot generate, save a profile, import a resume, change account
+          details, or change page style until an administrator sets priority to
+          able.
         </p>
       ) : null}
       <div className="tabs" role="tablist" aria-label="Resume Tailor">
@@ -611,9 +612,14 @@ export default function ResumeForm({
         </section>
       )}
 
-      {tab === "account" && <AccountPanel session={session} />}
+      {tab === "account" && (
+        <AccountPanel session={session} canOperate={canOperate} />
+      )}
       {tab === "settings" && (
-        <UserSettingsPanel initialStyle={initialPageStyle} />
+        <UserSettingsPanel
+          initialStyle={initialPageStyle}
+          canOperate={canOperate}
+        />
       )}
 
       {tab === "generate" && (

@@ -96,8 +96,9 @@ export default function AdminSettings({
               <option value="disable">disable</option>
             </select>
             <p className="hint">
-              Disable still lets people sign in. They cannot generate or save a
-              profile until you switch them to able.
+              Disable still lets people sign in. They cannot generate, save a
+              profile, or change account settings until you switch them to
+              able.
             </p>
           </div>
           <div className="field field-span">
@@ -147,8 +148,8 @@ export default function AdminSettings({
             <p className="hint">
               When off, /signup is closed except for the first account on an
               empty site. Disable does not block sign-up or sign-in; it only
-              blocks generate, profile saves, and resume import until you set
-              priority to able.
+              blocks generate, profile saves, resume import, account changes,
+              and page style until you set priority to able.
             </p>
           </div>
         </div>

@@ -6,8 +6,10 @@ import { PAGE_STYLES, type PageStyle } from "@/lib/appearance";
 
 export function UserSettingsPanel({
   initialStyle,
+  canOperate = true,
 }: {
   initialStyle: PageStyle;
+  canOperate?: boolean;
 }) {
   const [selected, setSelected] = useState<PageStyle>(initialStyle);
   const [saved, setSaved] = useState<PageStyle>(initialStyle);
@@ -29,6 +31,11 @@ export function UserSettingsPanel({
             Choose another look for Resume Tailor. Your choice is saved to your
             account and used across the site.
           </p>
+          {!canOperate ? (
+            <p className="hint">
+              This account is disabled, so page style cannot be changed.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -40,9 +47,10 @@ export function UserSettingsPanel({
               key={option.id}
               type="button"
               className={`style-card${active ? " active" : ""}`}
-              disabled={busy}
+              disabled={busy || !canOperate}
               aria-pressed={active}
               onClick={() => {
+                if (!canOperate) return;
                 setSelected(option.id);
                 setMessage(null);
                 setError(null);
@@ -53,8 +61,12 @@ export function UserSettingsPanel({
                     setSaved(option.id);
                     setMessage(`${option.name} is on.`);
                   })
-                  .catch(() => {
-                    setError("Could not save that style.");
+                  .catch((err: unknown) => {
+                    setError(
+                      err instanceof Error
+                        ? err.message
+                        : "Could not save that style.",
+                    );
                     setSelected(saved);
                     document.documentElement.setAttribute("data-theme", saved);
                   })

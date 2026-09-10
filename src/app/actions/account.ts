@@ -9,7 +9,7 @@ import {
   createSessionToken,
   sessionCookieOptions,
 } from "@/lib/session";
-import { findUserById, updateUserAccount } from "@/lib/users";
+import { findUserById, isUserAble, PRIORITY_DISABLED_MESSAGE, updateUserAccount } from "@/lib/users";
 import { requireSession } from "@/app/actions/auth";
 
 export type AccountFormState = {
@@ -85,6 +85,9 @@ export async function updateOwnAccount(
   const user = await findUserById(session.userId);
   if (!user) {
     return { errors: { name: ["Account not found."] } };
+  }
+  if (!isUserAble(user)) {
+    return { errors: { name: [PRIORITY_DISABLED_MESSAGE] } };
   }
 
   const changingPassword = Boolean(parsed.data.password);

@@ -51,7 +51,8 @@ function AccountTab({
           <h2>Account</h2>
           <p className="hint">
             Login details and priority. Disable blocks generate, profile
-            saves, and resume import. They can still sign in.
+            saves, resume import, account changes, and page style. They can
+            still sign in.
           </p>
         </div>
       </div>

@@ -6,7 +6,13 @@ import type { SessionPayload } from "@/lib/session";
 
 const initial: AccountFormState = {};
 
-export function AccountPanel({ session }: { session: SessionPayload }) {
+export function AccountPanel({
+  session,
+  canOperate = true,
+}: {
+  session: SessionPayload;
+  canOperate?: boolean;
+}) {
   const [state, action] = useActionState(updateOwnAccount, initial);
 
   return (
@@ -23,6 +29,11 @@ export function AccountPanel({ session }: { session: SessionPayload }) {
           <p className="hint">
             Change your name and password. Email stays the same.
           </p>
+          {!canOperate ? (
+            <p className="hint">
+              This account is disabled, so account changes are turned off.
+            </p>
+          ) : null}
         </div>
       </div>
 
@@ -35,6 +46,7 @@ export function AccountPanel({ session }: { session: SessionPayload }) {
             defaultValue={session.name}
             required
             autoComplete="name"
+            disabled={!canOperate}
           />
         </div>
         <div className="field">
@@ -54,6 +66,7 @@ export function AccountPanel({ session }: { session: SessionPayload }) {
             name="currentPassword"
             autoComplete="current-password"
             placeholder="Required only when changing password"
+            disabled={!canOperate}
           />
         </div>
         <div className="field">
@@ -64,6 +77,7 @@ export function AccountPanel({ session }: { session: SessionPayload }) {
             name="password"
             autoComplete="new-password"
             placeholder="Leave blank to keep your current password"
+            disabled={!canOperate}
           />
         </div>
         <div className="field">
@@ -73,12 +87,13 @@ export function AccountPanel({ session }: { session: SessionPayload }) {
             type="password"
             name="confirmPassword"
             autoComplete="new-password"
+            disabled={!canOperate}
           />
         </div>
       </div>
 
       <div className="composer-footer">
-        <button type="submit" className="primary">
+        <button type="submit" className="primary" disabled={!canOperate}>
           Save account
         </button>
         {state.message ? (
