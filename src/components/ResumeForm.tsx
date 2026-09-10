@@ -1,6 +1,12 @@
 "use client";
 
-import { FormEvent, useMemo, useState, type ClipboardEvent } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+  type ClipboardEvent,
+} from "react";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
@@ -225,6 +231,16 @@ export default function ResumeForm({
   const [saving, setSaving] = useState(false);
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [status, setStatus] = useState<string | null>(null);
+
+  useEffect(() => {
+    setProfile((current) => {
+      if (current.personal.name === session.name) return current;
+      return {
+        ...current,
+        personal: { ...current.personal, name: session.name },
+      };
+    });
+  }, [session.name]);
 
   const jobEntries = useMemo(
     () => jobTexts.map((text, i) => ({ text: text.trim(), slot: i })),

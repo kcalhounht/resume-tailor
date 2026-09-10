@@ -17,7 +17,6 @@ export default async function Home() {
       />
       <main className="main">
         <ResumeForm
-          key={session.name}
           initialProfile={profileFromUser(user)}
           session={session}
         />
