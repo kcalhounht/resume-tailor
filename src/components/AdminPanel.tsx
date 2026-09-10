@@ -260,10 +260,14 @@ export default function AdminPanel({
   adminId,
   initialUsers,
   initialRecords,
+  defaultRole,
+  defaultPriority,
 }: {
   adminId: string;
   initialUsers: PublicUser[];
   initialRecords: AdminTailorRecord[];
+  defaultRole: UserRole;
+  defaultPriority: UserPriority;
 }) {
   const [userTab, setUserTab] = useState<UserTab>("account");
   const [users, setUsers] = useState(initialUsers);
@@ -274,8 +278,8 @@ export default function AdminPanel({
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newConfirmPassword, setNewConfirmPassword] = useState("");
-  const [newRole, setNewRole] = useState<UserRole>("user");
-  const [newPriority, setNewPriority] = useState<UserPriority>("disable");
+  const [newRole, setNewRole] = useState<UserRole>(defaultRole);
+  const [newPriority, setNewPriority] = useState<UserPriority>(defaultPriority);
   const [createFieldsLocked, setCreateFieldsLocked] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -376,8 +380,8 @@ export default function AdminPanel({
               setNewEmail("");
               setNewPassword("");
               setNewConfirmPassword("");
-              setNewRole("user");
-              setNewPriority("disable");
+              setNewRole(defaultRole);
+              setNewPriority(defaultPriority);
               setCreateFieldsLocked(true);
             });
           }}

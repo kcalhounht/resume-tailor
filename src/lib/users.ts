@@ -191,6 +191,16 @@ export async function findUserById(id: string): Promise<StoredUser | null> {
   return store.users.find((user) => user.id === id) ?? null;
 }
 
+export async function hasAnyUser(): Promise<boolean> {
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const rows = await sql`SELECT id FROM users LIMIT 1`;
+    return rows.length > 0;
+  }
+  const store = await readStore();
+  return store.users.length > 0;
+}
+
 export async function listPublicUsers(): Promise<PublicUser[]> {
   if (hasDatabase()) {
     await ensureOldestAdmin();

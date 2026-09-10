@@ -64,6 +64,12 @@ async function ensureSchema(client: NeonQueryFunction<false, false>) {
   await client`CREATE INDEX IF NOT EXISTS tailor_records_created_at_idx ON tailor_records (created_at DESC)`;
   await client`CREATE INDEX IF NOT EXISTS tailor_records_zip_name_idx ON tailor_records (zip_name)`;
   await client`CREATE INDEX IF NOT EXISTS tailor_records_folder_name_idx ON tailor_records (folder_name)`;
+  await client`
+    CREATE TABLE IF NOT EXISTS settings (
+      id TEXT PRIMARY KEY,
+      payload JSONB NOT NULL
+    )
+  `;
 }
 
 export function isUniqueViolation(err: unknown) {

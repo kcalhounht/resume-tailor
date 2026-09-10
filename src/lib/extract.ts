@@ -39,7 +39,7 @@ export async function extractJobDescription(rawJd: string): Promise<ExtractedJD>
   const client = getLlmClient();
 
   const completion = await client.chat.completions.create({
-    model: getLlmModel(),
+    model: await getLlmModel(),
     temperature: 0.2,
     response_format: { type: "json_object" },
     messages: [

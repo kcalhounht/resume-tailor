@@ -1,9 +1,16 @@
 import OpenAI from "openai";
 
+import { getSettings } from "./settings";
+
 const DEFAULT_MODEL = "deepseek/deepseek-v4-flash";
 
-export function getLlmModel() {
+export function getDefaultLlmModel() {
   return process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
+}
+
+export async function getLlmModel() {
+  const settings = await getSettings();
+  return settings.llmModel || getDefaultLlmModel();
 }
 
 export function getLlmClient() {

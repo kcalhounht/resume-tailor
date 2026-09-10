@@ -34,3 +34,8 @@ CREATE INDEX IF NOT EXISTS tailor_records_user_id_idx ON tailor_records (user_id
 CREATE INDEX IF NOT EXISTS tailor_records_created_at_idx ON tailor_records (created_at DESC);
 CREATE INDEX IF NOT EXISTS tailor_records_zip_name_idx ON tailor_records (zip_name);
 CREATE INDEX IF NOT EXISTS tailor_records_folder_name_idx ON tailor_records (folder_name);
+
+CREATE TABLE IF NOT EXISTS settings (
+  id TEXT PRIMARY KEY,
+  payload JSONB NOT NULL
+);

@@ -2,6 +2,7 @@ import AdminPanel from "@/components/AdminPanel";
 import SiteHeader from "@/components/SiteHeader";
 import { listAdminTailorRecords } from "@/app/actions/admin";
 import { requireAdmin } from "@/app/actions/auth";
+import { getSettings } from "@/lib/settings";
 import { listPublicUsers } from "@/lib/users";
 
 export const metadata = {
@@ -11,9 +12,10 @@ export const metadata = {
 
 export default async function AdminPage() {
   const { session, user } = await requireAdmin();
-  const [users, records] = await Promise.all([
+  const [users, records, settings] = await Promise.all([
     listPublicUsers(),
     listAdminTailorRecords(),
+    getSettings(),
   ]);
 
   return (
@@ -30,6 +32,8 @@ export default async function AdminPage() {
           adminId={user.id}
           initialUsers={users}
           initialRecords={records}
+          defaultRole={settings.defaultRole}
+          defaultPriority={settings.defaultPriority}
         />
       </main>
     </div>

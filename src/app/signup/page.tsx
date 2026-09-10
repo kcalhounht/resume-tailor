@@ -1,6 +1,15 @@
+import Link from "next/link";
 import SignUpForm from "@/components/SignUpForm";
+import { getSettings } from "@/lib/settings";
+import { hasAnyUser } from "@/lib/users";
 
-export default function SignUpPage() {
+export default async function SignUpPage() {
+  const [settings, siteHasUser] = await Promise.all([
+    getSettings(),
+    hasAnyUser(),
+  ]);
+  const signupClosed = !settings.allowSignup && siteHasUser;
+
   return (
     <div className="page">
       <div className="atmosphere" aria-hidden />
@@ -8,10 +17,24 @@ export default function SignUpPage() {
         <div className="auth-card">
           <p className="brand">Resume Tailor</p>
           <h1>Create an account</h1>
-          <p className="hint">
-            Sign up to save your profile and generate tailored resumes.
-          </p>
-          <SignUpForm />
+          {signupClosed ? (
+            <>
+              <p className="hint">
+                Public sign-up is turned off. Ask an administrator to create an
+                account for you.
+              </p>
+              <p className="auth-switch">
+                Already have an account? <Link href="/signin">Sign in</Link>
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="hint">
+                Sign up to save your profile and generate tailored resumes.
+              </p>
+              <SignUpForm />
+            </>
+          )}
         </div>
       </main>
     </div>

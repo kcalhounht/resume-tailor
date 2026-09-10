@@ -52,7 +52,7 @@ export async function generateTailoredPackage(
   rawJd: string,
 ): Promise<TailoredPackage> {
   const client = getLlmClient();
-  const model = getLlmModel();
+  const model = await getLlmModel();
   const userPayload = JSON.stringify({
     candidate: profile,
     extractedJd: extracted,

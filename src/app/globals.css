@@ -350,10 +350,22 @@ a {
   padding: 0.75rem 0.85rem 0.9rem;
 }
 
-.field-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0.7rem 0.75rem;
+.field-grid > .field.field-span {
+  grid-column: 1 / -1;
+}
+
+.check-label {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-weight: 650;
+}
+
+.check-label input {
+  width: auto;
+  accent-color: var(--accent-deep);
 }
 
 .field {
@@ -458,13 +470,9 @@ select:focus {
   color: var(--warn);
 }
 
-.text-btn {
-  background: transparent;
-  color: var(--muted);
-  border: 1px solid var(--line-strong);
-  padding: 0.35rem 0.6rem;
-  font-size: 0.78rem;
-  font-weight: 650;
+.text-btn.current {
+  color: var(--accent);
+  border-color: var(--accent-deep);
 }
 
 .text-btn:hover:not(:disabled) {

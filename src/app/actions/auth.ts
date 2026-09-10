@@ -11,10 +11,12 @@ import {
   sessionCookieOptions,
   type SessionPayload,
 } from "@/lib/session";
+import { getSettings } from "@/lib/settings";
 import {
   createUser,
   findUserByEmail,
   findUserById,
+  hasAnyUser,
   isAdminUser,
   isUserAble,
   type StoredUser,
@@ -107,11 +109,20 @@ export async function signup(
   }
 
   try {
+    const [settings, siteHasUser] = await Promise.all([
+      getSettings(),
+      hasAnyUser(),
+    ]);
+    if (!settings.allowSignup && siteHasUser) {
+      return { message: "Public sign-up is turned off." };
+    }
     const passwordHash = await hashPassword(parsed.data.password);
     const user = await createUser({
       name: parsed.data.name,
       email: parsed.data.email,
       passwordHash,
+      role: settings.defaultRole,
+      priority: settings.defaultPriority,
     });
     await setSessionCookie(user);
   } catch (err) {
