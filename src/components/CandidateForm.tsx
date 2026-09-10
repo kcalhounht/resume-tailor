@@ -232,7 +232,7 @@ export default function CandidateForm({
                 <label htmlFor={`edu-school-${index}`}>
                   School {index + 1}
                 </label>
-                {profile.education.length > 0 && (
+                {profile.education.length > 1 && (
                   <button
                     type="button"
                     className="text-btn section-remove"
