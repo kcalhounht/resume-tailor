@@ -1,7 +1,7 @@
 import ResumeForm from "@/components/ResumeForm";
 import SiteHeader from "@/components/SiteHeader";
 import { requireSession } from "@/app/actions/auth";
-import { findUserById, isAdminUser, profileFromUser } from "@/lib/users";
+import { findUserById, isAdminUser, isUserAble, profileFromUser } from "@/lib/users";
 import { parsePageStyle } from "@/lib/appearance";
 
 export default async function Home() {
@@ -22,6 +22,7 @@ export default async function Home() {
           initialProfile={profileFromUser(user)}
           session={session}
           initialPageStyle={parsePageStyle(user?.pageStyle)}
+          canOperate={isUserAble(user)}
         />
       </main>
     </div>

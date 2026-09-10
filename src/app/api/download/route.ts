@@ -4,7 +4,7 @@ import path from "path";
 import { Readable } from "stream";
 import { getOutputRoot } from "@/lib/package";
 import { getSession } from "@/app/actions/auth";
-import { findUserById, isAdminUser, isUserAble } from "@/lib/users";
+import { findUserById, isAdminUser } from "@/lib/users";
 import { findTailorRecordByOutput } from "@/lib/tailor-records";
 
 export const runtime = "nodejs";
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   }
 
   const user = await findUserById(session.userId);
-  if (!user || !isUserAble(user)) {
+  if (!user) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
   const admin = isAdminUser(user);

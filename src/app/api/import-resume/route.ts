@@ -2,7 +2,7 @@ import { getSession } from "@/app/actions/auth";
 import { extractProfileFromResume } from "@/lib/extract-resume";
 import { MAX_RESUME_PDF_BYTES } from "@/lib/limits";
 import { extractPdfText } from "@/lib/pdf-text";
-import { findUserById, isUserAble } from "@/lib/users";
+import { findUserById, isUserAble, PRIORITY_DISABLED_MESSAGE } from "@/lib/users";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -14,8 +14,11 @@ function errorResponse(message: string, status = 400) {
 export async function POST(request: Request) {
   const session = await getSession();
   const user = session ? await findUserById(session.userId) : null;
-  if (!session || !user || !isUserAble(user)) {
+  if (!session || !user) {
     return errorResponse("Sign in required", 401);
+  }
+  if (!isUserAble(user)) {
+    return errorResponse(PRIORITY_DISABLED_MESSAGE, 403);
   }
 
   let formData: FormData;

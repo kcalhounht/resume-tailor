@@ -24,6 +24,7 @@ import {
   hasAnyUser,
   isAdminUser,
   isUserAble,
+  PRIORITY_DISABLED_MESSAGE,
   type StoredUser,
 } from "@/lib/users";
 
@@ -86,13 +87,23 @@ export async function requireSession(): Promise<SessionPayload> {
   const session = await getSession();
   if (!session) redirect("/signin");
   const user = await findUserById(session.userId);
-  if (!user || !isUserAble(user)) {
+  if (!user) {
     const jar = await cookies();
     jar.delete(SESSION_COOKIE);
     jar.delete(PAGE_STYLE_COOKIE);
     redirect("/signin");
   }
   return session;
+}
+
+export async function requireAbleUser(): Promise<StoredUser> {
+  const session = await requireSession();
+  const user = await findUserById(session.userId);
+  if (!user) redirect("/signin");
+  if (!isUserAble(user)) {
+    throw new Error(PRIORITY_DISABLED_MESSAGE);
+  }
+  return user;
 }
 
 function safeNextPath(value: unknown): string {
@@ -172,9 +183,6 @@ export async function signin(
   const user = await findUserByEmail(parsed.data.email);
   if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
     return { message: "Email or password is incorrect." };
-  }
-  if (!isUserAble(user)) {
-    return { message: "This account is disabled." };
   }
 
   await setSessionCookie(user);

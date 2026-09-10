@@ -17,7 +17,10 @@ export function proxy(request: NextRequest) {
     return NextResponse.redirect(signin);
   }
 
-  if (session && isPublic) {
+  if (
+    session &&
+    (pathname === "/signin" || pathname.startsWith("/signin/"))
+  ) {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

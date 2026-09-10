@@ -214,10 +214,12 @@ export default function ResumeForm({
   initialProfile,
   session,
   initialPageStyle = DEFAULT_PAGE_STYLE,
+  canOperate = true,
 }: {
   initialProfile?: CandidateProfile;
   session: SessionPayload;
   initialPageStyle?: PageStyle;
+  canOperate?: boolean;
 }) {
   const [tab, setTab] = useState<
     "profile" | "generate" | "account" | "settings"
@@ -414,6 +416,13 @@ export default function ResumeForm({
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
 
+    if (!canOperate) {
+      setError(
+        "This account is disabled. An administrator must set priority to able before you can generate resumes.",
+      );
+      return;
+    }
+
     if (!isProfileReady(profile)) {
       const reason =
         profileBlockReason(profile) ||
@@ -441,6 +450,12 @@ export default function ResumeForm({
   }
 
   async function onRetry(job: JobProgress) {
+    if (!canOperate) {
+      setError(
+        "This account is disabled. An administrator must set priority to able before you can generate resumes.",
+      );
+      return;
+    }
     if (isRetrying(job.index)) return;
     await runJobs(
       [{ jobDescription: job.jobDescription, index: job.index }],
@@ -452,6 +467,13 @@ export default function ResumeForm({
 
   return (
     <div className="workspace">
+      {!canOperate ? (
+        <p className="priority-banner" role="status">
+          This account is disabled. You can sign in and view your profile, but
+          you cannot save it, import a resume, or generate packages until an
+          administrator sets priority to able.
+        </p>
+      ) : null}
       <div className="tabs" role="tablist" aria-label="Resume Tailor">
         <button
           type="button"
@@ -519,7 +541,7 @@ export default function ResumeForm({
               </p>
             </div>
             <ResumePdfImport
-              disabled={saving || batchBusy}
+              disabled={saving || batchBusy || !canOperate}
               onImported={(imported) => {
                 setError(null);
                 setProfile((current) =>
@@ -549,11 +571,17 @@ export default function ResumeForm({
             <button
               type="button"
               className="primary"
-              disabled={saving || batchBusy}
+              disabled={saving || batchBusy || !canOperate}
               onClick={() => {
                 void (async () => {
                   setError(null);
                   setSaveMessage(null);
+                  if (!canOperate) {
+                    setError(
+                      "This account is disabled. An administrator must set priority to able before you can save a profile.",
+                    );
+                    return;
+                  }
                   const reason = profileBlockReason(profile);
                   if (reason) {
                     setError(reason);
@@ -654,7 +682,7 @@ export default function ResumeForm({
           <button
             type="submit"
             className="primary"
-            disabled={batchBusy || !hasAnyJd}
+            disabled={batchBusy || !hasAnyJd || !canOperate}
           >
             {loading ? "Processing…" : "Generate packages"}
           </button>
@@ -805,7 +833,7 @@ export default function ResumeForm({
                       <button
                         type="button"
                         className="retry-btn"
-                        disabled={isRetrying(job.index)}
+                        disabled={isRetrying(job.index) || !canOperate}
                         onClick={() => void onRetry(job)}
                       >
                         <RetryIcon />

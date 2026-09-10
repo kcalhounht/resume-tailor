@@ -350,6 +350,16 @@ a {
   gap: 1rem;
 }
 
+.priority-banner {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid color-mix(in srgb, var(--warn) 45%, var(--line));
+  background: color-mix(in srgb, var(--warn) 12%, var(--surface));
+  color: var(--warn);
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
 .tabs {
   display: flex;
   flex-wrap: wrap;

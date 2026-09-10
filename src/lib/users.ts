@@ -171,6 +171,9 @@ export function isUserAble(
   return userPriority(user) === "able";
 }
 
+export const PRIORITY_DISABLED_MESSAGE =
+  "This account is disabled. An administrator must set priority to able before you can save a profile or generate resumes.";
+
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
   const needle = email.trim().toLowerCase();
   if (hasDatabase()) {
