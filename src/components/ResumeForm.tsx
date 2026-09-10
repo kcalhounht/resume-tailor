@@ -15,7 +15,9 @@ import {
   profileBlockReason,
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
+import { AccountPanel } from "@/components/AccountPanel";
 import type { CandidateProfile } from "@/lib/types";
+import type { SessionPayload } from "@/lib/session";
 import { saveProfile } from "@/app/actions/profile";
 
 type StepStatus = "pending" | "active" | "done" | "error";
@@ -206,10 +208,12 @@ function StatusBadge({ status }: { status: JobProgress["status"] }) {
 
 export default function ResumeForm({
   initialProfile,
+  session,
 }: {
   initialProfile?: CandidateProfile;
+  session: SessionPayload;
 }) {
-  const [tab, setTab] = useState<"profile" | "generate">("profile");
+  const [tab, setTab] = useState<"profile" | "generate" | "account">("profile");
   const [profile, setProfile] = useState<CandidateProfile>(
     () => initialProfile ?? emptyProfile(),
   );
@@ -448,6 +452,17 @@ export default function ResumeForm({
         >
           Generate resume
         </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-account"
+          aria-selected={tab === "account"}
+          aria-controls="panel-account"
+          className={`tab${tab === "account" ? " active" : ""}`}
+          onClick={() => setTab("account")}
+        >
+          Account
+        </button>
       </div>
 
       {tab === "profile" && (
@@ -504,6 +519,8 @@ export default function ResumeForm({
           </div>
         </section>
       )}
+
+      {tab === "account" && <AccountPanel session={session} />}
 
       {tab === "generate" && (
         <>

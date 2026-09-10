@@ -16,7 +16,11 @@ export default async function Home() {
         isAdmin={isAdminUser(user)}
       />
       <main className="main">
-        <ResumeForm initialProfile={profileFromUser(user)} />
+        <ResumeForm
+          key={session.name}
+          initialProfile={profileFromUser(user)}
+          session={session}
+        />
       </main>
     </div>
   );
