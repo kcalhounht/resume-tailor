@@ -42,7 +42,7 @@ export function AccountPanel({ session }: { session: SessionPayload }) {
           <input
             id="own-account-email"
             type="email"
-            value={session.email}
+            defaultValue={session.email}
             readOnly
           />
         </div>

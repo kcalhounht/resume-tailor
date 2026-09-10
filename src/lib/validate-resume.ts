@@ -247,7 +247,8 @@ export function validateAndFixResume(
 
   const education =
     Array.isArray(resume.education) && resume.education.length
-      ? resume.education.map((edu) => ({
+      ? resume.education.map((edu, index) => ({
+          id: edu.id || profile.education[index]?.id || profile.education[0]?.id || "",
           school: sanitizePlainText(edu.school) || profile.education[0]?.school || "",
           discipline:
             sanitizePlainText(edu.discipline) ||
@@ -269,6 +270,7 @@ export function validateAndFixResume(
       });
     }
     return {
+      id: edu.id,
       school: edu.school,
       discipline: edu.discipline,
       degree: generated.degree || edu.degree,

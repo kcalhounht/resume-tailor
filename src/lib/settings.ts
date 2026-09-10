@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { hasDatabase, withDatabase } from "./db";
+import { getDataRoot } from "./runtime";
 import type { UserPriority, UserRole } from "./users";
 
 export type AppSettings = {
@@ -30,7 +31,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
 const SETTINGS_ID = "app";
 
 function storePath() {
-  return path.join(process.cwd(), "data", "settings.json");
+  return path.join(getDataRoot(), "settings.json");
 }
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -106,15 +107,22 @@ export async function getSettings(): Promise<AppSettings> {
 export async function saveSettings(
   input: Omit<AppSettings, "openRouterApiKey"> & { openRouterApiKey?: string },
 ): Promise<AppSettings> {
-  const current = await getSettings();
-  const settings = parseSettings({
-    ...input,
-    openRouterApiKey: input.openRouterApiKey?.trim()
-      ? input.openRouterApiKey
-      : current.openRouterApiKey,
-  });
+  const merge = (current: AppSettings) =>
+    parseSettings({
+      ...input,
+      openRouterApiKey: input.openRouterApiKey?.trim()
+        ? input.openRouterApiKey
+        : current.openRouterApiKey,
+    });
+
   if (hasDatabase()) {
     const sql = await withDatabase();
+    const rows = (await sql`
+      SELECT payload FROM settings WHERE id = ${SETTINGS_ID} LIMIT 1
+    `) as Array<{ payload: unknown }>;
+    const settings = merge(
+      rows[0] ? parseSettings(rows[0].payload) : { ...DEFAULT_SETTINGS },
+    );
     await sql`
       INSERT INTO settings (id, payload)
       VALUES (${SETTINGS_ID}, ${settings})
@@ -123,6 +131,7 @@ export async function saveSettings(
     return settings;
   }
   return enqueue(async () => {
+    const settings = merge(await readJsonStore());
     await writeJsonStore(settings);
     return settings;
   });

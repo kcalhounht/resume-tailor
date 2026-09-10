@@ -217,7 +217,9 @@ export default function ResumeForm({
   const [profile, setProfile] = useState<CandidateProfile>(
     () => initialProfile ?? emptyProfile(),
   );
-  const [jobTexts, setJobTexts] = useState<string[]>([""]);
+  const [jobTexts, setJobTexts] = useState<{ id: string; text: string }[]>(() => [
+    { id: crypto.randomUUID(), text: "" },
+  ]);
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -239,7 +241,7 @@ export default function ResumeForm({
   }
 
   const jobEntries = useMemo(
-    () => jobTexts.map((text, i) => ({ text: text.trim(), slot: i })),
+    () => jobTexts.map((job, i) => ({ text: job.text.trim(), slot: i })),
     [jobTexts],
   );
   const readyJobs = useMemo(
@@ -270,7 +272,9 @@ export default function ResumeForm({
   }
 
   function setJobText(slot: number, value: string) {
-    setJobTexts((prev) => prev.map((text, i) => (i === slot ? value : text)));
+    setJobTexts((prev) =>
+      prev.map((job, i) => (i === slot ? { ...job, text: value } : job)),
+    );
   }
 
   function onPasteJob(
@@ -287,12 +291,14 @@ export default function ResumeForm({
   }
 
   function addJob() {
-    setJobTexts((prev) => [...prev, ""]);
+    setJobTexts((prev) => [...prev, { id: crypto.randomUUID(), text: "" }]);
   }
 
   function removeJob(slot: number) {
     setJobTexts((prev) =>
-      prev.length === 1 ? [""] : prev.filter((_, i) => i !== slot),
+      prev.length === 1
+        ? [{ id: prev[0].id, text: "" }]
+        : prev.filter((_, i) => i !== slot),
     );
   }
 
@@ -558,19 +564,19 @@ export default function ResumeForm({
         </div>
 
         <div className="jd-list">
-          {jobTexts.map((text, slot) => (
-            <div key={slot} className="jd-item">
+          {jobTexts.map((job, slot) => (
+            <div key={job.id} className="jd-item">
               <div className="jd-item-head">
-                <label htmlFor={`jd-${slot}`}>Job {slot + 1}</label>
+                <label htmlFor={`jd-${job.id}`}>Job {slot + 1}</label>
                 <span
                   className={`jd-char-count${
-                    text.trim().length > 0 &&
-                    text.trim().length < MIN_JOB_DESCRIPTION_CHARS
+                    job.text.trim().length > 0 &&
+                    job.text.trim().length < MIN_JOB_DESCRIPTION_CHARS
                       ? " short"
                       : ""
                   }`}
                 >
-                  {text.trim().length.toLocaleString()}/
+                  {job.text.trim().length.toLocaleString()}/
                   {MIN_JOB_DESCRIPTION_CHARS} chars
                 </span>
                 {jobTexts.length > 1 && (
@@ -584,9 +590,9 @@ export default function ResumeForm({
                 )}
               </div>
               <textarea
-                id={`jd-${slot}`}
+                id={`jd-${job.id}`}
                 rows={8}
-                value={text}
+                value={job.text}
                 onChange={(e) => setJobText(slot, e.target.value)}
                 onPaste={(e) => onPasteJob(slot, e)}
                 placeholder="Paste the full job description here…"

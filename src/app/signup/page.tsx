@@ -1,13 +1,20 @@
 import Link from "next/link";
 import SignUpForm from "@/components/SignUpForm";
-import { getSettings } from "@/lib/settings";
+import { DEFAULT_SETTINGS, getSettings } from "@/lib/settings";
 import { hasAnyUser } from "@/lib/users";
 
 export default async function SignUpPage() {
-  const [settings, siteHasUser] = await Promise.all([
-    getSettings(),
-    hasAnyUser(),
-  ]);
+  let settings = DEFAULT_SETTINGS;
+  let siteHasUser = false;
+  try {
+    [settings, siteHasUser] = await Promise.all([
+      getSettings(),
+      hasAnyUser(),
+    ]);
+  } catch {
+    settings = DEFAULT_SETTINGS;
+    siteHasUser = false;
+  }
   const signupClosed = !settings.allowSignup && siteHasUser;
 
   return (

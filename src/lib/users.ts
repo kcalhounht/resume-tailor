@@ -9,6 +9,7 @@ import {
   isUniqueViolation,
   withDatabase,
 } from "./db";
+import { getDataRoot } from "./runtime";
 
 export type UserRole = "admin" | "user";
 export type UserPriority = "able" | "disable";
@@ -50,7 +51,7 @@ type UserRow = {
 };
 
 function storePath() {
-  return path.join(process.cwd(), "data", "users.json");
+  return path.join(getDataRoot(), "users.json");
 }
 
 let queue: Promise<unknown> = Promise.resolve();

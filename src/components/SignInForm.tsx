@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 import { signin, type AuthFormState } from "@/app/actions/auth";
 
-export default function SignInForm() {
+export default function SignInForm({ next = "/" }: { next?: string }) {
   const [state, action, pending] = useActionState(
     signin,
     undefined as AuthFormState | undefined,
@@ -12,6 +12,7 @@ export default function SignInForm() {
 
   return (
     <form className="auth-form" action={action}>
+      <input type="hidden" name="next" value={next} />
       <div className="field">
         <label htmlFor="email">Email</label>
         <input

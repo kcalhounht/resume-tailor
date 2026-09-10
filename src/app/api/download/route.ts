@@ -70,7 +70,11 @@ export async function GET(request: Request) {
     zipName,
     folderName: folder,
   });
-  if (record && !admin && record.userId !== session.userId) {
+  if (record) {
+    if (!admin && record.userId !== session.userId) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+  } else if (!admin) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 

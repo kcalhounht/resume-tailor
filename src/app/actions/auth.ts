@@ -75,13 +75,23 @@ export async function requireSession(): Promise<SessionPayload> {
   const session = await getSession();
   if (!session) redirect("/signin");
   const user = await findUserById(session.userId);
-  if (!user) redirect("/signin");
-  if (!isUserAble(user)) {
+  if (!user || !isUserAble(user)) {
     const jar = await cookies();
     jar.delete(SESSION_COOKIE);
     redirect("/signin");
   }
   return session;
+}
+
+function safeNextPath(value: unknown): string {
+  if (typeof value !== "string") return "/";
+  const next = value.trim();
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) {
+    return "/";
+  }
+  if (next.includes("://")) return "/";
+  if (next.startsWith("/signin") || next.startsWith("/signup")) return "/";
+  return next;
 }
 
 export async function requireAdmin(): Promise<{
@@ -156,7 +166,7 @@ export async function signin(
   }
 
   await setSessionCookie(user);
-  redirect("/");
+  redirect(safeNextPath(formData.get("next")));
 }
 
 export async function signout() {

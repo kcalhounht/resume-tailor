@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { MIN_JOB_DESCRIPTION_CHARS } from "./limits";
+import { parseProfileDraft } from "./profile";
 import type { CandidateProfile } from "./types";
 
 const personalSchema = z.object({
@@ -18,6 +19,7 @@ const personalSchema = z.object({
 });
 
 const experienceSchema = z.object({
+  id: z.string().optional(),
   company: z.string().trim().min(1, "Company is required"),
   title: z.string().trim().min(1, "Title is required"),
   period: z.string().trim().min(1, "Period is required"),
@@ -25,6 +27,7 @@ const experienceSchema = z.object({
 });
 
 const educationSchema = z.object({
+  id: z.string().optional(),
   school: z.string().trim().min(1, "School is required"),
   discipline: z.string().trim(),
   degree: z.string().trim().min(1, "Degree is required"),
@@ -70,5 +73,14 @@ export function parseTailorRequest(body: unknown): {
   jobDescriptions: string[];
   indices?: number[];
 } {
-  return tailorRequestSchema.parse(body);
+  const parsed = tailorRequestSchema.parse(body);
+  const profile = parseProfileDraft(parsed.profile);
+  if (!profile) {
+    throw new Error("Invalid profile");
+  }
+  return {
+    profile,
+    jobDescriptions: parsed.jobDescriptions,
+    indices: parsed.indices,
+  };
 }

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import type {
   CandidateProfile,
   EducationInput,
@@ -18,6 +19,7 @@ export function emptyPersonal(): PersonalInfo {
 
 export function emptyExperience(): ExperienceInput {
   return {
+    id: randomUUID(),
     company: "",
     title: "",
     period: "",
@@ -27,6 +29,7 @@ export function emptyExperience(): ExperienceInput {
 
 export function emptyEducation(): EducationInput {
   return {
+    id: randomUUID(),
     school: "",
     discipline: "",
     degree: "",
@@ -57,6 +60,7 @@ export function parseProfileDraft(value: unknown): CandidateProfile | null {
     ? value.experiences.map((item) => {
         if (!isRecord(item)) return emptyExperience();
         return {
+          id: asString(item.id) || randomUUID(),
           company: asString(item.company),
           title: asString(item.title),
           period: asString(item.period),
@@ -68,6 +72,7 @@ export function parseProfileDraft(value: unknown): CandidateProfile | null {
     ? value.education.map((item) => {
         if (!isRecord(item)) return emptyEducation();
         return {
+          id: asString(item.id) || randomUUID(),
           school: asString(item.school),
           discipline: asString(item.discipline),
           degree: asString(item.degree),
@@ -102,6 +107,7 @@ export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
 
   const experiences = profile.experiences
     .map((exp) => ({
+      id: exp.id || randomUUID(),
       company: exp.company.trim(),
       title: exp.title.trim(),
       period: exp.period.trim(),
@@ -111,6 +117,7 @@ export function normalizeProfile(profile: CandidateProfile): CandidateProfile {
 
   const education = profile.education
     .map((edu) => ({
+      id: edu.id || randomUUID(),
       school: edu.school.trim(),
       discipline: edu.discipline.trim(),
       degree: edu.degree.trim(),

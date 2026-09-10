@@ -75,7 +75,6 @@ a {
 
 .topbar {
   padding: 1.5rem 0 1.15rem;
-  animation: rise 500ms ease-out both;
 }
 
 .topbar-inner {
@@ -85,6 +84,10 @@ a {
   gap: 1.5rem;
   padding-bottom: 1.1rem;
   border-bottom: 1px solid var(--line-strong);
+}
+
+.brand-block {
+  min-width: 0;
 }
 
 .brand {
@@ -141,7 +144,7 @@ a {
 
 .main {
   padding: 1.25rem 0 3.5rem;
-  animation: rise 700ms ease-out both;
+  min-width: 0;
 }
 
 .session-box {
@@ -149,6 +152,13 @@ a {
   display: grid;
   justify-items: end;
   gap: 0.35rem;
+  min-width: 0;
+}
+
+.session-name,
+.session-email {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .session-name {
@@ -224,6 +234,14 @@ a {
   text-decoration: underline;
 }
 
+.error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin-top: 1rem;
+}
+
 .field-error {
   margin: 0;
   color: var(--danger);
@@ -246,6 +264,7 @@ a {
 
 .tab {
   flex: 1;
+  min-width: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -356,6 +375,10 @@ a {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem 0.75rem;
+}
+
+.field-grid > .field {
+  min-width: 0;
 }
 
 .field-grid > .field.field-span {
@@ -678,6 +701,10 @@ button {
   align-items: start;
 }
 
+.job-identity {
+  min-width: 0;
+}
+
 .job-index {
   width: 1.8rem;
   height: 1.8rem;
@@ -695,10 +722,13 @@ button {
   align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
+  min-width: 0;
 }
 
 .job-title-row strong {
   font-size: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .badge {
@@ -958,6 +988,12 @@ button {
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 1rem;
   align-items: start;
+}
+
+.admin-user-list {
+  min-width: 0;
+  max-height: min(72vh, 44rem);
+  overflow: auto;
 }
 
 .admin-editor .tabs {

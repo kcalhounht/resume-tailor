@@ -4,6 +4,7 @@ import { mkdir, readFile, rm, unlink, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import type { ExtractedJD, PersonalInfo, TailoredPackage } from "./types";
+import { isEphemeralFilesystem } from "./runtime";
 import {
   buildCoverLetterDocx,
   buildResumeDocx,
@@ -16,12 +17,7 @@ import {
   sanitizeCompanyFolderName,
 } from "./filenames";
 
-/** Vercel/Lambda only allow writes under /tmp — cwd (/var/task) is read-only. */
-export function isEphemeralFilesystem() {
-  return Boolean(
-    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME,
-  );
-}
+export { isEphemeralFilesystem } from "./runtime";
 
 export function getOutputRoot() {
   if (isEphemeralFilesystem()) {

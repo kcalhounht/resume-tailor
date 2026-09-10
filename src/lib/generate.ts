@@ -249,7 +249,8 @@ function normalizeResume(
     experiences,
     education:
       Array.isArray(safe.education) && safe.education.length
-        ? safe.education.map((edu) => ({
+        ? safe.education.map((edu, index) => ({
+            id: profile.education[index]?.id || "",
             school: sanitizePlainText(edu.school),
             discipline: sanitizePlainText(edu.discipline),
             degree: sanitizePlainText(edu.degree),

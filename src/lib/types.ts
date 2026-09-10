@@ -17,6 +17,7 @@ export interface PersonalInfo {
 }
 
 export interface ExperienceInput {
+  id: string;
   company: string;
   title: string;
   period: string;
@@ -24,6 +25,7 @@ export interface ExperienceInput {
 }
 
 export interface EducationInput {
+  id: string;
   school: string;
   discipline: string;
   degree: string;
