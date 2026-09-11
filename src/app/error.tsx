@@ -26,8 +26,8 @@ export default function Error({
             <button type="button" className="primary" onClick={() => unstable_retry()}>
               Try again
             </button>
-            <Link href="/" className="text-btn">
-              Home
+            <Link href="/api/auth/clear" className="text-btn">
+              Sign out
             </Link>
           </div>
         </div>

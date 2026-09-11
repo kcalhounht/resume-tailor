@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import "./globals.css";
 
 export default function GlobalError({
@@ -31,6 +32,9 @@ export default function GlobalError({
               >
                 Try again
               </button>
+              <p className="hint">
+                <Link href="/api/auth/clear">Sign out</Link>
+              </p>
             </div>
           </main>
         </div>

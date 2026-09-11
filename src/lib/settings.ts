@@ -112,10 +112,11 @@ async function writeJsonStore(settings: AppSettings) {
 async function persistSettings(settings: AppSettings): Promise<AppSettings> {
   if (hasDatabase()) {
     const sql = await withDatabase();
+    const payload = JSON.stringify(settings);
     await sql`
       INSERT INTO settings (id, payload)
-      VALUES (${SETTINGS_ID}, ${settings})
-      ON CONFLICT (id) DO UPDATE SET payload = ${settings}
+      VALUES (${SETTINGS_ID}, ${payload})
+      ON CONFLICT (id) DO UPDATE SET payload = ${payload}
     `;
     return settings;
   }

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, readSessionToken } from "@/lib/session";
 
-const PUBLIC_PATHS = ["/signin", "/signup"];
+const PUBLIC_PATHS = ["/signin", "/signup", "/api/auth/clear"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -13,15 +13,10 @@ export function proxy(request: NextRequest) {
 
   if (!session && !isPublic) {
     const signin = new URL("/signin", request.url);
-    signin.searchParams.set("next", pathname);
+    if (pathname !== "/api/auth/clear") {
+      signin.searchParams.set("next", pathname);
+    }
     return NextResponse.redirect(signin);
-  }
-
-  if (
-    session &&
-    (pathname === "/signin" || pathname.startsWith("/signin/"))
-  ) {
-    return NextResponse.redirect(new URL("/", request.url));
   }
 
   return NextResponse.next();

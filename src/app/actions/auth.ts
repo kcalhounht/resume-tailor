@@ -99,11 +99,8 @@ export async function requireSession(): Promise<SessionPayload> {
   if (!session) redirect("/signin");
   const user = await findUserById(session.userId);
   if (!user) {
-    const jar = await cookies();
-    jar.delete(SESSION_COOKIE);
-    jar.delete(PAGE_STYLE_COOKIE);
-    jar.delete(RESUME_FORMAT_COOKIE);
-    redirect("/signin");
+    // Cookie deletes are not allowed during Server Component render.
+    redirect("/api/auth/clear");
   }
   return session;
 }
@@ -111,7 +108,7 @@ export async function requireSession(): Promise<SessionPayload> {
 export async function requireAbleUser(): Promise<StoredUser> {
   const session = await requireSession();
   const user = await findUserById(session.userId);
-  if (!user) redirect("/signin");
+  if (!user) redirect("/api/auth/clear");
   if (!isUserAble(user)) {
     throw new Error(PRIORITY_DISABLED_MESSAGE);
   }
@@ -126,6 +123,7 @@ function safeNextPath(value: unknown): string {
   }
   if (next.includes("://")) return "/";
   if (next.startsWith("/signin") || next.startsWith("/signup")) return "/";
+  if (next.startsWith("/api/")) return "/";
   return next;
 }
 
