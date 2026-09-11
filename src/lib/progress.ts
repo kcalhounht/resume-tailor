@@ -64,3 +64,37 @@ export type ProgressEvent =
       type: "fatal";
       error: string;
     };
+
+export const IMPORT_STEPS = ["read", "extract", "fill"] as const;
+
+export type ImportStep = (typeof IMPORT_STEPS)[number];
+
+export const IMPORT_STEP_LABELS: Record<ImportStep, string> = {
+  read: "Reading PDF",
+  extract: "Extracting profile",
+  fill: "Filling fields",
+};
+
+export const IMPORT_STEP_PERCENT: Record<ImportStep, number> = {
+  read: 28,
+  extract: 72,
+  fill: 100,
+};
+
+export type ImportProgressEvent =
+  | {
+      type: "step";
+      step: ImportStep;
+      percent: number;
+      message: string;
+    }
+  | {
+      type: "done";
+      percent: 100;
+      profile: unknown;
+      source: "llm" | "text";
+    }
+  | {
+      type: "error";
+      error: string;
+    };

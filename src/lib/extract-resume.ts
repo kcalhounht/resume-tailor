@@ -473,9 +473,11 @@ async function extractProfileWithLlm(
 export async function extractProfileFromResume(
   text: string,
   links: string[] = [],
+  onProgress?: (message: string) => void,
 ): Promise<{ profile: CandidateProfile; source: "llm" | "text" }> {
   const fallback = extractProfileFromResumeText(text);
   if (!(await getLlmApiKey())) {
+    onProgress?.("Parsing resume text…");
     return {
       profile: mergeResumeHints(fallback, fallback, text, links),
       source: "text",
@@ -483,6 +485,7 @@ export async function extractProfileFromResume(
   }
 
   try {
+    onProgress?.("Extracting with OpenRouter…");
     const llmProfile = await extractProfileWithLlm(text, links);
     const profile = mergeResumeHints(llmProfile, fallback, text, links);
     if (usefulProfile(profile)) {
