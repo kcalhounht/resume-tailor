@@ -69,6 +69,8 @@ export function isValidProfileEmail(value: string): boolean {
 export const REQUIRED_PROFILE_MESSAGE =
   "You should fill all required profile forms.";
 
+export const GENERATE_PROFILE_MESSAGE = "You should save your full profile.";
+
 export function parseProfileDraft(value: unknown): CandidateProfile | null {
   if (!isRecord(value) || !isRecord(value.personal)) return null;
 

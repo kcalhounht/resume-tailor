@@ -14,8 +14,8 @@ import {
   listProfileFieldIssues,
   mergeImportedProfile,
   normalizeProfile,
-  profileBlockReason,
   REQUIRED_PROFILE_MESSAGE,
+  GENERATE_PROFILE_MESSAGE,
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
 import { AccountPanel } from "@/components/AccountPanel";
@@ -265,13 +265,12 @@ export default function ResumeForm({
       ),
     [jobEntries],
   );
-  const hasAnyJd = jobEntries.some((entry) => entry.text.length > 0);
   const profileReady = isProfileReady(profile);
 
-  function showIncompleteProfile() {
+  function showIncompleteProfile(message = REQUIRED_PROFILE_MESSAGE) {
     setShowProfileErrors(true);
     setTab("profile");
-    setMessageBox(REQUIRED_PROFILE_MESSAGE);
+    setMessageBox(message);
   }
 
   const summary = useMemo(() => {
@@ -434,7 +433,7 @@ export default function ResumeForm({
     }
 
     if (!isProfileReady(profile)) {
-      showIncompleteProfile();
+      showIncompleteProfile(GENERATE_PROFILE_MESSAGE);
       return;
     }
 
@@ -705,7 +704,7 @@ export default function ResumeForm({
           <button
             type="submit"
             className="primary"
-            disabled={batchBusy || !hasAnyJd || !canOperate}
+            disabled={batchBusy}
           >
             {loading ? "Processing…" : "Generate packages"}
           </button>
@@ -720,7 +719,7 @@ export default function ResumeForm({
           {status && <p className="inline-status">{status}</p>}
           {!profileReady && (
             <p className="inline-status warn-status">
-              {profileBlockReason(profile)}
+              {GENERATE_PROFILE_MESSAGE}
             </p>
           )}
         </div>
@@ -876,10 +875,12 @@ export default function ResumeForm({
         <MessageBox
           message={dialogMessage}
           onClose={() => {
-            const wasRequired = dialogMessage === REQUIRED_PROFILE_MESSAGE;
+            const wasProfilePrompt =
+              dialogMessage === REQUIRED_PROFILE_MESSAGE ||
+              dialogMessage === GENERATE_PROFILE_MESSAGE;
             setMessageBox(null);
             if (error === REQUIRED_PROFILE_MESSAGE) setError(null);
-            if (!wasRequired) return;
+            if (!wasProfilePrompt) return;
             const firstId = listProfileFieldIssues(profile)[0]?.id;
             window.setTimeout(() => {
               document.getElementById(firstId ?? "")?.focus();
