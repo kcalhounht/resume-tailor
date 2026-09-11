@@ -429,15 +429,7 @@ export default function ResumeForm({
       const issues = listProfileFieldIssues(profile);
       setShowProfileErrors(true);
       setTab("profile");
-      const reason =
-        profileBlockReason(profile) ||
-        "Fill your profile, then generate.";
-      setError(reason);
-      window.alert(
-        `Fill the required fields before generating:\n\n${issues
-          .map((issue) => `• ${issue.label}`)
-          .join("\n")}`,
-      );
+      setError(profileBlockReason(profile));
       window.setTimeout(() => {
         document.getElementById(issues[0]?.id ?? "")?.focus();
       }, 0);
@@ -604,13 +596,7 @@ export default function ResumeForm({
                   const issues = listProfileFieldIssues(profile);
                   if (issues.length) {
                     setShowProfileErrors(true);
-                    const reason = profileBlockReason(profile);
-                    setError(reason);
-                    window.alert(
-                      `Fill the required fields before saving:\n\n${issues
-                        .map((issue) => `• ${issue.label}`)
-                        .join("\n")}`,
-                    );
+                    setError(profileBlockReason(profile));
                     window.setTimeout(() => {
                       document.getElementById(issues[0]?.id ?? "")?.focus();
                     }, 0);
@@ -637,12 +623,12 @@ export default function ResumeForm({
               {saving ? "Saving…" : "Save"}
             </button>
             {saveMessage && <p className="inline-status">{saveMessage}</p>}
-            {error && tab === "profile" && (
-              <p className="error" role="alert">
-                {error}
-              </p>
-            )}
           </div>
+          {error && tab === "profile" && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
         </section>
       )}
 

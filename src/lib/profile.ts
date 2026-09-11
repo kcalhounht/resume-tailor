@@ -66,11 +66,8 @@ export function isValidProfileEmail(value: string): boolean {
   return EMAIL_RE.test(value.trim());
 }
 
-function joinList(items: string[]): string {
-  if (items.length <= 1) return items[0] ?? "";
-  if (items.length === 2) return `${items[0]} and ${items[1]}`;
-  return `${items.slice(0, -1).join(", ")}, and ${items[items.length - 1]}`;
-}
+export const REQUIRED_PROFILE_MESSAGE =
+  "You should fill all required profile forms.";
 
 export function parseProfileDraft(value: unknown): CandidateProfile | null {
   if (!isRecord(value) || !isRecord(value.personal)) return null;
@@ -315,7 +312,6 @@ export function mergeImportedProfile(
 }
 
 export function profileBlockReason(profile: CandidateProfile): string | null {
-  const issues = listProfileFieldIssues(profile);
-  if (!issues.length) return null;
-  return `Fill ${joinList(issues.map((issue) => issue.label))}. Portfolio is optional.`;
+  if (!listProfileFieldIssues(profile).length) return null;
+  return REQUIRED_PROFILE_MESSAGE;
 }
