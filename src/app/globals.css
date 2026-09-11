@@ -595,8 +595,27 @@ a {
   min-width: 0;
 }
 
-.field-grid > .field.field-span {
+.field-grid > .field.field-span,
+.field-grid > .settings-pair.field-span {
   grid-column: 1 / -1;
+}
+
+.settings-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.7rem 0.75rem;
+  min-width: 0;
+}
+
+.settings-pair > .field {
+  min-width: 0;
+}
+
+.admin-settings-form .settings-pair select {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  field-sizing: fixed;
 }
 
 .check-label {
@@ -653,7 +672,10 @@ select:disabled {
 }
 
 select {
+  display: block;
   width: 100%;
+  min-width: 0;
+  field-sizing: fixed;
   border: 1px solid var(--line-strong);
   background: var(--paper);
   color: var(--ink);
@@ -670,7 +692,8 @@ select:focus {
 }
 
 @media (max-width: 640px) {
-  .field-grid {
+  .field-grid,
+  .settings-pair {
     grid-template-columns: 1fr;
   }
 }

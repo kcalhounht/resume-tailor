@@ -40,6 +40,7 @@ export default function AdminSettings({
       </div>
 
       <form
+        className="admin-settings-form"
         autoComplete="off"
         onSubmit={(event) => {
           event.preventDefault();
@@ -65,38 +66,40 @@ export default function AdminSettings({
         }}
       >
         <div className="field-grid">
-          <div className="field">
-            <label htmlFor="setting-default-role">Default role</label>
-            <select
-              id="setting-default-role"
-              value={defaultRole}
-              disabled={busy}
-              onChange={(event) =>
-                setDefaultRole(event.target.value as UserRole)
-              }
-            >
-              <option value="user">user</option>
-              <option value="admin">admin</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="setting-default-priority">Default priority</label>
-            <select
-              id="setting-default-priority"
-              value={defaultPriority}
-              disabled={busy}
-              onChange={(event) =>
-                setDefaultPriority(event.target.value as UserPriority)
-              }
-            >
-              <option value="able">able</option>
-              <option value="disable">disable</option>
-            </select>
-            <p className="hint">
-              Disable still lets people sign in. They cannot generate, save a
-              profile, or change account settings until you switch them to
-              able.
-            </p>
+          <div className="settings-pair field-span">
+            <div className="field">
+              <label htmlFor="setting-default-role">Default role</label>
+              <select
+                id="setting-default-role"
+                value={defaultRole}
+                disabled={busy}
+                onChange={(event) =>
+                  setDefaultRole(event.target.value as UserRole)
+                }
+              >
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="setting-default-priority">Default priority</label>
+              <select
+                id="setting-default-priority"
+                value={defaultPriority}
+                disabled={busy}
+                onChange={(event) =>
+                  setDefaultPriority(event.target.value as UserPriority)
+                }
+              >
+                <option value="able">able</option>
+                <option value="disable">disable</option>
+              </select>
+              <p className="hint">
+                Disable still lets people sign in. They cannot generate, save a
+                profile, or change account settings until you switch them to
+                able.
+              </p>
+            </div>
           </div>
           <div className="field field-span">
             <label htmlFor="openRouterkey-input">OpenRouter API key</label>
