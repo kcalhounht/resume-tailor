@@ -55,7 +55,15 @@ export async function processOneJob(options: {
 
   if (!validation.ok) {
     onStep("validating", "Fixing validation issues and regenerating…");
-    tailored = await generateTailoredPackage(profile, extracted, rawText);
+    const repairHints = validation.issues
+      .filter((issue) => issue.level === "error")
+      .map((issue) => issue.message);
+    tailored = await generateTailoredPackage(
+      profile,
+      extracted,
+      rawText,
+      repairHints,
+    );
     validation = validateAndFixResume(tailored, profile, extracted);
   }
 

@@ -17,22 +17,24 @@ Create a tailored resume and cover letter that maximize ATS keyword match for th
 Hard rules:
 1. Resume sections: Headline (one line under the name, not a heading), Summary, Skills, Experience, Education.
    headline format: "Target Role | Skill, Skill, Skill" or four skills. Use the JD job title as the target role and 3-4 concrete hard skills from the JD. No markdown.
-2. Skills MUST be classified into compact groups (not one skill per line). Use 4-6 groups such as:
-   Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices.
-   Each group has a short category name and 4-10 comma-ready item strings.
-3. Each experience MUST include:
+2. Summary length MUST be more than 90 words (91+ words required; aim for 95-130). Write one dense professional paragraph. No markdown.
+3. Skills MUST be classified into compact groups (not one skill per line). Use 6-8 groups such as:
+   Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices, Methodologies, Platforms.
+   The skill set MUST contain MORE THAN 50 distinct skill items in total across all groups (not 50 groups; 51+ items required, aim for 55-70).
+   Each group has a short category name and 8-12 comma-ready item strings.
+4. Each experience MUST include:
    - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
    - exactly 7 bullet points of accomplishments.
-4. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
-5. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
-6. Include slightly MORE relevant experience breadth than the JD strictly requires.
-7. Mirror JD terminology and hard skills heavily for ATS scoring.
-8. keywords: array of important JD keywords/phrases that should be bolded.
-9. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
-10. Keep the candidate's company names, periods, job locations, schools, disciplines, degrees, and education periods exactly as given. You may refine job titles slightly if plausible.
-11. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
-12. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
-13. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
+5. Each bullet must be professional and specific (~25-40 words). Describe concrete work done.
+6. Include hard numbers (counts, scale, volume, latency, users, datasets, dollars) but NEVER invent unrealistic percentages.
+7. Include slightly MORE relevant experience breadth than the JD strictly requires.
+8. Mirror JD terminology and hard skills heavily for ATS scoring.
+9. keywords: array of important JD keywords/phrases that should be bolded.
+10. Cover letter: 3-4 short paragraphs in ONE string, use \\n\\n between paragraphs. No icons/emojis.
+11. Keep the candidate's company names, periods, job locations, schools, disciplines, degrees, and education periods exactly as given. You may refine job titles slightly if plausible.
+12. Do not invent employers or schools. Invent realistic overviews and accomplishment bullets grounded in the companies and JD.
+13. Return ONLY valid compact JSON. Escape all double quotes inside strings. Do not wrap in markdown.
+14. NEVER use markdown in any string (**bold**, *italic*, backticks, headings). Plain text only. Keyword bolding is applied later by the document formatter.
 
 JSON shape:
 {
@@ -45,20 +47,23 @@ JSON shape:
     "keywords": string[]
   },
   "coverLetter": string
-}`;
+}
+summary must be more than 90 words. skills.items across all groups must contain more than 50 distinct items.`;
 
 export async function generateTailoredPackage(
   profile: CandidateProfile,
   extracted: ExtractedJD,
   rawJd: string,
+  repairHints: string[] = [],
 ): Promise<TailoredPackage> {
   const client = await getLlmClient();
   const model = await getLlmModel();
-  const userPayload = JSON.stringify({
-    candidate: profile,
-    extractedJd: extracted,
-    rawJobDescription: rawJd.slice(0, 12000),
-  });
+  const userPayload = buildGenerateUserPrompt(
+    profile,
+    extracted,
+    rawJd,
+    repairHints,
+  );
 
   let content = await requestJson(client, model, [
     { role: "system", content: SYSTEM_PROMPT },
@@ -76,7 +81,7 @@ export async function generateTailoredPackage(
       {
         role: "user",
         content:
-          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. No markdown, no commentary.",
+          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Summary must be more than 90 words. Include more than 50 distinct skill items across all groups. No markdown, no commentary.",
       },
     ]);
     try {
@@ -99,6 +104,33 @@ export async function generateTailoredPackage(
   }
 
   return { resume, coverLetter };
+}
+
+function buildGenerateUserPrompt(
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+  rawJd: string,
+  repairHints: string[],
+): string {
+  const lines = [
+    "Return JSON only.",
+    "Summary length MUST be more than 90 words.",
+    "The skill set MUST contain more than 50 distinct skill items across all groups.",
+  ];
+  if (repairHints.length) {
+    lines.push("Fix these issues from the previous attempt:");
+    for (const hint of repairHints) {
+      lines.push(`- ${hint}`);
+    }
+  }
+  lines.push(
+    JSON.stringify({
+      candidate: profile,
+      extractedJd: extracted,
+      rawJobDescription: rawJd.slice(0, 12000),
+    }),
+  );
+  return lines.join("\n");
 }
 
 async function requestJson(

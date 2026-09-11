@@ -120,10 +120,10 @@ export function validateAndFixResume(
     .map((k) => sanitizePlainText(k))
     .filter(Boolean);
 
-  if (!summary || wordCount(summary) < 20) {
+  if (!summary || wordCount(summary) < 91) {
     issues.push({
       level: "error",
-      message: "Summary is missing or too short.",
+      message: "Summary must be more than 90 words.",
     });
   }
 
@@ -138,6 +138,17 @@ export function validateAndFixResume(
     issues.push({
       level: "warning",
       message: "Skills should be grouped into at least 3 categories.",
+    });
+  }
+
+  const skillItemCount = skills.reduce(
+    (count, group) => count + group.items.length,
+    0,
+  );
+  if (skillItemCount < 51) {
+    issues.push({
+      level: "error",
+      message: "Skills must include more than 50 items across all groups.",
     });
   }
 
