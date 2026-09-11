@@ -605,6 +605,7 @@ a {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.7rem 0.75rem;
   min-width: 0;
+  align-items: start;
 }
 
 .settings-pair > .field {
@@ -615,7 +616,9 @@ a {
   display: block;
   width: 100%;
   min-width: 0;
+  height: 2.5rem;
   field-sizing: fixed;
+  align-self: start;
 }
 
 .check-label {
@@ -635,6 +638,8 @@ a {
 .field {
   display: grid;
   gap: 0.28rem;
+  align-content: start;
+  align-items: start;
 }
 
 .field label {
@@ -675,7 +680,9 @@ select {
   display: block;
   width: 100%;
   min-width: 0;
+  height: auto;
   field-sizing: fixed;
+  align-self: start;
   border: 1px solid var(--line-strong);
   background: var(--paper);
   color: var(--ink);
