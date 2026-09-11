@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  FormEvent,
-  useEffect,
-  useMemo,
-  useState,
-  type ClipboardEvent,
-} from "react";
+import { FormEvent, useMemo, useState, type ClipboardEvent } from "react";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
@@ -25,6 +19,7 @@ import {
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
 import { AccountPanel } from "@/components/AccountPanel";
+import { MessageBox } from "@/components/MessageBox";
 import { ResumePdfImport } from "@/components/ResumePdfImport";
 import { UserSettingsPanel } from "@/components/UserSettingsPanel";
 import type { CandidateProfile } from "@/lib/types";
@@ -206,39 +201,6 @@ function RetryIcon() {
   );
 }
 
-function MessageBox({
-  message,
-  onClose,
-}: {
-  message: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  return (
-    <div className="message-box-overlay" onClick={onClose}>
-      <div
-        className="message-box"
-        role="alertdialog"
-        aria-modal="true"
-        aria-describedby="message-box-text"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p id="message-box-text">{message}</p>
-        <button type="button" className="primary" autoFocus onClick={onClose}>
-          OK
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function StatusBadge({ status }: { status: JobProgress["status"] }) {
   const label =
     status === "queued"
@@ -274,7 +236,6 @@ export default function ResumeForm({
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [showProfileErrors, setShowProfileErrors] = useState(false);
   const [messageBox, setMessageBox] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -589,15 +550,14 @@ export default function ResumeForm({
                 setProfile((current) =>
                   mergeImportedProfile(current, imported),
                 );
-                setSaveMessage(
+                setMessageBox(
                   source === "llm"
                     ? "Filled with OpenRouter. Review the fields, then Save."
                     : "Filled from the PDF text. Add an OpenRouter key in Admin Settings for better results.",
                 );
               }}
               onError={(message) => {
-                setSaveMessage(null);
-                setError(message);
+                setMessageBox(message);
               }}
             />
           </div>
@@ -606,7 +566,6 @@ export default function ResumeForm({
             profile={profile}
             issues={showProfileErrors ? listProfileFieldIssues(profile) : []}
             onChange={(next) => {
-              setSaveMessage(null);
               setProfile(next);
             }}
             disabled={saving || batchBusy}
@@ -620,9 +579,8 @@ export default function ResumeForm({
               onClick={() => {
                 void (async () => {
                   setError(null);
-                  setSaveMessage(null);
                   if (!canOperate) {
-                    setError(
+                    setMessageBox(
                       "This account is disabled. An administrator must set priority to able before you can save a profile.",
                     );
                     return;
@@ -637,10 +595,10 @@ export default function ResumeForm({
                   setSaving(true);
                   try {
                     await saveProfile(profile);
-                    setSaveMessage("Profile saved.");
+                    setMessageBox("Profile saved.");
                     setShowProfileErrors(false);
                   } catch (err) {
-                    setError(
+                    setMessageBox(
                       err instanceof Error
                         ? err.message
                         : "Could not save your profile.",
@@ -653,7 +611,6 @@ export default function ResumeForm({
             >
               {saving ? "Saving…" : "Save"}
             </button>
-            {saveMessage && <p className="inline-status">{saveMessage}</p>}
           </div>
           {error && tab === "profile" && (
             <p className="error" role="alert">
@@ -910,7 +867,9 @@ export default function ResumeForm({
         <MessageBox
           message={messageBox}
           onClose={() => {
+            const wasRequired = messageBox === REQUIRED_PROFILE_MESSAGE;
             setMessageBox(null);
+            if (!wasRequired) return;
             const firstId = listProfileFieldIssues(profile)[0]?.id;
             window.setTimeout(() => {
               document.getElementById(firstId ?? "")?.focus();

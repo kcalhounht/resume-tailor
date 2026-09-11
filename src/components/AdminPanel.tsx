@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import CandidateForm from "@/components/CandidateForm";
+import { MessageBox, type ConfirmRequest } from "@/components/MessageBox";
 import TailoringRecords from "@/components/TailoringRecords";
 import {
   createAccount,
@@ -10,7 +11,11 @@ import {
   updateAccount,
   type AdminTailorRecord,
 } from "@/app/actions/admin";
-import { isProfileReady } from "@/lib/profile";
+import {
+  isProfileReady,
+  listProfileFieldIssues,
+  REQUIRED_PROFILE_MESSAGE,
+} from "@/lib/profile";
 import type { CandidateProfile } from "@/lib/types";
 import type { PublicUser, UserPriority, UserRole } from "@/lib/users";
 
@@ -26,6 +31,7 @@ function AccountTab({
   busy,
   onBusy,
   onUsersChange,
+  onConfirm,
 }: {
   adminId: string;
   selected: PublicUser;
@@ -35,6 +41,7 @@ function AccountTab({
     update: (current: PublicUser[]) => PublicUser[],
     nextSelectedId?: string,
   ) => void;
+  onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [name, setName] = useState(selected.name);
   const [email, setEmail] = useState(selected.email);
@@ -180,18 +187,19 @@ function AccountTab({
           className="text-btn danger-btn"
           disabled={busy || selected.id === adminId}
           onClick={() => {
-            if (
-              !window.confirm(`Delete ${selected.email}? This cannot be undone.`)
-            ) {
-              return;
-            }
-            void onBusy("Account deleted.", async () => {
-              const removedId = selected.id;
-              await removeAccount(removedId);
-              onUsersChange(
-                (current) => current.filter((user) => user.id !== removedId),
-                undefined,
-              );
+            onConfirm({
+              message: `Delete ${selected.email}? This cannot be undone.`,
+              confirmLabel: "Delete",
+              work: () => {
+                void onBusy("Account deleted.", async () => {
+                  const removedId = selected.id;
+                  await removeAccount(removedId);
+                  onUsersChange(
+                    (current) => current.filter((user) => user.id !== removedId),
+                    undefined,
+                  );
+                });
+              },
             });
           }}
         >
@@ -207,6 +215,7 @@ function ProfileTab({
   busy,
   onBusy,
   onUsersChange,
+  onNotice,
 }: {
   selected: PublicUser;
   busy: boolean;
@@ -215,8 +224,10 @@ function ProfileTab({
     update: (current: PublicUser[]) => PublicUser[],
     nextSelectedId?: string,
   ) => void;
+  onNotice: (message: string) => void;
 }) {
   const [profile, setProfile] = useState<CandidateProfile>(selected.profile);
+  const [showProfileErrors, setShowProfileErrors] = useState(false);
 
   return (
     <>
@@ -232,6 +243,7 @@ function ProfileTab({
       <CandidateForm
         profile={profile}
         disabled={busy}
+        issues={showProfileErrors ? listProfileFieldIssues(profile) : []}
         onChange={setProfile}
       />
 
@@ -241,6 +253,13 @@ function ProfileTab({
           className="primary"
           disabled={busy}
           onClick={() => {
+            const issues = listProfileFieldIssues(profile);
+            if (issues.length) {
+              setShowProfileErrors(true);
+              onNotice(REQUIRED_PROFILE_MESSAGE);
+              return;
+            }
+            setShowProfileErrors(false);
             void onBusy("Profile saved.", async () => {
               await saveAccountProfile(selected.id, profile);
               onUsersChange((current) =>
@@ -284,8 +303,8 @@ export default function AdminPanel({
   const [newPriority, setNewPriority] = useState<UserPriority>(defaultPriority);
   const [createFieldsLocked, setCreateFieldsLocked] = useState(true);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [messageBox, setMessageBox] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
   const selected = users.find((user) => user.id === selectedId) ?? null;
 
@@ -314,13 +333,13 @@ export default function AdminPanel({
 
   async function run(label: string, work: () => Promise<void>) {
     setBusy(true);
-    setError(null);
-    setMessage(null);
+    setMessageBox(null);
+    setConfirm(null);
     try {
       await work();
-      setMessage(label);
+      setMessageBox(label);
     } catch (err) {
-      setError(actionError(err));
+      setMessageBox(actionError(err));
     } finally {
       setBusy(false);
     }
@@ -359,13 +378,11 @@ export default function AdminPanel({
           onSubmit={(event) => {
             event.preventDefault();
             if (!newConfirmPassword) {
-              setError("Confirm the password.");
-              setMessage(null);
+              setMessageBox("Confirm the password.");
               return;
             }
             if (newPassword !== newConfirmPassword) {
-              setError("Passwords do not match.");
-              setMessage(null);
+              setMessageBox("Passwords do not match.");
               return;
             }
             void run("Account created.", async () => {
@@ -524,8 +541,8 @@ export default function AdminPanel({
                     disabled={busy}
                     onClick={() => {
                       setSelectedId(user.id);
-                      setMessage(null);
-                      setError(null);
+                      setMessageBox(null);
+                      setConfirm(null);
                     }}
                   >
                     <span className="admin-user-name">{user.name}</span>
@@ -587,6 +604,7 @@ export default function AdminPanel({
                   busy={busy}
                   onBusy={run}
                   onUsersChange={changeUsers}
+                  onConfirm={setConfirm}
                 />
               )}
               {userTab === "profile" && (
@@ -596,6 +614,7 @@ export default function AdminPanel({
                   busy={busy}
                   onBusy={run}
                   onUsersChange={changeUsers}
+                  onNotice={setMessageBox}
                 />
               )}
               {userTab === "tailoring" && (
@@ -605,17 +624,31 @@ export default function AdminPanel({
                   busy={busy}
                   onBusy={run}
                   onRecordsChange={(update) => setRecords(update(records))}
+                  onConfirm={setConfirm}
                 />
               )}
             </>
           ) : (
             <p className="hint">Create an account to start the user list.</p>
           )}
-
-          {message && <p className="inline-status">{message}</p>}
-          {error && <p className="error">{error}</p>}
         </section>
       </div>
+      {confirm ? (
+        <MessageBox
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          cancelLabel="Cancel"
+          danger
+          onConfirm={() => {
+            const work = confirm.work;
+            setConfirm(null);
+            work();
+          }}
+          onClose={() => setConfirm(null)}
+        />
+      ) : messageBox ? (
+        <MessageBox message={messageBox} onClose={() => setMessageBox(null)} />
+      ) : null}
     </div>
   );
 }

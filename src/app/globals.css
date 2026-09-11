@@ -883,8 +883,10 @@ button {
   line-height: 1.5;
 }
 
-.message-box .primary {
-  justify-self: end;
+.message-box-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
 }
 
 .empty-board {

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { removeTailorRecord } from "@/app/actions/admin";
 import type { AdminTailorRecord } from "@/app/actions/admin";
+import type { ConfirmRequest } from "@/components/MessageBox";
 
 function recordDate(value: string) {
   const date = new Date(value);
@@ -43,6 +44,7 @@ export default function TailoringRecords({
   busy,
   onBusy,
   onRecordsChange,
+  onConfirm,
 }: {
   records: AdminTailorRecord[];
   busy: boolean;
@@ -50,6 +52,7 @@ export default function TailoringRecords({
   onRecordsChange: (
     update: (current: AdminTailorRecord[]) => AdminTailorRecord[],
   ) => void;
+  onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [query, setQuery] = useState("");
   const [day, setDay] = useState("all");
@@ -213,19 +216,24 @@ export default function TailoringRecords({
                           className="text-btn danger-btn"
                           disabled={busy}
                           onClick={() => {
-                            if (
-                              !window.confirm(
+                            onConfirm({
+                              message:
                                 "Delete this tailoring record and its files?",
-                              )
-                            ) {
-                              return;
-                            }
-                            void onBusy("Tailoring record deleted.", async () => {
-                              await removeTailorRecord(record.id);
-                              onRecordsChange((current) =>
-                                current.filter((entry) => entry.id !== record.id),
-                              );
-                              if (openId === record.id) setOpenId(null);
+                              confirmLabel: "Delete",
+                              work: () => {
+                                void onBusy(
+                                  "Tailoring record deleted.",
+                                  async () => {
+                                    await removeTailorRecord(record.id);
+                                    onRecordsChange((current) =>
+                                      current.filter(
+                                        (entry) => entry.id !== record.id,
+                                      ),
+                                    );
+                                    if (openId === record.id) setOpenId(null);
+                                  },
+                                );
+                              },
                             });
                           }}
                         >

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { updateSettings } from "@/app/actions/settings";
+import { MessageBox } from "@/components/MessageBox";
 import type { PublicSettings } from "@/lib/settings";
 import type { UserPriority, UserRole } from "@/lib/users";
 
@@ -24,8 +25,7 @@ export default function AdminSettings({
     initialSettings.openRouterApiKey,
   );
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [messageBox, setMessageBox] = useState<string | null>(null);
 
   return (
     <section className="composer">
@@ -44,8 +44,7 @@ export default function AdminSettings({
         onSubmit={(event) => {
           event.preventDefault();
           setBusy(true);
-          setError(null);
-          setMessage(null);
+          setMessageBox(null);
           void updateSettings({
             defaultRole,
             defaultPriority,
@@ -55,10 +54,10 @@ export default function AdminSettings({
           })
             .then((saved) => {
               setOpenRouterApiKey(saved.openRouterApiKey);
-              setMessage("Settings saved.");
+              setMessageBox("Settings saved.");
             })
             .catch((err) =>
-              setError(
+              setMessageBox(
                 err instanceof Error ? err.message : "Could not save settings.",
               ),
             )
@@ -157,9 +156,9 @@ export default function AdminSettings({
           </button>
         </div>
       </form>
-
-      {message && <p className="inline-status">{message}</p>}
-      {error && <p className="error">{error}</p>}
+      {messageBox ? (
+        <MessageBox message={messageBox} onClose={() => setMessageBox(null)} />
+      ) : null}
     </section>
   );
 }

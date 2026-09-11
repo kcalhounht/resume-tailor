@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { saveOwnPageStyle } from "@/app/actions/appearance";
+import { MessageBox } from "@/components/MessageBox";
 import { PAGE_STYLES, type PageStyle } from "@/lib/appearance";
 
 export function UserSettingsPanel({
@@ -14,8 +15,7 @@ export function UserSettingsPanel({
   const [selected, setSelected] = useState<PageStyle>(initialStyle);
   const [saved, setSaved] = useState<PageStyle>(initialStyle);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [messageBox, setMessageBox] = useState<string | null>(null);
 
   return (
     <section
@@ -52,17 +52,16 @@ export function UserSettingsPanel({
               onClick={() => {
                 if (!canOperate) return;
                 setSelected(option.id);
-                setMessage(null);
-                setError(null);
+                setMessageBox(null);
                 document.documentElement.setAttribute("data-theme", option.id);
                 setBusy(true);
                 void saveOwnPageStyle(option.id)
                   .then(() => {
                     setSaved(option.id);
-                    setMessage(`${option.name} is on.`);
+                    setMessageBox(`${option.name} is on.`);
                   })
                   .catch((err: unknown) => {
-                    setError(
+                    setMessageBox(
                       err instanceof Error
                         ? err.message
                         : "Could not save that style.",
@@ -86,11 +85,9 @@ export function UserSettingsPanel({
           );
         })}
       </div>
-
-      <div className="composer-footer">
-        {message ? <p className="inline-status">{message}</p> : null}
-        {error ? <p className="error">{error}</p> : null}
-      </div>
+      {messageBox ? (
+        <MessageBox message={messageBox} onClose={() => setMessageBox(null)} />
+      ) : null}
     </section>
   );
 }

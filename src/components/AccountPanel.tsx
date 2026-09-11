@@ -1,10 +1,22 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import { updateOwnAccount, type AccountFormState } from "@/app/actions/account";
+import { MessageBox } from "@/components/MessageBox";
 import type { SessionPayload } from "@/lib/session";
 
 const initial: AccountFormState = {};
+
+function accountNotice(state: AccountFormState): string | null {
+  if (state.message) return state.message;
+  return (
+    state.errors?.name?.[0] ||
+    state.errors?.currentPassword?.[0] ||
+    state.errors?.password?.[0] ||
+    state.errors?.confirmPassword?.[0] ||
+    null
+  );
+}
 
 export function AccountPanel({
   session,
@@ -14,6 +26,9 @@ export function AccountPanel({
   canOperate?: boolean;
 }) {
   const [state, action] = useActionState(updateOwnAccount, initial);
+  const [closedFor, setClosedFor] = useState<AccountFormState | null>(null);
+  const notice = accountNotice(state);
+  const showBox = Boolean(notice && closedFor !== state);
 
   return (
     <form
@@ -96,22 +111,22 @@ export function AccountPanel({
         <button type="submit" className="primary" disabled={!canOperate}>
           Save account
         </button>
-        {state.message ? (
-          <p className="inline-status">{state.message}</p>
-        ) : null}
-        {state.errors?.name?.[0] ? (
-          <p className="error">{state.errors.name[0]}</p>
-        ) : null}
-        {state.errors?.currentPassword?.[0] ? (
-          <p className="error">{state.errors.currentPassword[0]}</p>
-        ) : null}
-        {state.errors?.password?.[0] ? (
-          <p className="error">{state.errors.password[0]}</p>
-        ) : null}
-        {state.errors?.confirmPassword?.[0] ? (
-          <p className="error">{state.errors.confirmPassword[0]}</p>
-        ) : null}
       </div>
+      {state.errors?.name?.[0] ? (
+        <p className="error">{state.errors.name[0]}</p>
+      ) : null}
+      {state.errors?.currentPassword?.[0] ? (
+        <p className="error">{state.errors.currentPassword[0]}</p>
+      ) : null}
+      {state.errors?.password?.[0] ? (
+        <p className="error">{state.errors.password[0]}</p>
+      ) : null}
+      {state.errors?.confirmPassword?.[0] ? (
+        <p className="error">{state.errors.confirmPassword[0]}</p>
+      ) : null}
+      {showBox && notice ? (
+        <MessageBox message={notice} onClose={() => setClosedFor(state)} />
+      ) : null}
     </form>
   );
 }
