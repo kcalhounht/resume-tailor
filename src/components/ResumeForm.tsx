@@ -430,6 +430,7 @@ export default function ResumeForm({
     if (!isProfileReady(profile)) {
       setShowProfileErrors(true);
       setTab("profile");
+      // Message box, not .error banner.
       setMessageBox(REQUIRED_PROFILE_MESSAGE);
       return;
     }

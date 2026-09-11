@@ -2,6 +2,8 @@
 
 import { useEffect } from "react";
 
+/** In-app dialog used for save/create/delete. Not window.alert and not the .error banner. */
+
 export type ConfirmRequest = {
   message: string;
   confirmLabel: string;
