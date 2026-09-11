@@ -175,13 +175,114 @@ export function isPersonalComplete(personal: PersonalInfo): boolean {
   );
 }
 
-export function isProfileReady(profile: CandidateProfile): boolean {
-  const normalized = normalizeProfile(profile);
-  return (
-    isPersonalComplete(normalized.personal) &&
-    normalized.experiences.length > 0 &&
-    normalized.education.length > 0
+function hasExperienceValues(exp: ExperienceInput): boolean {
+  return Boolean(
+    exp.company.trim() ||
+      exp.title.trim() ||
+      exp.period.trim() ||
+      exp.location.trim(),
   );
+}
+
+function hasEducationValues(edu: EducationInput): boolean {
+  return Boolean(
+    edu.school.trim() ||
+      edu.discipline.trim() ||
+      edu.degree.trim() ||
+      edu.period.trim(),
+  );
+}
+
+export type ProfileFieldIssue = {
+  id: string;
+  label: string;
+  message: string;
+};
+
+function addIfEmpty(
+  issues: ProfileFieldIssue[],
+  id: string,
+  label: string,
+  value: string,
+) {
+  if (!value.trim()) {
+    issues.push({ id, label, message: "Required" });
+  }
+}
+
+export function listProfileFieldIssues(
+  profile: CandidateProfile,
+): ProfileFieldIssue[] {
+  const issues: ProfileFieldIssue[] = [];
+  const personal = profile.personal;
+  if (personal.name.trim().length < 2) {
+    issues.push({
+      id: "candidate-name",
+      label: "Full name",
+      message: personal.name.trim()
+        ? "Enter at least 2 characters."
+        : "Required",
+    });
+  }
+  if (!personal.email.trim()) {
+    issues.push({
+      id: "candidate-email",
+      label: "Email",
+      message: "Required",
+    });
+  } else if (!isValidProfileEmail(personal.email)) {
+    issues.push({
+      id: "candidate-email",
+      label: "Email",
+      message: "Enter a valid email.",
+    });
+  }
+  addIfEmpty(issues, "candidate-location", "Location", personal.location);
+  addIfEmpty(issues, "candidate-phone", "Phone", personal.phone);
+  addIfEmpty(issues, "candidate-linkedin", "LinkedIn", personal.linkedin);
+
+  if (!profile.experiences.length) {
+    issues.push({
+      id: "exp-company-0",
+      label: "at least one experience",
+      message: "Required",
+    });
+  }
+  profile.experiences.forEach((exp, index) => {
+    if (index > 0 && !hasExperienceValues(exp)) return;
+    const role = `Role ${index + 1}`;
+    addIfEmpty(issues, `exp-company-${index}`, `${role} company`, exp.company);
+    addIfEmpty(issues, `exp-title-${index}`, `${role} title`, exp.title);
+    addIfEmpty(issues, `exp-period-${index}`, `${role} period`, exp.period);
+    addIfEmpty(issues, `exp-location-${index}`, `${role} location`, exp.location);
+  });
+
+  if (!profile.education.length) {
+    issues.push({
+      id: "edu-school-0",
+      label: "at least one education",
+      message: "Required",
+    });
+  }
+  profile.education.forEach((edu, index) => {
+    if (index > 0 && !hasEducationValues(edu)) return;
+    const school = `School ${index + 1}`;
+    addIfEmpty(issues, `edu-school-${index}`, `${school} school`, edu.school);
+    addIfEmpty(
+      issues,
+      `edu-discipline-${index}`,
+      `${school} discipline`,
+      edu.discipline,
+    );
+    addIfEmpty(issues, `edu-degree-${index}`, `${school} degree`, edu.degree);
+    addIfEmpty(issues, `edu-period-${index}`, `${school} period`, edu.period);
+  });
+
+  return issues;
+}
+
+export function isProfileReady(profile: CandidateProfile): boolean {
+  return listProfileFieldIssues(profile).length === 0;
 }
 
 export function mergeImportedProfile(
@@ -214,21 +315,7 @@ export function mergeImportedProfile(
 }
 
 export function profileBlockReason(profile: CandidateProfile): string | null {
-  const normalized = normalizeProfile(profile);
-  const missing: string[] = [];
-  const personal = normalized.personal;
-  if (personal.name.length < 2) missing.push("your name");
-  if (!personal.email.trim()) missing.push("email");
-  else if (!isValidProfileEmail(personal.email)) missing.push("a valid email");
-  if (!personal.location.trim()) missing.push("location");
-  if (!personal.phone.trim()) missing.push("phone");
-  if (!personal.linkedin.trim()) missing.push("LinkedIn");
-  if (normalized.experiences.length === 0) {
-    missing.push("at least one experience");
-  }
-  if (normalized.education.length === 0) {
-    missing.push("at least one education");
-  }
-  if (!missing.length) return null;
-  return `Fill ${joinList(missing)}. Portfolio is optional.`;
+  const issues = listProfileFieldIssues(profile);
+  if (!issues.length) return null;
+  return `Fill ${joinList(issues.map((issue) => issue.label))}. Portfolio is optional.`;
 }

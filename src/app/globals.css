@@ -339,6 +339,19 @@ a {
   margin-top: 1rem;
 }
 
+.field.field-invalid label {
+  color: var(--danger);
+}
+
+.field.field-invalid input {
+  border-color: var(--danger);
+}
+
+.field.field-invalid input:focus {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
 .field-error {
   margin: 0;
   color: var(--danger);

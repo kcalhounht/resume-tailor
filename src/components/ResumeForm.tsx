@@ -11,6 +11,7 @@ import { MIN_JOB_DESCRIPTION_CHARS } from "@/lib/limits";
 import {
   emptyProfile,
   isProfileReady,
+  listProfileFieldIssues,
   mergeImportedProfile,
   normalizeProfile,
   profileBlockReason,
@@ -234,6 +235,7 @@ export default function ResumeForm({
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [showProfileErrors, setShowProfileErrors] = useState(false);
   const [saving, setSaving] = useState(false);
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [status, setStatus] = useState<string | null>(null);
@@ -424,11 +426,21 @@ export default function ResumeForm({
     }
 
     if (!isProfileReady(profile)) {
+      const issues = listProfileFieldIssues(profile);
+      setShowProfileErrors(true);
+      setTab("profile");
       const reason =
         profileBlockReason(profile) ||
         "Fill your profile, then generate.";
       setError(reason);
-      setTab("profile");
+      window.alert(
+        `Fill the required fields before generating:\n\n${issues
+          .map((issue) => `• ${issue.label}`)
+          .join("\n")}`,
+      );
+      window.setTimeout(() => {
+        document.getElementById(issues[0]?.id ?? "")?.focus();
+      }, 0);
       return;
     }
 
@@ -563,9 +575,13 @@ export default function ResumeForm({
 
           <CandidateForm
             profile={profile}
+            issues={showProfileErrors ? listProfileFieldIssues(profile) : []}
             onChange={(next) => {
               setSaveMessage(null);
               setProfile(next);
+              if (showProfileErrors) {
+                setError(profileBlockReason(next));
+              }
             }}
             disabled={saving || batchBusy}
           />
@@ -585,15 +601,27 @@ export default function ResumeForm({
                     );
                     return;
                   }
-                  const reason = profileBlockReason(profile);
-                  if (reason) {
+                  const issues = listProfileFieldIssues(profile);
+                  if (issues.length) {
+                    setShowProfileErrors(true);
+                    const reason = profileBlockReason(profile);
                     setError(reason);
+                    window.alert(
+                      `Fill the required fields before saving:\n\n${issues
+                        .map((issue) => `• ${issue.label}`)
+                        .join("\n")}`,
+                    );
+                    window.setTimeout(() => {
+                      document.getElementById(issues[0]?.id ?? "")?.focus();
+                    }, 0);
                     return;
                   }
+                  setShowProfileErrors(false);
                   setSaving(true);
                   try {
                     await saveProfile(profile);
                     setSaveMessage("Profile saved.");
+                    setShowProfileErrors(false);
                   } catch (err) {
                     setError(
                       err instanceof Error
@@ -609,7 +637,11 @@ export default function ResumeForm({
               {saving ? "Saving…" : "Save"}
             </button>
             {saveMessage && <p className="inline-status">{saveMessage}</p>}
-            {error && tab === "profile" && <p className="error">{error}</p>}
+            {error && tab === "profile" && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
           </div>
         </section>
       )}
