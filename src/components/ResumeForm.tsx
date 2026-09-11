@@ -1,6 +1,12 @@
 "use client";
 
-import { FormEvent, useMemo, useState, type ClipboardEvent } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+  type ClipboardEvent,
+} from "react";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
@@ -15,7 +21,6 @@ import {
   mergeImportedProfile,
   normalizeProfile,
   profileBlockReason,
-  REQUIRED_PROFILE_MESSAGE,
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
 import { AccountPanel } from "@/components/AccountPanel";
@@ -237,6 +242,7 @@ export default function ResumeForm({
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showProfileErrors, setShowProfileErrors] = useState(false);
+  const [focusFieldId, setFocusFieldId] = useState<string | null>(null);
   const [messageBox, setMessageBox] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [jobs, setJobs] = useState<JobProgress[]>([]);
@@ -267,6 +273,22 @@ export default function ResumeForm({
   );
   const hasAnyJd = jobEntries.some((entry) => entry.text.length > 0);
   const profileReady = isProfileReady(profile);
+
+  function showIncompleteProfile() {
+    const issues = listProfileFieldIssues(profile);
+    setShowProfileErrors(true);
+    setTab("profile");
+    setError(profileBlockReason(profile));
+    setFocusFieldId(issues[0]?.id ?? null);
+  }
+
+  useEffect(() => {
+    if (!focusFieldId || tab !== "profile") return;
+    const node = document.getElementById(focusFieldId);
+    if (!node) return;
+    node.focus();
+    setFocusFieldId(null);
+  }, [focusFieldId, tab]);
 
   const summary = useMemo(() => {
     const done = jobs.filter((j) => j.status === "done").length;
@@ -428,9 +450,7 @@ export default function ResumeForm({
     }
 
     if (!isProfileReady(profile)) {
-      setShowProfileErrors(true);
-      setTab("profile");
-      setMessageBox(REQUIRED_PROFILE_MESSAGE);
+      showIncompleteProfile();
       return;
     }
 
@@ -562,11 +582,20 @@ export default function ResumeForm({
             />
           </div>
 
+          {error && tab === "profile" && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+
           <CandidateForm
             profile={profile}
             issues={showProfileErrors ? listProfileFieldIssues(profile) : []}
             onChange={(next) => {
               setProfile(next);
+              if (showProfileErrors) {
+                setError(profileBlockReason(next));
+              }
             }}
             disabled={saving || batchBusy}
           />
@@ -587,8 +616,7 @@ export default function ResumeForm({
                   }
                   const issues = listProfileFieldIssues(profile);
                   if (issues.length) {
-                    setShowProfileErrors(true);
-                    setMessageBox(REQUIRED_PROFILE_MESSAGE);
+                    showIncompleteProfile();
                     return;
                   }
                   setShowProfileErrors(false);
@@ -612,11 +640,6 @@ export default function ResumeForm({
               {saving ? "Saving…" : "Save"}
             </button>
           </div>
-          {error && tab === "profile" && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
         </section>
       )}
 
@@ -866,15 +889,7 @@ export default function ResumeForm({
       {messageBox ? (
         <MessageBox
           message={messageBox}
-          onClose={() => {
-            const wasRequired = messageBox === REQUIRED_PROFILE_MESSAGE;
-            setMessageBox(null);
-            if (!wasRequired) return;
-            const firstId = listProfileFieldIssues(profile)[0]?.id;
-            window.setTimeout(() => {
-              document.getElementById(firstId ?? "")?.focus();
-            }, 0);
-          }}
+          onClose={() => setMessageBox(null)}
         />
       ) : null}
     </div>
