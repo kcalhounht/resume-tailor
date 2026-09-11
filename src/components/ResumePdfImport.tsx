@@ -186,7 +186,7 @@ export function ResumePdfImport({
     await waitForCircleFill();
   }
 
-  const label = busy ? labelForPercent(percent) : "Upload resume PDF";
+  const label = busy ? labelForPercent(percent) : "Resume import";
 
   return (
     <div className="resume-import">
@@ -218,20 +218,15 @@ export function ResumePdfImport({
             });
         }}
       />
-      <div className="import-circle-slot">
-        <CircleChart percent={percent} label={busy ? label : "Resume import"} />
-      </div>
-      <div className="import-actions">
-        <button
-          type="button"
-          className="text-btn"
-          disabled={disabled || busy}
-          onClick={() => fileRef.current?.click()}
-        >
-          Upload resume PDF
-        </button>
-        <p className="import-circle-label">{busy ? label : "\u00a0"}</p>
-      </div>
+      {busy ? <CircleChart percent={percent} label={label} /> : null}
+      <button
+        type="button"
+        className="text-btn"
+        disabled={disabled || busy}
+        onClick={() => fileRef.current?.click()}
+      >
+        Upload resume PDF
+      </button>
     </div>
   );
 }

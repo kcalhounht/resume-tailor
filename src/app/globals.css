@@ -506,31 +506,23 @@ a {
 }
 
 .resume-import {
-  display: grid;
-  grid-template-columns: 2.35rem 9.6rem;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
   align-items: center;
-  column-gap: 0.5rem;
-  flex: 0 0 12.45rem;
-  width: 12.45rem;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex: 0 0 auto;
   min-height: 2.35rem;
   align-self: start;
-}
-
-.import-circle-slot {
-  width: 2.35rem;
-  height: 2.35rem;
-}
-
-.import-actions {
-  display: grid;
-  justify-items: end;
-  min-width: 0;
+  white-space: nowrap;
 }
 
 .import-circle {
   position: relative;
   width: 2.35rem;
   height: 2.35rem;
+  flex: 0 0 2.35rem;
 }
 
 .import-circle svg {
@@ -556,20 +548,6 @@ a {
   letter-spacing: -0.02em;
   color: var(--ink);
   font-variant-numeric: tabular-nums;
-}
-
-.import-circle-label {
-  margin: 0.15rem 0 0;
-  color: var(--muted);
-  font-size: 0.72rem;
-  font-weight: 650;
-  line-height: 1.2;
-  height: 1.2em;
-  width: 9.6rem;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: right;
 }
 
 .profile-form {
