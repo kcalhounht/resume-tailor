@@ -1349,14 +1349,16 @@ button {
 
 .record-fields {
   display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.65rem;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 0.65rem 1rem;
   margin: 0;
+  align-items: start;
 }
 
 .record-fields > div {
   display: grid;
   gap: 0.18rem;
+  min-width: 0;
 }
 
 .record-generated {
@@ -1376,6 +1378,12 @@ button {
   margin: 0;
   color: var(--ink);
   font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .record-fields {
+    grid-template-columns: 1fr;
+  }
 }
 
 .record-meta {
