@@ -9,6 +9,7 @@ import type OpenAI from "openai";
 import { getLlmClient, getLlmModel } from "./llm";
 import { parseModelJson } from "./parse-json";
 import { buildResumeHeadline } from "./headline";
+import { yearsOfExperienceFromProfile } from "./experience-years";
 import { sanitizePlainText } from "./validate-resume";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
@@ -18,10 +19,11 @@ Hard rules:
 1. Resume sections: Headline (one line under the name, not a heading), Summary, Skills, Experience, Education.
    headline format: "Target Role | Skill, Skill, Skill" or four skills. Use the JD job title as the target role and 3-4 concrete hard skills from the JD. No markdown.
 2. Summary length MUST be more than 90 words (91+ words required; aim for 95-130). Write one dense professional paragraph. No markdown.
+   Years of experience in the Summary MUST match the candidate's work history periods (use yearsOfExperience from the user payload). Do not invent a larger or smaller number.
 3. Skills MUST be classified into compact groups (not one skill per line). Use 6-8 groups such as:
    Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices, Methodologies, Platforms.
-   The skill set MUST contain MORE THAN 50 distinct skill items in total across all groups (not 50 groups; 51+ items required, aim for 55-70).
-   Each group has a short category name and 8-12 comma-ready item strings.
+   The skill set MUST contain MORE THAN 40 distinct skill items in total across all groups (not 40 groups; 41+ items required, aim for 45-60).
+   Each group has a short category name and 6-10 comma-ready item strings.
 4. Each experience MUST include:
    - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
    - exactly 7 bullet points of accomplishments.
@@ -48,7 +50,7 @@ JSON shape:
   },
   "coverLetter": string
 }
-summary must be more than 90 words. skills.items across all groups must contain more than 50 distinct items.`;
+summary must be more than 90 words and must use yearsOfExperience from the candidate profile. skills.items across all groups must contain more than 40 distinct items.`;
 
 export async function generateTailoredPackage(
   profile: CandidateProfile,
@@ -81,7 +83,7 @@ export async function generateTailoredPackage(
       {
         role: "user",
         content:
-          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Summary must be more than 90 words. Include more than 50 distinct skill items across all groups. No markdown, no commentary.",
+          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Summary must be more than 90 words and must use the profile years of experience. Include more than 40 distinct skill items across all groups. No markdown, no commentary.",
       },
     ]);
     try {
@@ -112,11 +114,21 @@ function buildGenerateUserPrompt(
   rawJd: string,
   repairHints: string[],
 ): string {
+  const yearsOfExperience = yearsOfExperienceFromProfile(profile);
   const lines = [
     "Return JSON only.",
     "Summary length MUST be more than 90 words.",
-    "The skill set MUST contain more than 50 distinct skill items across all groups.",
+    "The skill set MUST contain more than 40 distinct skill items across all groups.",
   ];
+  if (yearsOfExperience) {
+    lines.push(
+      `The Summary MUST state ${yearsOfExperience} years of experience, calculated from the candidate's work periods. Do not invent a different number.`,
+    );
+  } else {
+    lines.push(
+      "Do not invent years of experience in the Summary. Only mention a year count if it is clearly supported by the listed work periods.",
+    );
+  }
   if (repairHints.length) {
     lines.push("Fix these issues from the previous attempt:");
     for (const hint of repairHints) {
@@ -126,6 +138,8 @@ function buildGenerateUserPrompt(
   lines.push(
     JSON.stringify({
       candidate: profile,
+      yearsOfExperience,
+      workPeriods: profile.experiences.map((exp) => exp.period).filter(Boolean),
       extractedJd: extracted,
       rawJobDescription: rawJd.slice(0, 12000),
     }),

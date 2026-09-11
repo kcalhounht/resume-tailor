@@ -6,6 +6,11 @@ import type {
   TailoredResume,
 } from "./types";
 import { buildResumeHeadline } from "./headline";
+import {
+  alignExperienceYears,
+  summaryMentionsYears,
+  yearsOfExperienceFromProfile,
+} from "./experience-years";
 
 export interface ValidationIssue {
   level: "error" | "warning" | "fixed";
@@ -113,8 +118,8 @@ export function validateAndFixResume(
     resume.skills,
     resume.headline,
   );
-  const summary = sanitizePlainText(resume.summary);
-  const coverLetter = sanitizePlainText(tailored.coverLetter);
+  let summary = sanitizePlainText(resume.summary);
+  let coverLetter = sanitizePlainText(tailored.coverLetter);
   const skills = sanitizeSkills(resume.skills);
   const keywords = resume.keywords
     .map((k) => sanitizePlainText(k))
@@ -125,6 +130,32 @@ export function validateAndFixResume(
       level: "error",
       message: "Summary must be more than 90 words.",
     });
+  }
+
+  const yearsOfExperience = yearsOfExperienceFromProfile(profile);
+  if (yearsOfExperience) {
+    const alignedSummary = alignExperienceYears(summary, yearsOfExperience);
+    if (alignedSummary.changed) {
+      summary = alignedSummary.text;
+      issues.push({
+        level: "fixed",
+        message: `Corrected years of experience in the summary to ${yearsOfExperience} years from the profile.`,
+      });
+    } else if (!summaryMentionsYears(summary)) {
+      issues.push({
+        level: "error",
+        message: `Summary must include ${yearsOfExperience} years of experience from the profile.`,
+      });
+    }
+
+    const alignedCover = alignExperienceYears(coverLetter, yearsOfExperience);
+    if (alignedCover.changed) {
+      coverLetter = alignedCover.text;
+      issues.push({
+        level: "fixed",
+        message: `Corrected years of experience in the cover letter to ${yearsOfExperience} years from the profile.`,
+      });
+    }
   }
 
   if (!coverLetter || wordCount(coverLetter) < 40) {
@@ -145,10 +176,10 @@ export function validateAndFixResume(
     (count, group) => count + group.items.length,
     0,
   );
-  if (skillItemCount < 51) {
+  if (skillItemCount < 41) {
     issues.push({
       level: "error",
-      message: "Skills must include more than 50 items across all groups.",
+      message: "Skills must include more than 40 items across all groups.",
     });
   }
 
