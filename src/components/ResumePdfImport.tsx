@@ -1,17 +1,21 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { CandidateProfile } from "@/lib/types";
 import { parseProfileDraft } from "@/lib/profile";
-import {
-  IMPORT_STEP_LABELS,
-  type ImportProgressEvent,
-  type ImportStep,
-} from "@/lib/progress";
+import type { ImportProgressEvent } from "@/lib/progress";
 
 const CIRCLE_SIZE = 38;
 const CIRCLE_RADIUS = 14.5;
 const CIRCLE_LENGTH = 2 * Math.PI * CIRCLE_RADIUS;
+const PERCENT_PER_SECOND = 40;
+const STEP_LABELS = ["Reading PDF", "Extracting profile", "Filling fields"] as const;
+
+function labelForPercent(percent: number) {
+  if (percent < 100 / 3) return STEP_LABELS[0];
+  if (percent < 200 / 3) return STEP_LABELS[1];
+  return STEP_LABELS[2];
+}
 
 function CircleChart({
   percent,
@@ -23,7 +27,14 @@ function CircleChart({
   const clamped = Math.max(0, Math.min(100, percent));
   const offset = CIRCLE_LENGTH * (1 - clamped / 100);
   return (
-    <div className="import-circle" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(clamped)} aria-label={label}>
+    <div
+      className="import-circle"
+      role="progressbar"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(clamped)}
+      aria-label={label}
+    >
       <svg
         width={CIRCLE_SIZE}
         height={CIRCLE_SIZE}
@@ -50,7 +61,9 @@ function CircleChart({
           transform="rotate(-90 19 19)"
         />
       </svg>
-      <span className="import-circle-pct">{Math.round(clamped)}</span>
+      <span className="import-circle-pct">
+        {clamped > 0 ? Math.round(clamped) : ""}
+      </span>
     </div>
   );
 }
@@ -65,15 +78,43 @@ export function ResumePdfImport({
   onError: (message: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
+  const percentRef = useRef(0);
+  const completeRef = useRef(false);
   const [busy, setBusy] = useState(false);
   const [percent, setPercent] = useState(0);
-  const [step, setStep] = useState<ImportStep | null>(null);
-  const [message, setMessage] = useState("Reading PDF");
+
+  useEffect(() => {
+    if (!busy) return;
+
+    let frame = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const cap = completeRef.current ? 100 : 94;
+      const next = Math.min(cap, percentRef.current + PERCENT_PER_SECOND * dt);
+      percentRef.current = next;
+      setPercent(next);
+      if (next < 100) {
+        frame = requestAnimationFrame(tick);
+      }
+    };
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [busy]);
+
+  function waitForCircleFill() {
+    completeRef.current = true;
+    return new Promise<void>((resolve) => {
+      const check = () => {
+        if (percentRef.current >= 99.5) resolve();
+        else requestAnimationFrame(check);
+      };
+      check();
+    });
+  }
 
   async function importFile(file: File) {
-    setPercent(8);
-    setStep("read");
-    setMessage("Uploading PDF…");
     const body = new FormData();
     body.append("file", file);
     const response = await fetch("/api/import-resume", {
@@ -103,9 +144,8 @@ export function ResumePdfImport({
       if (!profile) {
         throw new Error("Could not read a profile from that resume.");
       }
-      setPercent(100);
-      setStep("fill");
       onImported(profile, payload.source === "llm" ? "llm" : "text");
+      await waitForCircleFill();
       return;
     }
 
@@ -127,21 +167,13 @@ export function ResumePdfImport({
           .find((entry) => entry.startsWith("data: "));
         if (!line) continue;
         const event = JSON.parse(line.slice(6)) as ImportProgressEvent;
-        if (event.type === "step") {
-          setStep(event.step);
-          setPercent(event.percent);
-          setMessage(event.message || IMPORT_STEP_LABELS[event.step]);
-        } else if (event.type === "done") {
+        if (event.type === "done") {
           const profile = parseProfileDraft(event.profile);
           if (!profile) {
             throw new Error("Could not read a profile from that resume.");
           }
-          setPercent(100);
-          setStep("fill");
-          setMessage("Filling fields…");
           onImported(profile, event.source);
           imported = true;
-          await new Promise((resolve) => setTimeout(resolve, 450));
         } else if (event.type === "error") {
           throw new Error(event.error || "Could not read that resume.");
         }
@@ -151,7 +183,10 @@ export function ResumePdfImport({
     if (!imported) {
       throw new Error("Could not read that resume.");
     }
+    await waitForCircleFill();
   }
+
+  const label = busy ? labelForPercent(percent) : "Upload resume PDF";
 
   return (
     <div className="resume-import">
@@ -165,10 +200,10 @@ export function ResumePdfImport({
           const file = event.target.files?.[0];
           event.target.value = "";
           if (!file) return;
+          completeRef.current = false;
+          percentRef.current = 0;
+          setPercent(0);
           setBusy(true);
-          setPercent(8);
-          setStep("read");
-          setMessage("Uploading PDF…");
           void importFile(file)
             .catch((err: unknown) => {
               onError(
@@ -177,26 +212,26 @@ export function ResumePdfImport({
             })
             .finally(() => {
               setBusy(false);
-              setStep(null);
+              completeRef.current = false;
+              percentRef.current = 0;
               setPercent(0);
             });
         }}
       />
-      {busy ? (
-        <div className="import-circle-wrap" data-step={step ?? "read"}>
-          <CircleChart percent={percent} label={message} />
-          <p className="import-circle-label">{message}</p>
-        </div>
-      ) : (
+      <div className="import-circle-slot">
+        <CircleChart percent={percent} label={busy ? label : "Resume import"} />
+      </div>
+      <div className="import-actions">
         <button
           type="button"
           className="text-btn"
-          disabled={disabled}
+          disabled={disabled || busy}
           onClick={() => fileRef.current?.click()}
         >
           Upload resume PDF
         </button>
-      )}
+        <p className="import-circle-label">{busy ? label : "\u00a0"}</p>
+      </div>
     </div>
   );
 }

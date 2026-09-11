@@ -506,25 +506,31 @@ a {
 }
 
 .resume-import {
-  display: flex;
+  display: grid;
+  grid-template-columns: 2.35rem 9.6rem;
   align-items: center;
-  justify-content: flex-end;
-  gap: 0.55rem;
-  flex: 0 0 auto;
-  min-height: 2.4rem;
+  column-gap: 0.5rem;
+  flex: 0 0 12.45rem;
+  width: 12.45rem;
+  min-height: 2.35rem;
+  align-self: start;
 }
 
-.import-circle-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+.import-circle-slot {
+  width: 2.35rem;
+  height: 2.35rem;
+}
+
+.import-actions {
+  display: grid;
+  justify-items: end;
+  min-width: 0;
 }
 
 .import-circle {
   position: relative;
   width: 2.35rem;
   height: 2.35rem;
-  flex: 0 0 auto;
 }
 
 .import-circle svg {
@@ -538,7 +544,6 @@ a {
 .import-circle-fill {
   stroke: var(--accent);
   stroke-linecap: round;
-  transition: stroke-dashoffset 0.28s ease;
 }
 
 .import-circle-pct {
@@ -550,15 +555,20 @@ a {
   font-weight: 750;
   letter-spacing: -0.02em;
   color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .import-circle-label {
-  margin: 0;
+  margin: 0.15rem 0 0;
   color: var(--muted);
   font-size: 0.72rem;
   font-weight: 650;
-  line-height: 1.25;
-  max-width: 7.8rem;
+  line-height: 1.2;
+  height: 1.2em;
+  width: 9.6rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: right;
 }
 
