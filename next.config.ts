@@ -10,6 +10,9 @@ const nextConfig: NextConfig = {
     "archiver",
     "unpdf",
   ],
+  outputFileTracingIncludes: {
+    "/api/tailor": ["./src/lib/fonts/**/*"],
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "5mb",

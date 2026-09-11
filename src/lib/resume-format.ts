@@ -40,12 +40,38 @@ export const RESUME_FONT_OPTIONS: Array<{
   id: ResumeFont;
   name: string;
   hint: string;
+  cssFamily: string;
 }> = [
-  { id: "calibri", name: "Calibri", hint: "Clean sans-serif (default)" },
-  { id: "aptos", name: "Aptos", hint: "Microsoft 365 sans-serif" },
-  { id: "times", name: "Times", hint: "Traditional serif" },
-  { id: "georgia", name: "Georgia", hint: "Readable serif" },
-  { id: "arial", name: "Arial", hint: "Simple sans-serif" },
+  {
+    id: "calibri",
+    name: "Calibri",
+    hint: "Clean sans-serif (default)",
+    cssFamily: 'Calibri, "ResumeCalibri", sans-serif',
+  },
+  {
+    id: "aptos",
+    name: "Aptos",
+    hint: "Microsoft 365 sans-serif",
+    cssFamily: 'Aptos, "ResumeAptos", sans-serif',
+  },
+  {
+    id: "times",
+    name: "Times",
+    hint: "Traditional serif",
+    cssFamily: '"Times New Roman", Times, "ResumeTimes", serif',
+  },
+  {
+    id: "georgia",
+    name: "Georgia",
+    hint: "Readable serif",
+    cssFamily: 'Georgia, "ResumeGeorgia", serif',
+  },
+  {
+    id: "arial",
+    name: "Arial",
+    hint: "Simple sans-serif",
+    cssFamily: 'Arial, "ResumeArial", Helvetica, sans-serif',
+  },
 ];
 
 export const RESUME_STYLE_OPTIONS: Array<{

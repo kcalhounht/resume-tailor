@@ -154,7 +154,12 @@ export function UserSettingsPanel({
                 aria-pressed={active}
                 onClick={() => saveResumePatch({ font: option.id as ResumeFont })}
               >
-                <span className="format-option-name">{option.name}</span>
+                <span
+                  className="format-option-name font-preview"
+                  style={{ fontFamily: option.cssFamily }}
+                >
+                  {option.name}
+                </span>
                 <span className="format-option-hint">{option.hint}</span>
               </button>
             );

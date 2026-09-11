@@ -13,9 +13,11 @@ import type { EducationInput, PersonalInfo, TailoredResume } from "./types";
 import { segmentWithKeywords } from "./keywords";
 import {
   resumeLook,
+  parseResumeFormat,
   type ResumeFormat,
   type ResumeLook,
 } from "./resume-format";
+import { registerResumePdfFonts } from "./pdf-fonts";
 
 function docxFont(look: ResumeLook) {
   return {
@@ -614,7 +616,8 @@ export async function buildResumePdf(
   resume: TailoredResume,
   format?: ResumeFormat | null,
 ): Promise<Buffer> {
-  const look = resumeLook(format);
+  const parsed = parseResumeFormat(format);
+  const look = resumeLook(parsed);
   const kw = resume.keywords;
   const accent = `#${look.accent}`;
 
@@ -627,6 +630,10 @@ export async function buildResumePdf(
         Author: personal.name,
       },
     });
+    const pdf = registerResumePdfFonts(doc, parsed.font);
+    look.pdfRegular = pdf.regular;
+    look.pdfBold = pdf.bold;
+    look.pdfItalic = pdf.italic;
     const chunks: Buffer[] = [];
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));
     doc.on("end", () => resolve(Buffer.concat(chunks)));

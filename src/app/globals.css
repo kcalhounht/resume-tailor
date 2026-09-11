@@ -1,5 +1,45 @@
 @import "tailwindcss";
 
+@font-face {
+  font-family: "ResumeCalibri";
+  src: url("../lib/fonts/carlito-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ResumeAptos";
+  src: url("../lib/fonts/source-sans-3-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ResumeTimes";
+  src: url("../lib/fonts/tinos-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ResumeGeorgia";
+  src: url("../lib/fonts/gelasio-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "ResumeArial";
+  src: url("../lib/fonts/arimo-regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 :root {
   --ink: #e8eee9;
   --muted: #93a399;
@@ -511,6 +551,12 @@ a {
 .format-option-name {
   font-weight: 650;
   font-size: 0.88rem;
+}
+
+.format-option-name.font-preview {
+  font-weight: 400;
+  font-size: 1.08rem;
+  letter-spacing: 0;
 }
 
 .format-option-hint {
