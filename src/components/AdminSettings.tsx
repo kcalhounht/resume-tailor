@@ -19,7 +19,9 @@ export default function AdminSettings({
   const [defaultPriority, setDefaultPriority] = useState<UserPriority>(
     initialSettings.defaultPriority,
   );
-  const [allowSignup, setAllowSignup] = useState(initialSettings.allowSignup);
+  const [allowSignup, setAllowSignup] = useState(
+    initialSettings.allowSignup !== false,
+  );
   const [llmModel, setLlmModel] = useState(initialSettings.llmModel);
   const [openRouterApiKey, setOpenRouterApiKey] = useState(
     initialSettings.openRouterApiKey,
@@ -162,10 +164,11 @@ export default function AdminSettings({
               Allow public sign-up
             </label>
             <p className="hint">
-              When off, /signup is closed except for the first account on an
-              empty site. Disable does not block sign-up or sign-in; it only
-              blocks generate, profile saves, resume import, account changes,
-              and page style until you set priority to able.
+              Public sign-up is on by default. When off, /signup is closed
+              except for the first account on an empty site. Disable does not
+              block sign-up or sign-in; it only blocks generate, profile saves,
+              resume import, account changes, and page style until you set
+              priority to able.
             </p>
           </div>
         </div>
