@@ -153,6 +153,19 @@ export async function removeTailorRecord(recordId: string): Promise<void> {
   });
 }
 
+export async function clearUserTailorRecords(userId: string): Promise<void> {
+  await requireAdmin();
+  const records = await deleteTailorRecordsForUser(userId);
+  await Promise.all(
+    records.map((record) =>
+      deleteJobOutput({
+        folderName: record.folderName,
+        zipName: record.zipName,
+      }),
+    ),
+  );
+}
+
 export async function saveAccountProfile(
   userId: string,
   profile: CandidateProfile,

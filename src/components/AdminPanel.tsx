@@ -742,9 +742,11 @@ export default function AdminPanel({
                   profileName={
                     selected.profile.personal.name.trim() || selected.name
                   }
+                  userId={selected.id}
                   busy={busy}
                   onBusy={run}
                   onRecordsChange={(update) => setRecords(update(records))}
+                  onConfirm={setConfirm}
                 />
               )}
             </>

@@ -1,8 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { removeTailorRecord } from "@/app/actions/admin";
-import type { AdminTailorRecord } from "@/app/actions/admin";
+import {
+  clearUserTailorRecords,
+  removeTailorRecord,
+  type AdminTailorRecord,
+} from "@/app/actions/admin";
+import type { ConfirmRequest } from "@/components/MessageBox";
 
 function recordDate(value: string) {
   const date = new Date(value);
@@ -48,17 +52,21 @@ type DayGroup = {
 export default function TailoringRecords({
   records,
   profileName,
+  userId,
   busy,
   onBusy,
   onRecordsChange,
+  onConfirm,
 }: {
   records: AdminTailorRecord[];
   profileName: string;
+  userId: string;
   busy: boolean;
   onBusy: (label: string | null, work: () => Promise<void>) => Promise<void>;
   onRecordsChange: (
     update: (current: AdminTailorRecord[]) => AdminTailorRecord[],
   ) => void;
+  onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [query, setQuery] = useState("");
   const [day, setDay] = useState("all");
@@ -105,6 +113,38 @@ export default function TailoringRecords({
       })) satisfies DayGroup[];
   }, [day, days, profileName, query, records]);
 
+  function deleteRecord(record: AdminTailorRecord) {
+    onConfirm({
+      message: "Delete this tailoring record and its files?",
+      confirmLabel: "Delete",
+      work: () => {
+        void onBusy(null, async () => {
+          await removeTailorRecord(record.id);
+          onRecordsChange((current) =>
+            current.filter((entry) => entry.id !== record.id),
+          );
+          if (openId === record.id) setOpenId(null);
+        });
+      },
+    });
+  }
+
+  function clearAll() {
+    onConfirm({
+      message: "Delete all tailoring records for this user? This cannot be undone.",
+      confirmLabel: "Clear all",
+      work: () => {
+        void onBusy(null, async () => {
+          await clearUserTailorRecords(userId);
+          onRecordsChange((current) =>
+            current.filter((entry) => entry.userId !== userId),
+          );
+          setOpenId(null);
+        });
+      },
+    });
+  }
+
   return (
     <>
       <div className="section-head">
@@ -114,6 +154,14 @@ export default function TailoringRecords({
             This user’s generate history, grouped by date.
           </p>
         </div>
+        <button
+          type="button"
+          className="text-btn danger-btn"
+          disabled={busy || records.length === 0}
+          onClick={clearAll}
+        >
+          Clear all
+        </button>
       </div>
 
       <div className="field-grid">
@@ -199,79 +247,32 @@ export default function TailoringRecords({
 
                       {record.error && <p className="error">{record.error}</p>}
 
-                      <div className="download-actions record-actions">
-                        <button
-                          type="button"
-                          className="text-btn"
-                          disabled={busy}
-                          onClick={() => setOpenId(open ? null : record.id)}
-                        >
-                          {open ? "Hide summary" : "Summary"}
-                        </button>
+                      <button
+                        type="button"
+                        className="text-btn"
+                        disabled={busy}
+                        onClick={() => setOpenId(open ? null : record.id)}
+                      >
+                        {open ? "Hide summary" : "Summary"}
+                      </button>
+
+                      {open ? (
+                        <p className="record-summary">
+                          {record.extracted?.summary?.trim() ||
+                            "No summary saved."}
+                        </p>
+                      ) : null}
+
+                      <div className="record-card-footer">
                         <button
                           type="button"
                           className="text-btn danger-btn"
                           disabled={busy}
-                          onClick={() => {
-                            void onBusy(null, async () => {
-                              await removeTailorRecord(record.id);
-                              onRecordsChange((current) =>
-                                current.filter((entry) => entry.id !== record.id),
-                              );
-                              if (openId === record.id) setOpenId(null);
-                            });
-                          }}
+                          onClick={() => deleteRecord(record)}
                         >
                           Delete
                         </button>
                       </div>
-
-                      {open && (
-                        <div className="record-details">
-                          <p className="hint">
-                            {record.extracted?.summary || "No summary saved."}
-                            {record.extracted?.hardTechnicalSkills.length
-                              ? ` Skills: ${record.extracted.hardTechnicalSkills.slice(0, 8).join(", ")}`
-                              : ""}
-                          </p>
-                          {record.status === "done" &&
-                            record.folderName &&
-                            record.resumeDocxName && (
-                              <div className="download-actions">
-                                <a
-                                  className="download-btn"
-                                  href={`/api/download?folder=${encodeURIComponent(record.folderName)}&name=${encodeURIComponent(record.resumeDocxName)}`}
-                                >
-                                  Resume
-                                </a>
-                                {record.coverLetterDocxName && (
-                                  <a
-                                    className="download-btn"
-                                    href={`/api/download?folder=${encodeURIComponent(record.folderName)}&name=${encodeURIComponent(record.coverLetterDocxName)}`}
-                                  >
-                                    Cover letter
-                                  </a>
-                                )}
-                                {record.zipName && (
-                                  <a
-                                    className="download-btn"
-                                    href={`/api/download?file=${encodeURIComponent(record.zipName)}`}
-                                  >
-                                    Zip
-                                  </a>
-                                )}
-                              </div>
-                            )}
-                          <label className="field">
-                            <span>Job description</span>
-                            <textarea
-                              readOnly
-                              value={record.jobDescription}
-                              rows={8}
-                            />
-                          </label>
-                        </div>
-                      )}
                     </li>
                   );
                 })}
