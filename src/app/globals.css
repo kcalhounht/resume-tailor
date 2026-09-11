@@ -1345,6 +1345,39 @@ button {
   font-size: 0.95rem;
 }
 
+.record-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.65rem 1rem;
+  margin: 0;
+}
+
+.record-fields > div {
+  display: grid;
+  gap: 0.18rem;
+}
+
+.record-fields dt {
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.record-fields dd {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .record-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+.record-meta {
+
 .record-meta {
   margin: 0.2rem 0 0;
   color: var(--muted);

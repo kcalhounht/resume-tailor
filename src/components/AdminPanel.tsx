@@ -389,13 +389,13 @@ export default function AdminPanel({
     return counts;
   }, [records]);
 
-  async function run(label: string, work: () => Promise<void>) {
+  async function run(label: string | null, work: () => Promise<void>) {
     setBusy(true);
     setMessageBox(null);
     setConfirm(null);
     try {
       await work();
-      setMessageBox(label);
+      if (label) setMessageBox(label);
     } catch (err) {
       setMessageBox(actionError(err));
     } finally {
@@ -739,10 +739,12 @@ export default function AdminPanel({
                 <TailoringRecords
                   key={`${selected.id}-tailoring`}
                   records={selectedRecords}
+                  profileName={
+                    selected.profile.personal.name.trim() || selected.name
+                  }
                   busy={busy}
                   onBusy={run}
                   onRecordsChange={(update) => setRecords(update(records))}
-                  onConfirm={setConfirm}
                 />
               )}
             </>
