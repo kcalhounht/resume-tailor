@@ -1357,6 +1357,7 @@ button {
 
 .record-name,
 .record-role {
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1365,17 +1366,10 @@ button {
   font-size: 0.9rem;
 }
 
-.record-name {
-  flex: 1 1 7rem;
-}
-
-.record-role {
-  flex: 1 1 7rem;
-}
-
 .record-time,
 .record-row .ats-score,
-.record-row .record-status {
+.record-row .record-status,
+.record-row .text-btn {
   flex: 0 0 auto;
   white-space: nowrap;
 }
@@ -1383,16 +1377,6 @@ button {
 .record-time {
   color: var(--muted);
   font-size: 0.86rem;
-}
-
-.record-row .text-btn {
-  flex: 0 0 auto;
-  margin-left: auto;
-  white-space: nowrap;
-}
-
-.record-row .danger-btn {
-  margin-left: 0;
 }
 
 .record-fields {
