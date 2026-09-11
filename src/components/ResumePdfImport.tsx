@@ -10,7 +10,7 @@ export function ResumePdfImport({
   onError,
 }: {
   disabled?: boolean;
-  onImported: (profile: CandidateProfile) => void;
+  onImported: (profile: CandidateProfile, source: "llm" | "text") => void;
   onError: (message: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -27,6 +27,7 @@ export function ResumePdfImport({
       ok?: boolean;
       error?: string;
       profile?: CandidateProfile;
+      source?: "llm" | "text";
     };
     if (!response.ok || !payload.ok) {
       throw new Error(payload.error || "Could not read that resume.");
@@ -35,7 +36,7 @@ export function ResumePdfImport({
     if (!profile) {
       throw new Error("Could not read a profile from that resume.");
     }
-    onImported(profile);
+    onImported(profile, payload.source === "llm" ? "llm" : "text");
   }
 
   return (
@@ -66,7 +67,7 @@ export function ResumePdfImport({
         disabled={disabled || busy}
         onClick={() => fileRef.current?.click()}
       >
-        {busy ? "Reading PDF…" : "Upload resume PDF"}
+        {busy ? "Reading resume…" : "Upload resume PDF"}
       </button>
     </div>
   );

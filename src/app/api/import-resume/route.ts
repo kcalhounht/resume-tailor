@@ -46,8 +46,8 @@ export async function POST(request: Request) {
 
   try {
     const bytes = new Uint8Array(await file.arrayBuffer());
-    const { text } = await extractPdfText(bytes);
-    const { profile, source } = await extractProfileFromResume(text);
+    const { text, links } = await extractPdfText(bytes);
+    const { profile, source } = await extractProfileFromResume(text, links);
     return Response.json({ ok: true, profile, source });
   } catch (err) {
     const message =

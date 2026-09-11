@@ -1,5 +1,7 @@
-import { extractText, getDocumentProxy } from "unpdf";
+import { Buffer } from "node:buffer";
+import { extractLinks, extractText, extractTextItems, getDocumentProxy } from "unpdf";
 import { MAX_RESUME_PDF_PAGES } from "./limits";
+import { normalizeResumeText, reconstructPdfText } from "./pdf-layout";
 
 function isPdfMagic(bytes: Uint8Array) {
   return (
@@ -11,33 +13,50 @@ function isPdfMagic(bytes: Uint8Array) {
   );
 }
 
+function cleanupText(text: string) {
+  return normalizeResumeText(text);
+}
+
 export async function extractPdfText(bytes: Uint8Array): Promise<{
   text: string;
   totalPages: number;
+  links: string[];
 }> {
   if (!isPdfMagic(bytes)) {
     throw new Error("That file is not a PDF.");
   }
 
-  const pdf = await getDocumentProxy(bytes);
+  const pdf = await getDocumentProxy(
+    Buffer.isBuffer(bytes) ? new Uint8Array(bytes) : bytes,
+  );
   try {
     if (pdf.numPages > MAX_RESUME_PDF_PAGES) {
       throw new Error(
         `Use a resume of ${MAX_RESUME_PDF_PAGES} pages or fewer.`,
       );
     }
-    const { totalPages, text } = await extractText(pdf, { mergePages: true });
-    const cleaned = text
-      .replace(/\u0000/g, " ")
-      .replace(/[ \t]+\n/g, "\n")
-      .replace(/\n{3,}/g, "\n\n")
-      .trim();
-    if (cleaned.replace(/\s+/g, "").length < 40) {
+
+    const [{ items, totalPages }, { links }] = await Promise.all([
+      extractTextItems(pdf),
+      extractLinks(pdf),
+    ]);
+    let text = cleanupText(reconstructPdfText(items));
+
+    if (text.replace(/\s+/g, "").length < 40) {
+      const fallback = await extractText(pdf, { mergePages: true });
+      text = cleanupText(String(fallback.text || ""));
+    }
+
+    if (text.replace(/\s+/g, "").length < 40) {
       throw new Error(
         "No readable text in that PDF. Try a text resume, not a scan.",
       );
     }
-    return { text: cleaned, totalPages };
+
+    const uniqueLinks = Array.from(
+      new Set(links.map((link) => link.trim()).filter(Boolean)),
+    );
+    return { text, totalPages, links: uniqueLinks };
   } finally {
     await pdf.cleanup();
   }

@@ -543,13 +543,15 @@ export default function ResumeForm({
             </div>
             <ResumePdfImport
               disabled={saving || batchBusy || !canOperate}
-              onImported={(imported) => {
+              onImported={(imported, source) => {
                 setError(null);
                 setProfile((current) =>
                   mergeImportedProfile(current, imported),
                 );
                 setSaveMessage(
-                  "Filled from your resume. Review the fields, then Save.",
+                  source === "llm"
+                    ? "Filled with OpenRouter. Review the fields, then Save."
+                    : "Filled from the PDF text. Add an OpenRouter key in Admin Settings for better results.",
                 );
               }}
               onError={(message) => {
