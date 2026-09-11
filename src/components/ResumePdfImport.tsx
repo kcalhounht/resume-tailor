@@ -141,6 +141,7 @@ export function ResumePdfImport({
           setMessage("Filling fields…");
           onImported(profile, event.source);
           imported = true;
+          await new Promise((resolve) => setTimeout(resolve, 450));
         } else if (event.type === "error") {
           throw new Error(event.error || "Could not read that resume.");
         }
