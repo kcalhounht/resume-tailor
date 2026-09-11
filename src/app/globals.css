@@ -676,6 +676,23 @@ select:disabled {
   cursor: not-allowed;
 }
 
+.secret-field {
+  position: relative;
+  min-width: 0;
+}
+
+.secret-field input {
+  padding-right: 4.4rem;
+}
+
+.secret-field .secret-toggle {
+  position: absolute;
+  top: 50%;
+  right: 0.35rem;
+  transform: translateY(-50%);
+  padding: 0.22rem 0.5rem;
+}
+
 select {
   display: block;
   width: 100%;

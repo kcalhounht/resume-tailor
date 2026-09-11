@@ -24,6 +24,7 @@ export default function AdminSettings({
   const [openRouterApiKey, setOpenRouterApiKey] = useState(
     initialSettings.openRouterApiKey,
   );
+  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [messageBox, setMessageBox] = useState<string | null>(null);
 
@@ -103,17 +104,33 @@ export default function AdminSettings({
           </div>
           <div className="field field-span">
             <label htmlFor="openRouterkey-input">OpenRouter API key</label>
-            <input
-              id="openRouterkey-input"
-              name="openRouterkey-input"
-              type="text"
-              autoComplete="off"
-              spellCheck={false}
-              value={openRouterApiKey}
-              disabled={busy}
-              placeholder="sk-or-…"
-              onChange={(event) => setOpenRouterApiKey(event.target.value)}
-            />
+            <div className="secret-field">
+              <input
+                id="openRouterkey-input"
+                name="openRouterkey-input"
+                type={showOpenRouterKey ? "text" : "password"}
+                autoComplete="off"
+                spellCheck={false}
+                value={openRouterApiKey}
+                disabled={busy}
+                placeholder="sk-or-…"
+                onChange={(event) => setOpenRouterApiKey(event.target.value)}
+              />
+              <button
+                type="button"
+                className="text-btn secret-toggle"
+                disabled={busy}
+                aria-pressed={showOpenRouterKey}
+                aria-label={
+                  showOpenRouterKey
+                    ? "Hide OpenRouter key"
+                    : "Show OpenRouter key"
+                }
+                onClick={() => setShowOpenRouterKey((visible) => !visible)}
+              >
+                {showOpenRouterKey ? "Hide" : "Show"}
+              </button>
+            </div>
             <p className="hint">
               {openRouterApiKey.trim()
                 ? "This key is used for extraction and generation. Save after you change it."
