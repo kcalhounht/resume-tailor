@@ -21,7 +21,6 @@ import {
   mergeImportedProfile,
   normalizeProfile,
   profileBlockReason,
-  REQUIRED_PROFILE_MESSAGE,
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
 import { AccountPanel } from "@/components/AccountPanel";
@@ -206,39 +205,6 @@ function RetryIcon() {
   );
 }
 
-function MessageBox({
-  message,
-  onClose,
-}: {
-  message: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
-
-  return (
-    <div className="message-box-overlay" onClick={onClose}>
-      <div
-        className="message-box"
-        role="alertdialog"
-        aria-modal="true"
-        aria-describedby="message-box-text"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <p id="message-box-text">{message}</p>
-        <button type="button" className="primary" autoFocus onClick={onClose}>
-          OK
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function StatusBadge({ status }: { status: JobProgress["status"] }) {
   const label =
     status === "queued"
@@ -276,7 +242,7 @@ export default function ResumeForm({
   const [error, setError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [showProfileErrors, setShowProfileErrors] = useState(false);
-  const [messageBox, setMessageBox] = useState<string | null>(null);
+  const [focusFieldId, setFocusFieldId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [status, setStatus] = useState<string | null>(null);
@@ -306,6 +272,22 @@ export default function ResumeForm({
   );
   const hasAnyJd = jobEntries.some((entry) => entry.text.length > 0);
   const profileReady = isProfileReady(profile);
+
+  function showIncompleteProfile() {
+    const issues = listProfileFieldIssues(profile);
+    setShowProfileErrors(true);
+    setTab("profile");
+    setError(profileBlockReason(profile));
+    setFocusFieldId(issues[0]?.id ?? null);
+  }
+
+  useEffect(() => {
+    if (!focusFieldId || tab !== "profile") return;
+    const node = document.getElementById(focusFieldId);
+    if (!node) return;
+    node.focus();
+    setFocusFieldId(null);
+  }, [focusFieldId, tab]);
 
   const summary = useMemo(() => {
     const done = jobs.filter((j) => j.status === "done").length;
@@ -467,9 +449,7 @@ export default function ResumeForm({
     }
 
     if (!isProfileReady(profile)) {
-      setShowProfileErrors(true);
-      setTab("profile");
-      setMessageBox(REQUIRED_PROFILE_MESSAGE);
+      showIncompleteProfile();
       return;
     }
 
@@ -602,12 +582,21 @@ export default function ResumeForm({
             />
           </div>
 
+          {error && tab === "profile" && (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          )}
+
           <CandidateForm
             profile={profile}
             issues={showProfileErrors ? listProfileFieldIssues(profile) : []}
             onChange={(next) => {
               setSaveMessage(null);
               setProfile(next);
+              if (showProfileErrors) {
+                setError(profileBlockReason(next));
+              }
             }}
             disabled={saving || batchBusy}
           />
@@ -627,10 +616,8 @@ export default function ResumeForm({
                     );
                     return;
                   }
-                  const issues = listProfileFieldIssues(profile);
-                  if (issues.length) {
-                    setShowProfileErrors(true);
-                    setMessageBox(REQUIRED_PROFILE_MESSAGE);
+                  if (!isProfileReady(profile)) {
+                    showIncompleteProfile();
                     return;
                   }
                   setShowProfileErrors(false);
@@ -655,11 +642,6 @@ export default function ResumeForm({
             </button>
             {saveMessage && <p className="inline-status">{saveMessage}</p>}
           </div>
-          {error && tab === "profile" && (
-            <p className="error" role="alert">
-              {error}
-            </p>
-          )}
         </section>
       )}
 
@@ -906,18 +888,6 @@ export default function ResumeForm({
       </section>
         </>
       )}
-      {messageBox ? (
-        <MessageBox
-          message={messageBox}
-          onClose={() => {
-            setMessageBox(null);
-            const firstId = listProfileFieldIssues(profile)[0]?.id;
-            window.setTimeout(() => {
-              document.getElementById(firstId ?? "")?.focus();
-            }, 0);
-          }}
-        />
-      ) : null}
     </div>
   );
 }
