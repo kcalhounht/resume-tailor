@@ -13,6 +13,7 @@ import {
 } from "@/app/actions/admin";
 import {
   isProfileReady,
+  isValidProfileEmail,
   listProfileFieldIssues,
   REQUIRED_PROFILE_MESSAGE,
 } from "@/lib/profile";
@@ -23,6 +24,53 @@ type UserTab = "account" | "profile" | "tailoring";
 
 function actionError(err: unknown) {
   return err instanceof Error ? err.message : "Administrator action failed.";
+}
+
+function createAccountFieldIssues(input: {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}) {
+  const issues: { id: string; message: string }[] = [];
+  if (input.name.trim().length < 2) {
+    issues.push({
+      id: "new-name",
+      message: input.name.trim() ? "Enter at least 2 characters." : "Required",
+    });
+  }
+  if (!input.email.trim()) {
+    issues.push({ id: "new-email", message: "Required" });
+  } else if (!isValidProfileEmail(input.email)) {
+    issues.push({ id: "new-email", message: "Enter a valid email." });
+  }
+  if (!input.password) {
+    issues.push({ id: "new-password", message: "Required" });
+  } else if (input.password.length < 8) {
+    issues.push({
+      id: "new-password",
+      message: "Password must be at least 8 characters.",
+    });
+  }
+  if (!input.confirmPassword) {
+    issues.push({ id: "new-confirm-password", message: "Required" });
+  } else if (input.password !== input.confirmPassword) {
+    issues.push({
+      id: "new-confirm-password",
+      message: "Passwords do not match.",
+    });
+  }
+  return issues;
+}
+
+function createAccountNotice(
+  issues: { id: string; message: string }[],
+): string | null {
+  if (!issues.length) return null;
+  if (issues.some((issue) => issue.message === "Required")) {
+    return "You should fill all required account fields.";
+  }
+  return issues[0].message;
 }
 
 function AccountTab({
@@ -302,11 +350,21 @@ export default function AdminPanel({
   const [newRole, setNewRole] = useState<UserRole>(defaultRole);
   const [newPriority, setNewPriority] = useState<UserPriority>(defaultPriority);
   const [createFieldsLocked, setCreateFieldsLocked] = useState(true);
+  const [showCreateErrors, setShowCreateErrors] = useState(false);
   const [busy, setBusy] = useState(false);
   const [messageBox, setMessageBox] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
   const selected = users.find((user) => user.id === selectedId) ?? null;
+  const createIssues = showCreateErrors
+    ? createAccountFieldIssues({
+        name: newName,
+        email: newEmail,
+        password: newPassword,
+        confirmPassword: newConfirmPassword,
+      })
+    : [];
+  const createIssueById = new Map(createIssues.map((issue) => [issue.id, issue]));
 
   const visibleUsers = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -375,16 +433,21 @@ export default function AdminPanel({
         </div>
         <form
           autoComplete="off"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
-            if (!newConfirmPassword) {
-              setMessageBox("Confirm the password.");
+            const issues = createAccountFieldIssues({
+              name: newName,
+              email: newEmail,
+              password: newPassword,
+              confirmPassword: newConfirmPassword,
+            });
+            if (issues.length) {
+              setShowCreateErrors(true);
+              setMessageBox(createAccountNotice(issues));
               return;
             }
-            if (newPassword !== newConfirmPassword) {
-              setMessageBox("Passwords do not match.");
-              return;
-            }
+            setShowCreateErrors(false);
             void run("Account created.", async () => {
               const created = await createAccount({
                 name: newName,
@@ -402,6 +465,7 @@ export default function AdminPanel({
               setNewRole(defaultRole);
               setNewPriority(defaultPriority);
               setCreateFieldsLocked(true);
+              setShowCreateErrors(false);
             });
           }}
         >
@@ -415,7 +479,7 @@ export default function AdminPanel({
             />
           </div>
           <div className="field-grid">
-            <div className="field">
+            <div className={`field${createIssueById.has("new-name") ? " field-invalid" : ""}`}>
               <label htmlFor="new-name">Name</label>
               <input
                 id="new-name"
@@ -423,12 +487,23 @@ export default function AdminPanel({
                 autoComplete="off"
                 value={newName}
                 disabled={busy}
+                required
+                aria-required
+                aria-invalid={createIssueById.has("new-name") ? true : undefined}
+                aria-describedby={
+                  createIssueById.has("new-name") ? "new-name-error" : undefined
+                }
                 readOnly={createFieldsLocked}
                 onFocus={() => setCreateFieldsLocked(false)}
                 onChange={(event) => setNewName(event.target.value)}
               />
+              {createIssueById.get("new-name") ? (
+                <p className="field-error" id="new-name-error">
+                  {createIssueById.get("new-name")?.message}
+                </p>
+              ) : null}
             </div>
-            <div className="field">
+            <div className={`field${createIssueById.has("new-email") ? " field-invalid" : ""}`}>
               <label htmlFor="new-email">Email</label>
               <input
                 id="new-email"
@@ -437,12 +512,23 @@ export default function AdminPanel({
                 autoComplete="off"
                 value={newEmail}
                 disabled={busy}
+                required
+                aria-required
+                aria-invalid={createIssueById.has("new-email") ? true : undefined}
+                aria-describedby={
+                  createIssueById.has("new-email") ? "new-email-error" : undefined
+                }
                 readOnly={createFieldsLocked}
                 onFocus={() => setCreateFieldsLocked(false)}
                 onChange={(event) => setNewEmail(event.target.value)}
               />
+              {createIssueById.get("new-email") ? (
+                <p className="field-error" id="new-email-error">
+                  {createIssueById.get("new-email")?.message}
+                </p>
+              ) : null}
             </div>
-            <div className="field">
+            <div className={`field${createIssueById.has("new-password") ? " field-invalid" : ""}`}>
               <label htmlFor="new-password">Password</label>
               <input
                 id="new-password"
@@ -451,12 +537,28 @@ export default function AdminPanel({
                 autoComplete="new-password"
                 value={newPassword}
                 disabled={busy}
+                required
+                aria-required
+                minLength={8}
+                aria-invalid={createIssueById.has("new-password") ? true : undefined}
+                aria-describedby={
+                  createIssueById.has("new-password")
+                    ? "new-password-error"
+                    : undefined
+                }
                 readOnly={createFieldsLocked}
                 onFocus={() => setCreateFieldsLocked(false)}
                 onChange={(event) => setNewPassword(event.target.value)}
               />
+              {createIssueById.get("new-password") ? (
+                <p className="field-error" id="new-password-error">
+                  {createIssueById.get("new-password")?.message}
+                </p>
+              ) : null}
             </div>
-            <div className="field">
+            <div
+              className={`field${createIssueById.has("new-confirm-password") ? " field-invalid" : ""}`}
+            >
               <label htmlFor="new-confirm-password">Confirm password</label>
               <input
                 id="new-confirm-password"
@@ -465,10 +567,26 @@ export default function AdminPanel({
                 autoComplete="new-password"
                 value={newConfirmPassword}
                 disabled={busy}
+                required
+                aria-required
+                minLength={8}
+                aria-invalid={
+                  createIssueById.has("new-confirm-password") ? true : undefined
+                }
+                aria-describedby={
+                  createIssueById.has("new-confirm-password")
+                    ? "new-confirm-password-error"
+                    : undefined
+                }
                 readOnly={createFieldsLocked}
                 onFocus={() => setCreateFieldsLocked(false)}
                 onChange={(event) => setNewConfirmPassword(event.target.value)}
               />
+              {createIssueById.get("new-confirm-password") ? (
+                <p className="field-error" id="new-confirm-password-error">
+                  {createIssueById.get("new-confirm-password")?.message}
+                </p>
+              ) : null}
             </div>
             <div className="field">
               <label htmlFor="new-role">Role</label>
