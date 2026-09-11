@@ -1368,8 +1368,7 @@ button {
 
 .record-time,
 .record-row .ats-score,
-.record-row .record-status,
-.record-row .text-btn {
+.record-row .record-status {
   flex: 0 0 auto;
   white-space: nowrap;
 }
@@ -1377,6 +1376,18 @@ button {
 .record-time {
   color: var(--muted);
   font-size: 0.86rem;
+}
+
+.record-row-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.75rem;
+  margin-left: auto;
+}
+
+.record-row-actions .text-btn {
+  white-space: nowrap;
 }
 
 .record-fields {

@@ -232,22 +232,24 @@ export default function TailoringRecords({
                             Failed
                           </span>
                         )}
-                        <button
-                          type="button"
-                          className="text-btn"
-                          disabled={busy}
-                          onClick={() => setOpenId(open ? null : record.id)}
-                        >
-                          {open ? "Hide summary" : "Summary"}
-                        </button>
-                        <button
-                          type="button"
-                          className="text-btn danger-btn"
-                          disabled={busy}
-                          onClick={() => deleteRecord(record)}
-                        >
-                          Delete
-                        </button>
+                        <div className="record-row-actions">
+                          <button
+                            type="button"
+                            className="text-btn"
+                            disabled={busy}
+                            onClick={() => setOpenId(open ? null : record.id)}
+                          >
+                            {open ? "Hide summary" : "Summary"}
+                          </button>
+                          <button
+                            type="button"
+                            className="text-btn danger-btn"
+                            disabled={busy}
+                            onClick={() => deleteRecord(record)}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
 
                       {record.error && <p className="error">{record.error}</p>}
