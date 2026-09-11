@@ -1,5 +1,6 @@
 export const RESUME_FONT_IDS = [
   "calibri",
+  "aptos",
   "times",
   "georgia",
   "arial",
@@ -41,6 +42,7 @@ export const RESUME_FONT_OPTIONS: Array<{
   hint: string;
 }> = [
   { id: "calibri", name: "Calibri", hint: "Clean sans-serif (default)" },
+  { id: "aptos", name: "Aptos", hint: "Microsoft 365 sans-serif" },
   { id: "times", name: "Times", hint: "Traditional serif" },
   { id: "georgia", name: "Georgia", hint: "Readable serif" },
   { id: "arial", name: "Arial", hint: "Simple sans-serif" },
@@ -134,6 +136,12 @@ const FONT_MAP: Record<
 > = {
   calibri: {
     docx: "Calibri",
+    pdfRegular: "Helvetica",
+    pdfBold: "Helvetica-Bold",
+    pdfItalic: "Helvetica-Oblique",
+  },
+  aptos: {
+    docx: "Aptos",
     pdfRegular: "Helvetica",
     pdfBold: "Helvetica-Bold",
     pdfItalic: "Helvetica-Oblique",
