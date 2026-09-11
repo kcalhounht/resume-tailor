@@ -217,16 +217,9 @@ export default function TailoringRecords({
                           <dd>{profileName || record.userName || "—"}</dd>
                         </div>
                         <div>
-                          <dt>Role</dt>
-                          <dd>{record.jobTitle || "—"}</dd>
-                        </div>
-                        <div>
                           <dt>Generated</dt>
-                          <dd>{formatGenerated(record.createdAt)}</dd>
-                        </div>
-                        <div>
-                          <dt>ATS</dt>
-                          <dd>
+                          <dd className="record-generated">
+                            <span>{formatGenerated(record.createdAt)}</span>
                             {record.status === "done" &&
                             typeof record.atsScore === "number" ? (
                               <span
@@ -243,18 +236,13 @@ export default function TailoringRecords({
                             )}
                           </dd>
                         </div>
+                        <div>
+                          <dt>Role</dt>
+                          <dd>{record.jobTitle || "—"}</dd>
+                        </div>
                       </dl>
 
                       {record.error && <p className="error">{record.error}</p>}
-
-                      <button
-                        type="button"
-                        className="text-btn"
-                        disabled={busy}
-                        onClick={() => setOpenId(open ? null : record.id)}
-                      >
-                        {open ? "Hide summary" : "Summary"}
-                      </button>
 
                       {open ? (
                         <p className="record-summary">
@@ -264,6 +252,14 @@ export default function TailoringRecords({
                       ) : null}
 
                       <div className="record-card-footer">
+                        <button
+                          type="button"
+                          className="text-btn"
+                          disabled={busy}
+                          onClick={() => setOpenId(open ? null : record.id)}
+                        >
+                          {open ? "Hide summary" : "Summary"}
+                        </button>
                         <button
                           type="button"
                           className="text-btn danger-btn"

@@ -1349,14 +1349,20 @@ button {
 
 .record-fields {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 0.65rem 1rem;
+  grid-template-columns: 1fr;
+  gap: 0.65rem;
   margin: 0;
 }
 
 .record-fields > div {
   display: grid;
   gap: 0.18rem;
+}
+
+.record-generated {
+  display: grid;
+  gap: 0.35rem;
+  justify-items: start;
 }
 
 .record-fields dt {
@@ -1370,12 +1376,6 @@ button {
   margin: 0;
   color: var(--ink);
   font-size: 0.9rem;
-}
-
-@media (max-width: 640px) {
-  .record-fields {
-    grid-template-columns: 1fr;
-  }
 }
 
 .record-meta {
@@ -1403,7 +1403,9 @@ button {
 
 .record-card-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
 }
 
 .record-summary {
