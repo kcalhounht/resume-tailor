@@ -43,6 +43,7 @@ Rules:
 - period should stay close to the resume wording (example: "Jan 2020 – Present").
 - location is the job or school city/remote line, not a company description or bullet.
 - personal.location is the candidate's city/region, not a job location.
+- If a personal or job location is not stated, use "Remote".
 - discipline is the field of study (example: "Computer Science"). degree is the credential (example: "B.S." or "Bachelor of Science").
 - If a line is "B.S. in Computer Science", degree is "B.S." and discipline is "Computer Science".
 - linkedin should be a full URL when possible (https://linkedin.com/in/...).
@@ -393,6 +394,20 @@ export function mergeResumeHints(
   }) ?? emptyProfile();
 }
 
+export function applyRemoteLocations(profile: CandidateProfile): CandidateProfile {
+  return {
+    ...profile,
+    personal: {
+      ...profile.personal,
+      location: profile.personal.location.trim() || "Remote",
+    },
+    experiences: profile.experiences.map((exp) => ({
+      ...exp,
+      location: exp.location.trim() || "Remote",
+    })),
+  };
+}
+
 function resumeUserContent(text: string, links: string[]) {
   const linkBlock = links.length
     ? `PDF hyperlinks:\n${links.map((link) => `- ${link}`).join("\n")}\n\n`
@@ -479,7 +494,7 @@ export async function extractProfileFromResume(
   if (!(await getLlmApiKey())) {
     onProgress?.("Parsing resume text…");
     return {
-      profile: mergeResumeHints(fallback, fallback, text, links),
+      profile: applyRemoteLocations(mergeResumeHints(fallback, fallback, text, links)),
       source: "text",
     };
   }
@@ -487,7 +502,9 @@ export async function extractProfileFromResume(
   try {
     onProgress?.("Extracting with OpenRouter…");
     const llmProfile = await extractProfileWithLlm(text, links);
-    const profile = mergeResumeHints(llmProfile, fallback, text, links);
+    const profile = applyRemoteLocations(
+      mergeResumeHints(llmProfile, fallback, text, links),
+    );
     if (usefulProfile(profile)) {
       return { profile, source: "llm" };
     }
@@ -497,7 +514,9 @@ export async function extractProfileFromResume(
       err instanceof Error ? err.message : "Could not read that resume.";
     if (usefulProfile(fallback)) {
       return {
-        profile: mergeResumeHints(fallback, fallback, text, links),
+        profile: applyRemoteLocations(
+          mergeResumeHints(fallback, fallback, text, links),
+        ),
         source: "text",
       };
     }

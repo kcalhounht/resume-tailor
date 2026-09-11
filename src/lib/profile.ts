@@ -195,11 +195,14 @@ export function mergeImportedProfile(
     linkedin: next.personal.linkedin || current.personal.linkedin,
     portfolio: next.personal.portfolio || current.personal.portfolio,
     email: next.personal.email || current.personal.email,
-    location: next.personal.location || current.personal.location,
+    location: next.personal.location || current.personal.location || "Remote",
   };
-  const experiences = next.experiences.filter(
-    (exp) => exp.company.trim() || exp.title.trim(),
-  );
+  const experiences = next.experiences
+    .filter((exp) => exp.company.trim() || exp.title.trim())
+    .map((exp) => ({
+      ...exp,
+      location: exp.location.trim() || "Remote",
+    }));
   const education = next.education.filter(
     (edu) => edu.school.trim() || edu.degree.trim(),
   );
