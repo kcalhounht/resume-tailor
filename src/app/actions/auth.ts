@@ -18,6 +18,11 @@ import {
   pageStyleCookieOptions,
 } from "@/lib/appearance";
 import {
+  parseResumeFormat,
+  resumeFormatCookieOptions,
+  RESUME_FORMAT_COOKIE,
+} from "@/lib/resume-format";
+import {
   createUser,
   findUserByEmail,
   findUserById,
@@ -60,6 +65,7 @@ async function setSessionCookie(user: {
   email: string;
   name: string;
   pageStyle?: string;
+  resumeFormat?: unknown;
 }) {
   const jar = await cookies();
   jar.set(
@@ -76,6 +82,11 @@ async function setSessionCookie(user: {
     parsePageStyle(user.pageStyle),
     pageStyleCookieOptions(),
   );
+  jar.set(
+    RESUME_FORMAT_COOKIE,
+    JSON.stringify(parseResumeFormat(user.resumeFormat)),
+    resumeFormatCookieOptions(),
+  );
 }
 
 export async function getSession(): Promise<SessionPayload | null> {
@@ -91,6 +102,7 @@ export async function requireSession(): Promise<SessionPayload> {
     const jar = await cookies();
     jar.delete(SESSION_COOKIE);
     jar.delete(PAGE_STYLE_COOKIE);
+    jar.delete(RESUME_FORMAT_COOKIE);
     redirect("/signin");
   }
   return session;
@@ -193,5 +205,6 @@ export async function signout() {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
   jar.delete(PAGE_STYLE_COOKIE);
+  jar.delete(RESUME_FORMAT_COOKIE);
   redirect("/signin");
 }

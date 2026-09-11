@@ -253,6 +253,7 @@ export default function ResumeForm({
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [status, setStatus] = useState<string | null>(null);
   const [appliedSessionName, setAppliedSessionName] = useState(session.name);
+  const [resumeFormat, setResumeFormat] = useState(initialResumeFormat);
 
   if (session.name !== appliedSessionName) {
     setAppliedSessionName(session.name);
@@ -366,6 +367,7 @@ export default function ResumeForm({
           profile: normalizeProfile(profile),
           jobDescriptions: targets.map((t) => t.jobDescription),
           indices: targets.map((t) => t.index),
+          resumeFormat,
         }),
       });
 
@@ -645,8 +647,9 @@ export default function ResumeForm({
       {tab === "settings" && (
         <UserSettingsPanel
           initialStyle={initialPageStyle}
-          initialResumeFormat={initialResumeFormat}
+          initialResumeFormat={resumeFormat}
           canOperate={canOperate}
+          onResumeFormatChange={setResumeFormat}
         />
       )}
 

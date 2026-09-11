@@ -111,6 +111,18 @@ function asAccent(value: unknown): ResumeAccent {
     : DEFAULT_RESUME_FORMAT.accent;
 }
 
+export const RESUME_FORMAT_COOKIE = "rt_resume_format";
+
+export function resumeFormatCookieOptions() {
+  return {
+    httpOnly: false,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 365 * 24 * 60 * 60,
+  };
+}
+
 export function parseResumeFormat(value: unknown): ResumeFormat {
   if (typeof value === "string") {
     try {

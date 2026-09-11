@@ -17,6 +17,15 @@ import {
   type ResumeLook,
 } from "./resume-format";
 
+function docxFont(look: ResumeLook) {
+  return {
+    ascii: look.docxFont,
+    hAnsi: look.docxFont,
+    eastAsia: look.docxFont,
+    cs: look.docxFont,
+  };
+}
+
 function linkedInDisplay(url: string): string {
   try {
     const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
@@ -66,7 +75,7 @@ function contactSeparator(look: ResumeLook) {
   return new TextRun({
     text: "  ·  ",
     size: look.contactSize,
-    font: look.docxFont,
+    font: docxFont(look),
     color: look.muted,
   });
 }
@@ -79,7 +88,7 @@ function hyperlinkRun(label: string, href: string, look: ResumeLook) {
         text: label,
         color: look.accent,
         size: look.contactSize,
-        font: look.docxFont,
+        font: docxFont(look),
         underline: {
           type: UnderlineType.NONE,
         },
@@ -92,7 +101,7 @@ function plainContactRun(text: string, look: ResumeLook) {
   return new TextRun({
     text,
     size: look.contactSize,
-    font: look.docxFont,
+    font: docxFont(look),
     color: look.muted,
   });
 }
@@ -162,7 +171,7 @@ function buildResumeHeader(
           text: displayName(personal.name, look),
           bold: true,
           size: look.nameSize,
-          font: look.docxFont,
+          font: docxFont(look),
           color: look.ink,
         }),
       ],
@@ -177,7 +186,7 @@ function buildResumeHeader(
                 text: headline,
                 italics: true,
                 size: look.headingSize,
-                font: look.docxFont,
+                font: docxFont(look),
                 color: look.accent,
               }),
             ],
@@ -212,7 +221,7 @@ function runsFromText(
         text: seg.text,
         bold: seg.bold,
         size,
-        font: look.docxFont,
+        font: docxFont(look),
       }),
   );
 }
@@ -233,7 +242,7 @@ function sectionHeading(text: string, look: ResumeLook) {
         text: headingLabel(text, look),
         bold: true,
         size: look.headingSize,
-        font: look.docxFont,
+        font: docxFont(look),
         allCaps: look.headingAllCaps,
         color: look.accent,
       }),
@@ -254,7 +263,7 @@ function skillGroupParagraph(
         text: `${category}: `,
         bold: true,
         size: look.bodySize,
-        font: look.docxFont,
+        font: docxFont(look),
       }),
       ...runsFromText(items.join(", "), keywords, look.bodySize, look),
     ],
@@ -292,7 +301,7 @@ export async function buildResumeDocx(
             text: exp.title,
             bold: true,
             size: look.headingSize,
-            font: look.docxFont,
+            font: docxFont(look),
           }),
         ],
       }),
@@ -303,7 +312,7 @@ export async function buildResumeDocx(
             text: `${exp.company}  |  ${exp.location}  |  ${exp.period}`,
             italics: true,
             size: look.bodySize,
-            font: look.docxFont,
+            font: docxFont(look),
           }),
         ],
       }),
@@ -315,7 +324,7 @@ export async function buildResumeDocx(
                 new TextRun({
                   text: exp.overview,
                   size: look.bodySize,
-                  font: look.docxFont,
+                  font: docxFont(look),
                   italics: true,
                   color: "444444",
                 }),
@@ -344,7 +353,7 @@ export async function buildResumeDocx(
             text: edu.degree,
             bold: true,
             size: look.headingSize,
-            font: look.docxFont,
+            font: docxFont(look),
           }),
         ],
       }),
@@ -355,7 +364,7 @@ export async function buildResumeDocx(
             text: educationSubline(edu),
             italics: true,
             size: look.bodySize,
-            font: look.docxFont,
+            font: docxFont(look),
           }),
         ],
       }),
@@ -363,6 +372,15 @@ export async function buildResumeDocx(
   }
 
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: look.docxFont,
+          },
+        },
+      },
+    },
     sections: [
       {
         properties: {
@@ -404,6 +422,15 @@ export async function buildCoverLetterDocx(
     .filter(Boolean);
 
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: look.docxFont,
+          },
+        },
+      },
+    },
     sections: [
       {
         properties: {
@@ -424,7 +451,7 @@ export async function buildCoverLetterDocx(
               new TextRun({
                 text: today,
                 size: look.bodySize,
-                font: look.docxFont,
+                font: docxFont(look),
               }),
             ],
           }),
@@ -434,7 +461,7 @@ export async function buildCoverLetterDocx(
               new TextRun({
                 text: `Hiring Manager`,
                 size: look.bodySize,
-                font: look.docxFont,
+                font: docxFont(look),
               }),
             ],
           }),
@@ -444,7 +471,7 @@ export async function buildCoverLetterDocx(
               new TextRun({
                 text: company,
                 size: look.bodySize,
-                font: look.docxFont,
+                font: docxFont(look),
               }),
             ],
           }),
@@ -455,7 +482,7 @@ export async function buildCoverLetterDocx(
                 text: `Re: ${jobTitle}`,
                 bold: true,
                 size: look.bodySize,
-                font: look.docxFont,
+                font: docxFont(look),
               }),
             ],
           }),
@@ -472,7 +499,7 @@ export async function buildCoverLetterDocx(
               new TextRun({
                 text: "Sincerely,",
                 size: look.bodySize,
-                font: look.docxFont,
+                font: docxFont(look),
               }),
             ],
           }),
@@ -483,7 +510,7 @@ export async function buildCoverLetterDocx(
                 text: personal.name,
                 bold: true,
                 size: look.bodySize,
-                font: look.docxFont,
+                font: docxFont(look),
               }),
             ],
           }),

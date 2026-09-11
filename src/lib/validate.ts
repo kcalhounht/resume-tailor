@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { MIN_JOB_DESCRIPTION_CHARS } from "./limits";
 import { isValidProfileEmail, parseProfileDraft } from "./profile";
+import { parseResumeFormat, type ResumeFormat } from "./resume-format";
 import type { CandidateProfile } from "./types";
 
 const personalSchema = z.object({
@@ -57,6 +58,13 @@ export const tailorRequestSchema = z
       )
       .min(1),
     indices: z.array(z.number().int().positive()).optional(),
+    resumeFormat: z
+      .object({
+        font: z.string().optional(),
+        style: z.string().optional(),
+        accent: z.string().optional(),
+      })
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (value.indices && value.indices.length !== value.jobDescriptions.length) {
@@ -72,6 +80,7 @@ export function parseTailorRequest(body: unknown): {
   profile: CandidateProfile;
   jobDescriptions: string[];
   indices?: number[];
+  resumeFormat?: ResumeFormat;
 } {
   const parsed = tailorRequestSchema.parse(body);
   const profile = parseProfileDraft(parsed.profile);
@@ -82,5 +91,8 @@ export function parseTailorRequest(body: unknown): {
     profile,
     jobDescriptions: parsed.jobDescriptions,
     indices: parsed.indices,
+    resumeFormat: parsed.resumeFormat
+      ? parseResumeFormat(parsed.resumeFormat)
+      : undefined,
   };
 }

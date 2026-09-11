@@ -19,10 +19,12 @@ export function UserSettingsPanel({
   initialStyle,
   initialResumeFormat,
   canOperate = true,
+  onResumeFormatChange,
 }: {
   initialStyle: PageStyle;
   initialResumeFormat: ResumeFormat;
   canOperate?: boolean;
+  onResumeFormatChange?: (format: ResumeFormat) => void;
 }) {
   const [selected, setSelected] = useState<PageStyle>(initialStyle);
   const [saved, setSaved] = useState<PageStyle>(initialStyle);
@@ -38,12 +40,14 @@ export function UserSettingsPanel({
     if (!canOperate) return;
     const next = parseResumeFormat({ ...resumeFormat, ...patch });
     setResumeFormat(next);
+    onResumeFormatChange?.(next);
     setError(null);
     setBusy(true);
     void saveOwnResumeFormat(next)
       .then((savedFormat) => {
         setResumeFormat(savedFormat.resumeFormat);
         setSavedResumeFormat(savedFormat.resumeFormat);
+        onResumeFormatChange?.(savedFormat.resumeFormat);
       })
       .catch((err: unknown) => {
         setError(
@@ -52,6 +56,7 @@ export function UserSettingsPanel({
             : "Could not save resume format.",
         );
         setResumeFormat(savedResumeFormat);
+        onResumeFormatChange?.(savedResumeFormat);
       })
       .finally(() => setBusy(false));
   }

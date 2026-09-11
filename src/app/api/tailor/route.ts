@@ -3,8 +3,12 @@ import { processOneJob } from "@/lib/process-job";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
 import { getSession } from "@/app/actions/auth";
+import { cookies } from "next/headers";
 import { findUserById, isUserAble, saveUserProfile, PRIORITY_DISABLED_MESSAGE } from "@/lib/users";
-import { parseResumeFormat } from "@/lib/resume-format";
+import {
+  parseResumeFormat,
+  RESUME_FORMAT_COOKIE,
+} from "@/lib/resume-format";
 import { normalizeProfile } from "@/lib/profile";
 import {
   addTailorRecord,
@@ -61,6 +65,12 @@ export async function POST(request: Request) {
     // Generation can still proceed if the profile write fails.
   }
 
+  const resumeFormat = parseResumeFormat(
+    payload.resumeFormat ??
+      (await cookies()).get(RESUME_FORMAT_COOKIE)?.value ??
+      user.resumeFormat,
+  );
+
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
     async start(controller) {
@@ -82,7 +92,7 @@ export async function POST(request: Request) {
                 profile: payload.profile,
                 personal: payload.profile.personal,
                 outputSuffix: recordOutputSuffix(recordId),
-                resumeFormat: parseResumeFormat(user.resumeFormat),
+                resumeFormat,
                 onStep: (step, message) => {
                   currentStep = step;
                   send({

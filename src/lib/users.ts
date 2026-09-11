@@ -295,7 +295,7 @@ export async function createUser(input: {
           ${user.priority},
           ${user.profile ?? null},
           ${user.pageStyle},
-          ${user.resumeFormat}
+          ${JSON.stringify(user.resumeFormat)}
         )
       `;
     } catch (err) {
@@ -525,7 +525,7 @@ export async function updateUserResumeFormat(
     const sql = await withDatabase();
     const exists = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`;
     if (!exists.length) throw new Error("Account not found.");
-    await sql`UPDATE users SET resume_format = ${next} WHERE id = ${userId}`;
+    await sql`UPDATE users SET resume_format = ${JSON.stringify(next)} WHERE id = ${userId}`;
     return next;
   }
 
