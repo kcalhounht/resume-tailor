@@ -1,6 +1,6 @@
 export const RESUME_FONT_IDS = [
-  "calibri",
   "aptos",
+  "calibri",
   "times",
   "georgia",
   "arial",
@@ -31,7 +31,7 @@ export type ResumeFormat = {
 };
 
 export const DEFAULT_RESUME_FORMAT: ResumeFormat = {
-  font: "calibri",
+  font: "aptos",
   style: "classic",
   accent: "navy",
 };
@@ -43,16 +43,16 @@ export const RESUME_FONT_OPTIONS: Array<{
   cssFamily: string;
 }> = [
   {
-    id: "calibri",
-    name: "Calibri",
-    hint: "Clean sans-serif (default)",
-    cssFamily: 'Calibri, "ResumeCalibri", sans-serif',
-  },
-  {
     id: "aptos",
     name: "Aptos",
-    hint: "Microsoft 365 sans-serif",
+    hint: "Microsoft 365 sans-serif (default)",
     cssFamily: 'Aptos, "ResumeAptos", sans-serif',
+  },
+  {
+    id: "calibri",
+    name: "Calibri",
+    hint: "Clean sans-serif",
+    cssFamily: 'Calibri, "ResumeCalibri", sans-serif',
   },
   {
     id: "times",
