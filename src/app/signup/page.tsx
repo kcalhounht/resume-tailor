@@ -41,7 +41,9 @@ export default async function SignUpPage() {
           ) : (
             <>
               <p className="hint">
-                Sign up to save your profile and generate tailored resumes.
+                Sign up to save your profile and generate tailored resumes. The
+                first person who signs up with the name admin becomes the
+                administrator.
               </p>
               {session ? (
                 <p className="hint">
