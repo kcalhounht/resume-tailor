@@ -9,11 +9,13 @@ import type {
 import {
   emptyEducation,
   emptyExperience,
+  type ProfileFieldIssue,
 } from "@/lib/profile";
 
 type CandidateFormProps = {
   profile: CandidateProfile;
   disabled?: boolean;
+  issues?: ProfileFieldIssue[];
   onChange: (profile: CandidateProfile) => void;
 };
 
@@ -25,6 +27,9 @@ function Field({
   placeholder,
   type = "text",
   disabled,
+  className,
+  required = true,
+  issue,
 }: {
   id: string;
   label: string;
@@ -33,9 +38,15 @@ function Field({
   placeholder?: string;
   type?: string;
   disabled?: boolean;
+  className?: string;
+  required?: boolean;
+  issue?: ProfileFieldIssue;
 }) {
+  const errorId = `${id}-error`;
   return (
-    <div className="field">
+    <div
+      className={`${className ? `field ${className}` : "field"}${issue ? " field-invalid" : ""}`}
+    >
       <label htmlFor={id}>{label}</label>
       <input
         id={id}
@@ -43,10 +54,19 @@ function Field({
         value={value}
         disabled={disabled}
         placeholder={placeholder}
+        required={required}
+        aria-required={required}
+        aria-invalid={issue ? true : undefined}
+        aria-describedby={issue ? errorId : undefined}
         onChange={(e) => onChange(e.target.value)}
         autoComplete="off"
         spellCheck={false}
       />
+      {issue ? (
+        <p className="field-error" id={errorId}>
+          {issue.message}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -54,8 +74,10 @@ function Field({
 export default function CandidateForm({
   profile,
   disabled,
+  issues = [],
   onChange,
 }: CandidateFormProps) {
+  const issueById = new Map(issues.map((issue) => [issue.id, issue]));
   function setPersonal<K extends keyof PersonalInfo>(
     key: K,
     value: PersonalInfo[K],
@@ -94,14 +116,7 @@ export default function CandidateForm({
           onChange={(value) => setPersonal("name", value)}
           placeholder="Jane Doe"
           disabled={disabled}
-        />
-        <Field
-          id="candidate-location"
-          label="Location"
-          value={profile.personal.location}
-          onChange={(value) => setPersonal("location", value)}
-          placeholder="City, Country"
-          disabled={disabled}
+          issue={issueById.get("candidate-name")}
         />
         <Field
           id="candidate-email"
@@ -111,6 +126,16 @@ export default function CandidateForm({
           onChange={(value) => setPersonal("email", value)}
           placeholder="you@email.com"
           disabled={disabled}
+          issue={issueById.get("candidate-email")}
+        />
+        <Field
+          id="candidate-location"
+          label="Location"
+          value={profile.personal.location}
+          onChange={(value) => setPersonal("location", value)}
+          placeholder="City, Country"
+          disabled={disabled}
+          issue={issueById.get("candidate-location")}
         />
         <Field
           id="candidate-phone"
@@ -119,6 +144,7 @@ export default function CandidateForm({
           onChange={(value) => setPersonal("phone", value)}
           placeholder="+1 555 123 4567"
           disabled={disabled}
+          issue={issueById.get("candidate-phone")}
         />
         <Field
           id="candidate-linkedin"
@@ -127,6 +153,16 @@ export default function CandidateForm({
           onChange={(value) => setPersonal("linkedin", value)}
           placeholder="https://www.linkedin.com/in/…"
           disabled={disabled}
+          issue={issueById.get("candidate-linkedin")}
+        />
+        <Field
+          id="candidate-portfolio"
+          label="Portfolio"
+          value={profile.personal.portfolio}
+          onChange={(value) => setPersonal("portfolio", value)}
+          placeholder="https://your-site.com"
+          disabled={disabled}
+          required={false}
         />
       </div>
 
@@ -136,13 +172,13 @@ export default function CandidateForm({
         </div>
         <div className="profile-list">
           {profile.experiences.map((exp, index) => (
-            <div key={index} className="profile-card">
+            <div key={exp.id || `experience-${index}`} className="profile-card">
               <div className="jd-item-head">
                 <label htmlFor={`exp-company-${index}`}>Role {index + 1}</label>
                 {profile.experiences.length > 1 && (
                   <button
                     type="button"
-                    className="text-btn"
+                    className="text-btn section-remove"
                     disabled={disabled}
                     onClick={() =>
                       onChange({
@@ -165,6 +201,7 @@ export default function CandidateForm({
                   onChange={(value) => setExperience(index, { company: value })}
                   placeholder="Acme"
                   disabled={disabled}
+                  issue={issueById.get(`exp-company-${index}`)}
                 />
                 <Field
                   id={`exp-title-${index}`}
@@ -173,6 +210,7 @@ export default function CandidateForm({
                   onChange={(value) => setExperience(index, { title: value })}
                   placeholder="Software Engineer"
                   disabled={disabled}
+                  issue={issueById.get(`exp-title-${index}`)}
                 />
                 <Field
                   id={`exp-period-${index}`}
@@ -181,6 +219,7 @@ export default function CandidateForm({
                   onChange={(value) => setExperience(index, { period: value })}
                   placeholder="Jan 2020 – Present"
                   disabled={disabled}
+                  issue={issueById.get(`exp-period-${index}`)}
                 />
                 <Field
                   id={`exp-location-${index}`}
@@ -191,6 +230,7 @@ export default function CandidateForm({
                   }
                   placeholder="Remote"
                   disabled={disabled}
+                  issue={issueById.get(`exp-location-${index}`)}
                 />
               </div>
             </div>
@@ -203,7 +243,10 @@ export default function CandidateForm({
           onClick={() =>
             onChange({
               ...profile,
-              experiences: [...profile.experiences, emptyExperience()],
+              experiences: [
+                ...(profile.experiences ?? []),
+                emptyExperience(),
+              ],
             })
           }
         >
@@ -217,15 +260,15 @@ export default function CandidateForm({
         </div>
         <div className="profile-list">
           {profile.education.map((edu, index) => (
-            <div key={index} className="profile-card">
+            <div key={edu.id || `education-${index}`} className="profile-card">
               <div className="jd-item-head">
                 <label htmlFor={`edu-school-${index}`}>
                   School {index + 1}
                 </label>
-                {profile.education.length > 0 && (
+                {profile.education.length > 1 && (
                   <button
                     type="button"
-                    className="text-btn"
+                    className="text-btn section-remove"
                     disabled={disabled}
                     onClick={() =>
                       onChange({
@@ -246,14 +289,27 @@ export default function CandidateForm({
                   onChange={(value) => setEducation(index, { school: value })}
                   placeholder="University"
                   disabled={disabled}
+                  issue={issueById.get(`edu-school-${index}`)}
+                />
+                <Field
+                  id={`edu-discipline-${index}`}
+                  label="Discipline"
+                  value={edu.discipline}
+                  onChange={(value) =>
+                    setEducation(index, { discipline: value })
+                  }
+                  placeholder="Computer Science"
+                  disabled={disabled}
+                  issue={issueById.get(`edu-discipline-${index}`)}
                 />
                 <Field
                   id={`edu-degree-${index}`}
                   label="Degree"
                   value={edu.degree}
                   onChange={(value) => setEducation(index, { degree: value })}
-                  placeholder="B.S. Computer Science"
+                  placeholder="B.S."
                   disabled={disabled}
+                  issue={issueById.get(`edu-degree-${index}`)}
                 />
                 <Field
                   id={`edu-period-${index}`}
@@ -262,16 +318,7 @@ export default function CandidateForm({
                   onChange={(value) => setEducation(index, { period: value })}
                   placeholder="2016 – 2020"
                   disabled={disabled}
-                />
-                <Field
-                  id={`edu-location-${index}`}
-                  label="Location"
-                  value={edu.location}
-                  onChange={(value) =>
-                    setEducation(index, { location: value })
-                  }
-                  placeholder="City, Country"
-                  disabled={disabled}
+                  issue={issueById.get(`edu-period-${index}`)}
                 />
               </div>
             </div>
@@ -284,7 +331,7 @@ export default function CandidateForm({
           onClick={() =>
             onChange({
               ...profile,
-              education: [...profile.education, emptyEducation()],
+              education: [...(profile.education ?? []), emptyEducation()],
             })
           }
         >

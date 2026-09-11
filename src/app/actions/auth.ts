@@ -11,12 +11,25 @@ import {
   sessionCookieOptions,
   type SessionPayload,
 } from "@/lib/session";
+import { getSettings } from "@/lib/settings";
+import {
+  PAGE_STYLE_COOKIE,
+  parsePageStyle,
+  pageStyleCookieOptions,
+} from "@/lib/appearance";
+import {
+  parseResumeFormat,
+  resumeFormatCookieOptions,
+  RESUME_FORMAT_COOKIE,
+} from "@/lib/resume-format";
 import {
   createUser,
   findUserByEmail,
   findUserById,
+  hasAnyUser,
   isAdminUser,
   isUserAble,
+  PRIORITY_DISABLED_MESSAGE,
   type StoredUser,
 } from "@/lib/users";
 
@@ -51,6 +64,8 @@ async function setSessionCookie(user: {
   id: string;
   email: string;
   name: string;
+  pageStyle?: string;
+  resumeFormat?: unknown;
 }) {
   const jar = await cookies();
   jar.set(
@@ -61,6 +76,16 @@ async function setSessionCookie(user: {
       name: user.name,
     }),
     sessionCookieOptions(),
+  );
+  jar.set(
+    PAGE_STYLE_COOKIE,
+    parsePageStyle(user.pageStyle),
+    pageStyleCookieOptions(),
+  );
+  jar.set(
+    RESUME_FORMAT_COOKIE,
+    JSON.stringify(parseResumeFormat(user.resumeFormat)),
+    resumeFormatCookieOptions(),
   );
 }
 
@@ -73,13 +98,33 @@ export async function requireSession(): Promise<SessionPayload> {
   const session = await getSession();
   if (!session) redirect("/signin");
   const user = await findUserById(session.userId);
-  if (!user) redirect("/signin");
-  if (!isUserAble(user)) {
-    const jar = await cookies();
-    jar.delete(SESSION_COOKIE);
-    redirect("/signin");
+  if (!user) {
+    // Cookie deletes are not allowed during Server Component render.
+    redirect("/api/auth/clear");
   }
   return session;
+}
+
+export async function requireAbleUser(): Promise<StoredUser> {
+  const session = await requireSession();
+  const user = await findUserById(session.userId);
+  if (!user) redirect("/api/auth/clear");
+  if (!isUserAble(user)) {
+    throw new Error(PRIORITY_DISABLED_MESSAGE);
+  }
+  return user;
+}
+
+function safeNextPath(value: unknown): string {
+  if (typeof value !== "string") return "/";
+  const next = value.trim();
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) {
+    return "/";
+  }
+  if (next.includes("://")) return "/";
+  if (next.startsWith("/signin") || next.startsWith("/signup")) return "/";
+  if (next.startsWith("/api/")) return "/";
+  return next;
 }
 
 export async function requireAdmin(): Promise<{
@@ -107,11 +152,20 @@ export async function signup(
   }
 
   try {
+    const [settings, siteHasUser] = await Promise.all([
+      getSettings(),
+      hasAnyUser(),
+    ]);
+    if (!settings.allowSignup && siteHasUser) {
+      return { message: "Public sign-up is turned off." };
+    }
     const passwordHash = await hashPassword(parsed.data.password);
     const user = await createUser({
       name: parsed.data.name,
       email: parsed.data.email,
       passwordHash,
+      role: settings.defaultRole,
+      priority: settings.defaultPriority,
     });
     await setSessionCookie(user);
   } catch (err) {
@@ -140,16 +194,15 @@ export async function signin(
   if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
     return { message: "Email or password is incorrect." };
   }
-  if (!isUserAble(user)) {
-    return { message: "This account is disabled." };
-  }
 
   await setSessionCookie(user);
-  redirect("/");
+  redirect(safeNextPath(formData.get("next")));
 }
 
 export async function signout() {
   const jar = await cookies();
   jar.delete(SESSION_COOKIE);
+  jar.delete(PAGE_STYLE_COOKIE);
+  jar.delete(RESUME_FORMAT_COOKIE);
   redirect("/signin");
 }

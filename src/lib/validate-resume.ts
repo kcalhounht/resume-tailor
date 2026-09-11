@@ -6,6 +6,11 @@ import type {
   TailoredResume,
 } from "./types";
 import { buildResumeHeadline } from "./headline";
+import {
+  alignExperienceYears,
+  summaryMentionsYears,
+  yearsOfExperienceFromProfile,
+} from "./experience-years";
 
 export interface ValidationIssue {
   level: "error" | "warning" | "fixed";
@@ -113,18 +118,44 @@ export function validateAndFixResume(
     resume.skills,
     resume.headline,
   );
-  const summary = sanitizePlainText(resume.summary);
-  const coverLetter = sanitizePlainText(tailored.coverLetter);
+  let summary = sanitizePlainText(resume.summary);
+  let coverLetter = sanitizePlainText(tailored.coverLetter);
   const skills = sanitizeSkills(resume.skills);
   const keywords = resume.keywords
     .map((k) => sanitizePlainText(k))
     .filter(Boolean);
 
-  if (!summary || wordCount(summary) < 20) {
+  if (!summary || wordCount(summary) < 91) {
     issues.push({
       level: "error",
-      message: "Summary is missing or too short.",
+      message: "Summary must be more than 90 words.",
     });
+  }
+
+  const yearsOfExperience = yearsOfExperienceFromProfile(profile);
+  if (yearsOfExperience) {
+    const alignedSummary = alignExperienceYears(summary, yearsOfExperience);
+    if (alignedSummary.changed) {
+      summary = alignedSummary.text;
+      issues.push({
+        level: "fixed",
+        message: `Corrected years of experience in the summary to ${yearsOfExperience} years from the profile.`,
+      });
+    } else if (!summaryMentionsYears(summary)) {
+      issues.push({
+        level: "error",
+        message: `Summary must include ${yearsOfExperience} years of experience from the profile.`,
+      });
+    }
+
+    const alignedCover = alignExperienceYears(coverLetter, yearsOfExperience);
+    if (alignedCover.changed) {
+      coverLetter = alignedCover.text;
+      issues.push({
+        level: "fixed",
+        message: `Corrected years of experience in the cover letter to ${yearsOfExperience} years from the profile.`,
+      });
+    }
   }
 
   if (!coverLetter || wordCount(coverLetter) < 40) {
@@ -138,6 +169,17 @@ export function validateAndFixResume(
     issues.push({
       level: "warning",
       message: "Skills should be grouped into at least 3 categories.",
+    });
+  }
+
+  const skillItemCount = skills.reduce(
+    (count, group) => count + group.items.length,
+    0,
+  );
+  if (skillItemCount < 41) {
+    issues.push({
+      level: "error",
+      message: "Skills must include more than 40 items across all groups.",
     });
   }
 
@@ -247,14 +289,15 @@ export function validateAndFixResume(
 
   const education =
     Array.isArray(resume.education) && resume.education.length
-      ? resume.education.map((edu) => ({
+      ? resume.education.map((edu, index) => ({
+          id: edu.id || profile.education[index]?.id || profile.education[0]?.id || "",
           school: sanitizePlainText(edu.school) || profile.education[0]?.school || "",
+          discipline:
+            sanitizePlainText(edu.discipline) ||
+            profile.education[0]?.discipline ||
+            "",
           degree: sanitizePlainText(edu.degree) || profile.education[0]?.degree || "",
           period: sanitizePlainText(edu.period) || profile.education[0]?.period || "",
-          location:
-            sanitizePlainText(edu.location) ||
-            profile.education[0]?.location ||
-            "",
         }))
       : profile.education;
 
@@ -269,10 +312,11 @@ export function validateAndFixResume(
       });
     }
     return {
+      id: edu.id,
       school: edu.school,
+      discipline: edu.discipline,
       degree: generated.degree || edu.degree,
       period: edu.period,
-      location: edu.location,
     };
   });
 

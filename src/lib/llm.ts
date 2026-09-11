@@ -1,16 +1,28 @@
 import OpenAI from "openai";
 
+import { getSettings } from "./settings";
+
 const DEFAULT_MODEL = "deepseek/deepseek-v4-flash";
 
-export function getLlmModel() {
+export function getDefaultLlmModel() {
   return process.env.OPENROUTER_MODEL || DEFAULT_MODEL;
 }
 
-export function getLlmClient() {
-  const apiKey = process.env.OPENROUTER_API_KEY;
+export async function getLlmModel() {
+  const settings = await getSettings();
+  return settings.llmModel || getDefaultLlmModel();
+}
+
+export async function getLlmApiKey() {
+  const settings = await getSettings();
+  return settings.openRouterApiKey || process.env.OPENROUTER_API_KEY?.trim() || "";
+}
+
+export async function getLlmClient() {
+  const apiKey = await getLlmApiKey();
   if (!apiKey) {
     throw new Error(
-      "OPENROUTER_API_KEY is not set. Add it to your .env.local file.",
+      "OpenRouter API key is not set. Add it on Admin → Settings, or set OPENROUTER_API_KEY.",
     );
   }
 

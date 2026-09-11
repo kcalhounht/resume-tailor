@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import CandidateForm from "@/components/CandidateForm";
+import { MessageBox, type ConfirmRequest } from "@/components/MessageBox";
 import TailoringRecords from "@/components/TailoringRecords";
 import {
   createAccount,
@@ -10,7 +11,12 @@ import {
   updateAccount,
   type AdminTailorRecord,
 } from "@/app/actions/admin";
-import { isProfileReady } from "@/lib/profile";
+import {
+  isProfileReady,
+  isValidProfileEmail,
+  listProfileFieldIssues,
+  REQUIRED_PROFILE_MESSAGE,
+} from "@/lib/profile";
 import type { CandidateProfile } from "@/lib/types";
 import type { PublicUser, UserPriority, UserRole } from "@/lib/users";
 
@@ -20,12 +26,60 @@ function actionError(err: unknown) {
   return err instanceof Error ? err.message : "Administrator action failed.";
 }
 
+function createAccountFieldIssues(input: {
+  name: string;
+  email: string;
+  password: string;
+  confirmPassword: string;
+}) {
+  const issues: { id: string; message: string }[] = [];
+  if (input.name.trim().length < 2) {
+    issues.push({
+      id: "new-name",
+      message: input.name.trim() ? "Enter at least 2 characters." : "Required",
+    });
+  }
+  if (!input.email.trim()) {
+    issues.push({ id: "new-email", message: "Required" });
+  } else if (!isValidProfileEmail(input.email)) {
+    issues.push({ id: "new-email", message: "Enter a valid email." });
+  }
+  if (!input.password) {
+    issues.push({ id: "new-password", message: "Required" });
+  } else if (input.password.length < 8) {
+    issues.push({
+      id: "new-password",
+      message: "Password must be at least 8 characters.",
+    });
+  }
+  if (!input.confirmPassword) {
+    issues.push({ id: "new-confirm-password", message: "Required" });
+  } else if (input.password !== input.confirmPassword) {
+    issues.push({
+      id: "new-confirm-password",
+      message: "Passwords do not match.",
+    });
+  }
+  return issues;
+}
+
+function createAccountNotice(
+  issues: { id: string; message: string }[],
+): string | null {
+  if (!issues.length) return null;
+  if (issues.some((issue) => issue.message === "Required")) {
+    return "You should fill all required account fields.";
+  }
+  return issues[0].message;
+}
+
 function AccountTab({
   adminId,
   selected,
   busy,
   onBusy,
   onUsersChange,
+  onConfirm,
 }: {
   adminId: string;
   selected: PublicUser;
@@ -35,12 +89,15 @@ function AccountTab({
     update: (current: PublicUser[]) => PublicUser[],
     nextSelectedId?: string,
   ) => void;
+  onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [name, setName] = useState(selected.name);
   const [email, setEmail] = useState(selected.email);
   const [role, setRole] = useState<UserRole>(selected.role);
   const [priority, setPriority] = useState<UserPriority>(selected.priority);
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordFieldsLocked, setPasswordFieldsLocked] = useState(true);
 
   return (
     <>
@@ -48,7 +105,9 @@ function AccountTab({
         <div>
           <h2>Account</h2>
           <p className="hint">
-            Login details and priority. Disable blocks sign-in.
+            Login details and priority. Disable blocks generate, profile
+            saves, resume import, account changes, and page style. They can
+            still sign in.
           </p>
         </div>
       </div>
@@ -103,11 +162,30 @@ function AccountTab({
           <label htmlFor="account-password">New password</label>
           <input
             id="account-password"
+            name="account-new-password"
             type="password"
+            autoComplete="new-password"
             value={password}
             disabled={busy}
             placeholder="Leave blank to keep"
+            readOnly={passwordFieldsLocked}
+            onFocus={() => setPasswordFieldsLocked(false)}
             onChange={(event) => setPassword(event.target.value)}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="account-confirm-password">Confirm new password</label>
+          <input
+            id="account-confirm-password"
+            name="account-confirm-password"
+            type="password"
+            autoComplete="new-password"
+            value={confirmPassword}
+            disabled={busy}
+            placeholder="Required if changing password"
+            readOnly={passwordFieldsLocked}
+            onFocus={() => setPasswordFieldsLocked(false)}
+            onChange={(event) => setConfirmPassword(event.target.value)}
           />
         </div>
       </div>
@@ -119,6 +197,17 @@ function AccountTab({
           disabled={busy}
           onClick={() => {
             void onBusy("Account saved.", async () => {
+              if (password || confirmPassword) {
+                if (password.length < 8) {
+                  throw new Error("Password must be at least 8 characters.");
+                }
+                if (!confirmPassword) {
+                  throw new Error("Confirm the new password.");
+                }
+                if (password !== confirmPassword) {
+                  throw new Error("Passwords do not match.");
+                }
+              }
               const updated = await updateAccount(selected.id, {
                 name,
                 email,
@@ -134,6 +223,8 @@ function AccountTab({
                 ),
               );
               setPassword("");
+              setConfirmPassword("");
+              setPasswordFieldsLocked(true);
             });
           }}
         >
@@ -144,18 +235,19 @@ function AccountTab({
           className="text-btn danger-btn"
           disabled={busy || selected.id === adminId}
           onClick={() => {
-            if (
-              !window.confirm(`Delete ${selected.email}? This cannot be undone.`)
-            ) {
-              return;
-            }
-            void onBusy("Account deleted.", async () => {
-              const removedId = selected.id;
-              await removeAccount(removedId);
-              onUsersChange(
-                (current) => current.filter((user) => user.id !== removedId),
-                undefined,
-              );
+            onConfirm({
+              message: `Delete ${selected.email}? This cannot be undone.`,
+              confirmLabel: "Delete",
+              work: () => {
+                void onBusy("Account deleted.", async () => {
+                  const removedId = selected.id;
+                  await removeAccount(removedId);
+                  onUsersChange(
+                    (current) => current.filter((user) => user.id !== removedId),
+                    undefined,
+                  );
+                });
+              },
             });
           }}
         >
@@ -171,6 +263,7 @@ function ProfileTab({
   busy,
   onBusy,
   onUsersChange,
+  onNotice,
 }: {
   selected: PublicUser;
   busy: boolean;
@@ -179,8 +272,10 @@ function ProfileTab({
     update: (current: PublicUser[]) => PublicUser[],
     nextSelectedId?: string,
   ) => void;
+  onNotice: (message: string) => void;
 }) {
   const [profile, setProfile] = useState<CandidateProfile>(selected.profile);
+  const [showProfileErrors, setShowProfileErrors] = useState(false);
 
   return (
     <>
@@ -196,6 +291,7 @@ function ProfileTab({
       <CandidateForm
         profile={profile}
         disabled={busy}
+        issues={showProfileErrors ? listProfileFieldIssues(profile) : []}
         onChange={setProfile}
       />
 
@@ -205,6 +301,13 @@ function ProfileTab({
           className="primary"
           disabled={busy}
           onClick={() => {
+            const issues = listProfileFieldIssues(profile);
+            if (issues.length) {
+              setShowProfileErrors(true);
+              onNotice(REQUIRED_PROFILE_MESSAGE);
+              return;
+            }
+            setShowProfileErrors(false);
             void onBusy("Profile saved.", async () => {
               await saveAccountProfile(selected.id, profile);
               onUsersChange((current) =>
@@ -226,10 +329,14 @@ export default function AdminPanel({
   adminId,
   initialUsers,
   initialRecords,
+  defaultRole,
+  defaultPriority,
 }: {
   adminId: string;
   initialUsers: PublicUser[];
   initialRecords: AdminTailorRecord[];
+  defaultRole: UserRole;
+  defaultPriority: UserPriority;
 }) {
   const [userTab, setUserTab] = useState<UserTab>("account");
   const [users, setUsers] = useState(initialUsers);
@@ -239,13 +346,25 @@ export default function AdminPanel({
   const [newName, setNewName] = useState("");
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [newRole, setNewRole] = useState<UserRole>("user");
-  const [newPriority, setNewPriority] = useState<UserPriority>("able");
+  const [newConfirmPassword, setNewConfirmPassword] = useState("");
+  const [newRole, setNewRole] = useState<UserRole>(defaultRole);
+  const [newPriority, setNewPriority] = useState<UserPriority>(defaultPriority);
+  const [createFieldsLocked, setCreateFieldsLocked] = useState(true);
+  const [showCreateErrors, setShowCreateErrors] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [messageBox, setMessageBox] = useState<string | null>(null);
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null);
 
   const selected = users.find((user) => user.id === selectedId) ?? null;
+  const createIssues = showCreateErrors
+    ? createAccountFieldIssues({
+        name: newName,
+        email: newEmail,
+        password: newPassword,
+        confirmPassword: newConfirmPassword,
+      })
+    : [];
+  const createIssueById = new Map(createIssues.map((issue) => [issue.id, issue]));
 
   const visibleUsers = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -270,15 +389,15 @@ export default function AdminPanel({
     return counts;
   }, [records]);
 
-  async function run(label: string, work: () => Promise<void>) {
+  async function run(label: string | null, work: () => Promise<void>) {
     setBusy(true);
-    setError(null);
-    setMessage(null);
+    setMessageBox(null);
+    setConfirm(null);
     try {
       await work();
-      setMessage(label);
+      if (label) setMessageBox(label);
     } catch (err) {
-      setError(actionError(err));
+      setMessageBox(actionError(err));
     } finally {
       setBusy(false);
     }
@@ -307,95 +426,205 @@ export default function AdminPanel({
           <div>
             <h2>Create account</h2>
             <p className="hint">
-              Admin-created accounts can sign in immediately. The first account
-              on an empty site is always an administrator.
+              Admin-created accounts can sign in immediately. The first person who
+              signs up with the name admin becomes the administrator.
             </p>
           </div>
         </div>
-        <div className="field-grid">
-          <div className="field">
-            <label htmlFor="new-name">Name</label>
-            <input
-              id="new-name"
-              value={newName}
-              disabled={busy}
-              onChange={(event) => setNewName(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="new-email">Email</label>
-            <input
-              id="new-email"
-              type="email"
-              value={newEmail}
-              disabled={busy}
-              onChange={(event) => setNewEmail(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="new-password">Password</label>
-            <input
-              id="new-password"
-              type="password"
-              value={newPassword}
-              disabled={busy}
-              onChange={(event) => setNewPassword(event.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="new-role">Role</label>
-            <select
-              id="new-role"
-              value={newRole}
-              disabled={busy}
-              onChange={(event) => setNewRole(event.target.value as UserRole)}
-            >
-              <option value="user">user</option>
-              <option value="admin">admin</option>
-            </select>
-          </div>
-          <div className="field">
-            <label htmlFor="new-priority">Priority</label>
-            <select
-              id="new-priority"
-              value={newPriority}
-              disabled={busy}
-              onChange={(event) =>
-                setNewPriority(event.target.value as UserPriority)
-              }
-            >
-              <option value="able">able</option>
-              <option value="disable">disable</option>
-            </select>
-          </div>
-        </div>
-        <div className="composer-footer">
-          <button
-            type="button"
-            className="primary"
-            disabled={busy}
-            onClick={() => {
-              void run("Account created.", async () => {
-                const created = await createAccount({
-                  name: newName,
-                  email: newEmail,
-                  password: newPassword,
-                  role: newRole,
-                  priority: newPriority,
-                });
-                changeUsers((current) => [...current, created], created.id);
-                setUserTab("account");
-                setNewName("");
-                setNewEmail("");
-                setNewPassword("");
-                setNewRole("user");
-                setNewPriority("able");
+        <form
+          autoComplete="off"
+          noValidate
+          onSubmit={(event) => {
+            event.preventDefault();
+            const issues = createAccountFieldIssues({
+              name: newName,
+              email: newEmail,
+              password: newPassword,
+              confirmPassword: newConfirmPassword,
+            });
+            if (issues.length) {
+              setShowCreateErrors(true);
+              setMessageBox(createAccountNotice(issues));
+              return;
+            }
+            setShowCreateErrors(false);
+            void run("Account created.", async () => {
+              const created = await createAccount({
+                name: newName,
+                email: newEmail,
+                password: newPassword,
+                role: newRole,
+                priority: newPriority,
               });
-            }}
-          >
-            Create account
-          </button>
-        </div>
+              changeUsers((current) => [...current, created], created.id);
+              setUserTab("account");
+              setNewName("");
+              setNewEmail("");
+              setNewPassword("");
+              setNewConfirmPassword("");
+              setNewRole(defaultRole);
+              setNewPriority(defaultPriority);
+              setCreateFieldsLocked(true);
+              setShowCreateErrors(false);
+            });
+          }}
+        >
+          <div aria-hidden className="autofill-trap">
+            <input type="text" name="username" autoComplete="username" tabIndex={-1} />
+            <input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              tabIndex={-1}
+            />
+          </div>
+          <div className="field-grid">
+            <div className={`field${createIssueById.has("new-name") ? " field-invalid" : ""}`}>
+              <label htmlFor="new-name">Name</label>
+              <input
+                id="new-name"
+                name="create-account-name"
+                autoComplete="off"
+                value={newName}
+                disabled={busy}
+                required
+                aria-required
+                aria-invalid={createIssueById.has("new-name") ? true : undefined}
+                aria-describedby={
+                  createIssueById.has("new-name") ? "new-name-error" : undefined
+                }
+                readOnly={createFieldsLocked}
+                onFocus={() => setCreateFieldsLocked(false)}
+                onChange={(event) => setNewName(event.target.value)}
+              />
+              {createIssueById.get("new-name") ? (
+                <p className="field-error" id="new-name-error">
+                  {createIssueById.get("new-name")?.message}
+                </p>
+              ) : null}
+            </div>
+            <div className={`field${createIssueById.has("new-email") ? " field-invalid" : ""}`}>
+              <label htmlFor="new-email">Email</label>
+              <input
+                id="new-email"
+                name="create-account-email"
+                type="email"
+                autoComplete="off"
+                value={newEmail}
+                disabled={busy}
+                required
+                aria-required
+                aria-invalid={createIssueById.has("new-email") ? true : undefined}
+                aria-describedby={
+                  createIssueById.has("new-email") ? "new-email-error" : undefined
+                }
+                readOnly={createFieldsLocked}
+                onFocus={() => setCreateFieldsLocked(false)}
+                onChange={(event) => setNewEmail(event.target.value)}
+              />
+              {createIssueById.get("new-email") ? (
+                <p className="field-error" id="new-email-error">
+                  {createIssueById.get("new-email")?.message}
+                </p>
+              ) : null}
+            </div>
+            <div className={`field${createIssueById.has("new-password") ? " field-invalid" : ""}`}>
+              <label htmlFor="new-password">Password</label>
+              <input
+                id="new-password"
+                name="create-account-password"
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                disabled={busy}
+                required
+                aria-required
+                minLength={8}
+                aria-invalid={createIssueById.has("new-password") ? true : undefined}
+                aria-describedby={
+                  createIssueById.has("new-password")
+                    ? "new-password-error"
+                    : undefined
+                }
+                readOnly={createFieldsLocked}
+                onFocus={() => setCreateFieldsLocked(false)}
+                onChange={(event) => setNewPassword(event.target.value)}
+              />
+              {createIssueById.get("new-password") ? (
+                <p className="field-error" id="new-password-error">
+                  {createIssueById.get("new-password")?.message}
+                </p>
+              ) : null}
+            </div>
+            <div
+              className={`field${createIssueById.has("new-confirm-password") ? " field-invalid" : ""}`}
+            >
+              <label htmlFor="new-confirm-password">Confirm password</label>
+              <input
+                id="new-confirm-password"
+                name="create-account-confirm-password"
+                type="password"
+                autoComplete="new-password"
+                value={newConfirmPassword}
+                disabled={busy}
+                required
+                aria-required
+                minLength={8}
+                aria-invalid={
+                  createIssueById.has("new-confirm-password") ? true : undefined
+                }
+                aria-describedby={
+                  createIssueById.has("new-confirm-password")
+                    ? "new-confirm-password-error"
+                    : undefined
+                }
+                readOnly={createFieldsLocked}
+                onFocus={() => setCreateFieldsLocked(false)}
+                onChange={(event) => setNewConfirmPassword(event.target.value)}
+              />
+              {createIssueById.get("new-confirm-password") ? (
+                <p className="field-error" id="new-confirm-password-error">
+                  {createIssueById.get("new-confirm-password")?.message}
+                </p>
+              ) : null}
+            </div>
+            <div className="field">
+              <label htmlFor="new-role">Role</label>
+              <select
+                id="new-role"
+                name="create-account-role"
+                value={newRole}
+                disabled={busy}
+                onChange={(event) =>
+                  setNewRole(event.target.value as UserRole)
+                }
+              >
+                <option value="user">user</option>
+                <option value="admin">admin</option>
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="new-priority">Priority</label>
+              <select
+                id="new-priority"
+                name="create-account-priority"
+                value={newPriority}
+                disabled={busy}
+                onChange={(event) =>
+                  setNewPriority(event.target.value as UserPriority)
+                }
+              >
+                <option value="able">able</option>
+                <option value="disable">disable</option>
+              </select>
+            </div>
+          </div>
+          <div className="composer-footer">
+            <button type="submit" className="primary" disabled={busy}>
+              Create account
+            </button>
+          </div>
+        </form>
       </section>
 
       <div className="admin-layout">
@@ -430,8 +659,8 @@ export default function AdminPanel({
                     disabled={busy}
                     onClick={() => {
                       setSelectedId(user.id);
-                      setMessage(null);
-                      setError(null);
+                      setMessageBox(null);
+                      setConfirm(null);
                     }}
                   >
                     <span className="admin-user-name">{user.name}</span>
@@ -493,6 +722,7 @@ export default function AdminPanel({
                   busy={busy}
                   onBusy={run}
                   onUsersChange={changeUsers}
+                  onConfirm={setConfirm}
                 />
               )}
               {userTab === "profile" && (
@@ -502,26 +732,45 @@ export default function AdminPanel({
                   busy={busy}
                   onBusy={run}
                   onUsersChange={changeUsers}
+                  onNotice={setMessageBox}
                 />
               )}
               {userTab === "tailoring" && (
                 <TailoringRecords
                   key={`${selected.id}-tailoring`}
                   records={selectedRecords}
+                  profileName={
+                    selected.profile.personal.name.trim() || selected.name
+                  }
+                  userId={selected.id}
                   busy={busy}
                   onBusy={run}
                   onRecordsChange={(update) => setRecords(update(records))}
+                  onConfirm={setConfirm}
                 />
               )}
             </>
           ) : (
             <p className="hint">Create an account to start the user list.</p>
           )}
-
-          {message && <p className="inline-status">{message}</p>}
-          {error && <p className="error">{error}</p>}
         </section>
       </div>
+      {confirm ? (
+        <MessageBox
+          message={confirm.message}
+          confirmLabel={confirm.confirmLabel}
+          cancelLabel="Cancel"
+          danger
+          onConfirm={() => {
+            const work = confirm.work;
+            setConfirm(null);
+            work();
+          }}
+          onClose={() => setConfirm(null)}
+        />
+      ) : messageBox ? (
+        <MessageBox message={messageBox} onClose={() => setMessageBox(null)} />
+      ) : null}
     </div>
   );
 }

@@ -1,22 +1,24 @@
 import { z } from "zod";
 import { MIN_JOB_DESCRIPTION_CHARS } from "./limits";
+import { isValidProfileEmail, parseProfileDraft } from "./profile";
+import { parseResumeFormat, type ResumeFormat } from "./resume-format";
 import type { CandidateProfile } from "./types";
 
 const personalSchema = z.object({
   name: z.string().trim().min(2, "Name is required"),
-  phone: z.string().trim(),
-  linkedin: z.string().trim(),
+  phone: z.string().trim().min(1, "Phone is required"),
+  linkedin: z.string().trim().min(1, "LinkedIn is required"),
+  portfolio: z.string().trim().optional().default(""),
   email: z
     .string()
     .trim()
-    .refine(
-      (value) => value === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value),
-      "Enter a valid email",
-    ),
-  location: z.string().trim(),
+    .min(1, "Email is required")
+    .refine(isValidProfileEmail, "Enter a valid email"),
+  location: z.string().trim().min(1, "Location is required"),
 });
 
 const experienceSchema = z.object({
+  id: z.string().optional(),
   company: z.string().trim().min(1, "Company is required"),
   title: z.string().trim().min(1, "Title is required"),
   period: z.string().trim().min(1, "Period is required"),
@@ -24,10 +26,11 @@ const experienceSchema = z.object({
 });
 
 const educationSchema = z.object({
+  id: z.string().optional(),
   school: z.string().trim().min(1, "School is required"),
+  discipline: z.string().trim().min(1, "Discipline is required"),
   degree: z.string().trim().min(1, "Degree is required"),
   period: z.string().trim().min(1, "Education period is required"),
-  location: z.string().trim().min(1, "Education location is required"),
 });
 
 export const candidateProfileSchema = z.object({
@@ -35,7 +38,9 @@ export const candidateProfileSchema = z.object({
   experiences: z
     .array(experienceSchema)
     .min(1, "Add at least one work experience"),
-  education: z.array(educationSchema),
+  education: z
+    .array(educationSchema)
+    .min(1, "Add at least one education"),
 });
 
 export const tailorRequestSchema = z
@@ -53,6 +58,13 @@ export const tailorRequestSchema = z
       )
       .min(1),
     indices: z.array(z.number().int().positive()).optional(),
+    resumeFormat: z
+      .object({
+        font: z.string().optional(),
+        style: z.string().optional(),
+        accent: z.string().optional(),
+      })
+      .optional(),
   })
   .superRefine((value, ctx) => {
     if (value.indices && value.indices.length !== value.jobDescriptions.length) {
@@ -68,6 +80,19 @@ export function parseTailorRequest(body: unknown): {
   profile: CandidateProfile;
   jobDescriptions: string[];
   indices?: number[];
+  resumeFormat?: ResumeFormat;
 } {
-  return tailorRequestSchema.parse(body);
+  const parsed = tailorRequestSchema.parse(body);
+  const profile = parseProfileDraft(parsed.profile);
+  if (!profile) {
+    throw new Error("Invalid profile");
+  }
+  return {
+    profile,
+    jobDescriptions: parsed.jobDescriptions,
+    indices: parsed.indices,
+    resumeFormat: parsed.resumeFormat
+      ? parseResumeFormat(parsed.resumeFormat)
+      : undefined,
+  };
 }

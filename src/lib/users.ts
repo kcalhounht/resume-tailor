@@ -9,6 +9,13 @@ import {
   isUniqueViolation,
   withDatabase,
 } from "./db";
+import { getDataRoot } from "./runtime";
+import { parsePageStyle, type PageStyle } from "./appearance";
+import {
+  DEFAULT_RESUME_FORMAT,
+  parseResumeFormat,
+  type ResumeFormat,
+} from "./resume-format";
 
 export type UserRole = "admin" | "user";
 export type UserPriority = "able" | "disable";
@@ -22,6 +29,8 @@ export type StoredUser = {
   role: UserRole;
   priority: UserPriority;
   profile?: CandidateProfile;
+  pageStyle?: PageStyle;
+  resumeFormat?: ResumeFormat;
 };
 
 export type PublicUser = {
@@ -47,10 +56,12 @@ type UserRow = {
   role: string;
   priority: string;
   profile: unknown;
+  page_style?: string | null;
+  resume_format?: unknown;
 };
 
 function storePath() {
-  return path.join(process.cwd(), "data", "users.json");
+  return path.join(getDataRoot(), "users.json");
 }
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -72,6 +83,25 @@ function asPriority(value: unknown): UserPriority {
   return value === "disable" ? "disable" : "able";
 }
 
+function isBootstrapAdminName(name: string): boolean {
+  return name.trim().toLowerCase() === "admin";
+}
+
+function assignNewUserAccess(
+  hasAdmin: boolean,
+  name: string,
+  inputRole?: UserRole,
+  inputPriority?: UserPriority,
+): { role: UserRole; priority: UserPriority } {
+  if (!hasAdmin && isBootstrapAdminName(name)) {
+    return { role: "admin", priority: "able" };
+  }
+  return {
+    role: inputRole === "admin" ? "admin" : "user",
+    priority: inputPriority === "disable" ? "disable" : "able",
+  };
+}
+
 function normalizeStore(store: UserStore): { store: UserStore; changed: boolean } {
   let changed = false;
   const users = store.users.map((user) => {
@@ -82,11 +112,14 @@ function normalizeStore(store: UserStore): { store: UserStore; changed: boolean 
   });
 
   if (users.length && !users.some((user) => user.role === "admin")) {
-    const oldest = [...users].sort((a, b) =>
-      a.createdAt.localeCompare(b.createdAt),
-    )[0];
-    oldest.role = "admin";
-    changed = true;
+    const named = [...users]
+      .filter((user) => isBootstrapAdminName(user.name))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
+    if (named) {
+      named.role = "admin";
+      named.priority = "able";
+      changed = true;
+    }
   }
 
   return { store: { users }, changed };
@@ -132,18 +165,23 @@ function rowToUser(row: UserRow): StoredUser {
     role: asRole(row.role),
     priority: asPriority(row.priority),
     profile: parseProfileDraft(row.profile) ?? undefined,
+    pageStyle: parsePageStyle(row.page_style),
+    resumeFormat: parseResumeFormat(row.resume_format),
   };
 }
 
-async function ensureOldestAdmin() {
+async function ensureNamedAdmin() {
   const sql = await withDatabase();
   const admins = await sql`SELECT id FROM users WHERE role = 'admin' LIMIT 1`;
   if (admins.length) return;
-  const oldest = await sql`
-    SELECT id FROM users ORDER BY created_at ASC LIMIT 1
+  const named = await sql`
+    SELECT id FROM users
+    WHERE lower(name) = 'admin'
+    ORDER BY created_at ASC
+    LIMIT 1
   `;
-  if (!oldest[0]?.id) return;
-  await sql`UPDATE users SET role = 'admin', priority = 'able' WHERE id = ${oldest[0].id}`;
+  if (!named[0]?.id) return;
+  await sql`UPDATE users SET role = 'admin', priority = 'able' WHERE id = ${named[0].id}`;
 }
 
 export function userRole(user: StoredUser | null | undefined): UserRole {
@@ -165,6 +203,9 @@ export function isUserAble(
 ): boolean {
   return userPriority(user) === "able";
 }
+
+export const PRIORITY_DISABLED_MESSAGE =
+  "This account is disabled. An administrator must set priority to able before you can do that.";
 
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
   const needle = email.trim().toLowerCase();
@@ -191,9 +232,19 @@ export async function findUserById(id: string): Promise<StoredUser | null> {
   return store.users.find((user) => user.id === id) ?? null;
 }
 
+export async function hasAnyUser(): Promise<boolean> {
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const rows = await sql`SELECT id FROM users LIMIT 1`;
+    return rows.length > 0;
+  }
+  const store = await readStore();
+  return store.users.length > 0;
+}
+
 export async function listPublicUsers(): Promise<PublicUser[]> {
   if (hasDatabase()) {
-    await ensureOldestAdmin();
+    await ensureNamedAdmin();
     const sql = await withDatabase();
     const rows = (await sql`
       SELECT * FROM users ORDER BY created_at ASC
@@ -233,16 +284,12 @@ export async function createUser(input: {
     }
     const admins = await sql`SELECT id FROM users WHERE role = 'admin' LIMIT 1`;
     const hasAdmin = admins.length > 0;
-    const role: UserRole = !hasAdmin
-      ? "admin"
-      : input.role === "admin"
-        ? "admin"
-        : "user";
-    const priority: UserPriority = !hasAdmin
-      ? "able"
-      : input.priority === "disable"
-        ? "disable"
-        : "able";
+    const { role, priority } = assignNewUserAccess(
+      hasAdmin,
+      name,
+      input.role,
+      input.priority,
+    );
     const user: StoredUser = {
       id: randomUUID(),
       name,
@@ -252,11 +299,13 @@ export async function createUser(input: {
       role,
       priority,
       profile,
+      pageStyle: "forest",
+      resumeFormat: DEFAULT_RESUME_FORMAT,
     };
     try {
       await sql`
         INSERT INTO users (
-          id, name, email, password_hash, created_at, role, priority, profile
+          id, name, email, password_hash, created_at, role, priority, profile, page_style, resume_format
         ) VALUES (
           ${user.id},
           ${user.name},
@@ -265,7 +314,9 @@ export async function createUser(input: {
           ${user.createdAt},
           ${user.role},
           ${user.priority},
-          ${user.profile ?? null}
+          ${user.profile ?? null},
+          ${user.pageStyle},
+          ${JSON.stringify(user.resumeFormat)}
         )
       `;
     } catch (err) {
@@ -283,11 +334,12 @@ export async function createUser(input: {
       throw new Error("An account with that email already exists.");
     }
     const hasAdmin = store.users.some((user) => user.role === "admin");
-    const role: UserRole = !hasAdmin
-      ? "admin"
-      : input.role === "admin"
-        ? "admin"
-        : "user";
+    const { role, priority } = assignNewUserAccess(
+      hasAdmin,
+      name,
+      input.role,
+      input.priority,
+    );
     const user: StoredUser = {
       id: randomUUID(),
       name,
@@ -295,12 +347,10 @@ export async function createUser(input: {
       passwordHash: input.passwordHash,
       createdAt: new Date().toISOString(),
       role,
-      priority: !hasAdmin
-        ? "able"
-        : input.priority === "disable"
-          ? "disable"
-          : "able",
+      priority,
       profile,
+      pageStyle: "forest",
+      resumeFormat: DEFAULT_RESUME_FORMAT,
     };
     store.users.push(user);
     await writeStore(store);
@@ -460,6 +510,51 @@ export async function deleteUser(userId: string): Promise<void> {
     store.users = store.users.filter((entry) => entry.id !== userId);
     await writeStore(store);
   });
+}
+
+export async function updateUserPageStyle(
+  userId: string,
+  pageStyle: PageStyle,
+): Promise<void> {
+  const next = parsePageStyle(pageStyle);
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const exists = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`;
+    if (!exists.length) throw new Error("Account not found.");
+    await sql`UPDATE users SET page_style = ${next} WHERE id = ${userId}`;
+    return;
+  }
+
+  await enqueue(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.id === userId);
+    if (!user) throw new Error("Account not found.");
+    user.pageStyle = next;
+    await writeStore(store);
+  });
+}
+
+export async function updateUserResumeFormat(
+  userId: string,
+  format: ResumeFormat,
+): Promise<ResumeFormat> {
+  const next = parseResumeFormat(format);
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const exists = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`;
+    if (!exists.length) throw new Error("Account not found.");
+    await sql`UPDATE users SET resume_format = ${JSON.stringify(next)} WHERE id = ${userId}`;
+    return next;
+  }
+
+  await enqueue(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.id === userId);
+    if (!user) throw new Error("Account not found.");
+    user.resumeFormat = next;
+    await writeStore(store);
+  });
+  return next;
 }
 
 export async function saveUserProfile(

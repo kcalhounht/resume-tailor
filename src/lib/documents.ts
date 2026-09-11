@@ -9,11 +9,24 @@ import {
   UnderlineType,
 } from "docx";
 import PDFDocument from "pdfkit";
-import type { PersonalInfo, TailoredResume } from "./types";
+import type { EducationInput, PersonalInfo, TailoredResume } from "./types";
 import { segmentWithKeywords } from "./keywords";
+import {
+  resumeLook,
+  parseResumeFormat,
+  type ResumeFormat,
+  type ResumeLook,
+} from "./resume-format";
+import { registerResumePdfFonts } from "./pdf-fonts";
 
-const LINK_COLOR = "1F4E79";
-const MUTED_COLOR = "555555";
+function docxFont(look: ResumeLook) {
+  return {
+    ascii: look.docxFont,
+    hAnsi: look.docxFont,
+    eastAsia: look.docxFont,
+    cs: look.docxFont,
+  };
+}
 
 function linkedInDisplay(url: string): string {
   try {
@@ -33,33 +46,51 @@ function linkedInHref(url: string): string {
   return `https://${url.replace(/^\/+/, "")}`;
 }
 
+function websiteDisplay(url: string): string {
+  try {
+    const parsed = new URL(url.startsWith("http") ? url : `https://${url}`);
+    const host = parsed.hostname.replace(/^www\./i, "");
+    const path = parsed.pathname.replace(/\/+$/, "");
+    return path && path !== "/" ? `${host}${path}` : host;
+  } catch {
+    return url
+      .replace(/^https?:\/\//i, "")
+      .replace(/^www\./i, "")
+      .replace(/\/+$/, "");
+  }
+}
+
 function phoneHref(phone: string): string {
   const digits = phone.replace(/[^\d+]/g, "");
   return `tel:${digits}`;
+}
+
+function educationSubline(edu: EducationInput): string {
+  return [edu.school, edu.discipline, edu.period].filter(Boolean).join("  |  ");
 }
 
 function emailHref(email: string): string {
   return `mailto:${email}`;
 }
 
-function contactSeparator() {
+function contactSeparator(look: ResumeLook) {
   return new TextRun({
     text: "  ·  ",
-    size: 18,
-    font: "Calibri",
-    color: MUTED_COLOR,
+    size: look.contactSize,
+    font: docxFont(look),
+    color: look.muted,
   });
 }
 
-function hyperlinkRun(label: string, href: string) {
+function hyperlinkRun(label: string, href: string, look: ResumeLook) {
   return new ExternalHyperlink({
     link: href,
     children: [
       new TextRun({
         text: label,
-        color: LINK_COLOR,
-        size: 18,
-        font: "Calibri",
+        color: look.accent,
+        size: look.contactSize,
+        font: docxFont(look),
         underline: {
           type: UnderlineType.NONE,
         },
@@ -68,35 +99,44 @@ function hyperlinkRun(label: string, href: string) {
   });
 }
 
-function plainContactRun(text: string) {
+function plainContactRun(text: string, look: ResumeLook) {
   return new TextRun({
     text,
-    size: 18,
-    font: "Calibri",
-    color: MUTED_COLOR,
+    size: look.contactSize,
+    font: docxFont(look),
+    color: look.muted,
   });
+}
+
+function displayName(name: string, look: ResumeLook) {
+  return look.nameAllCaps ? name.toUpperCase() : name;
+}
+
+function headingLabel(text: string, look: ResumeLook) {
+  return look.headingAllCaps ? text.toUpperCase() : text;
 }
 
 function buildResumeHeader(
   personal: PersonalInfo,
-  headline?: string,
+  headline: string | undefined,
+  look: ResumeLook,
 ): Paragraph[] {
   const contactChildren: Array<TextRun | ExternalHyperlink> = [];
 
   const pushSep = () => {
-    if (contactChildren.length) contactChildren.push(contactSeparator());
+    if (contactChildren.length) contactChildren.push(contactSeparator(look));
   };
 
   if (personal.phone) {
     pushSep();
     contactChildren.push(
-      hyperlinkRun(personal.phone, phoneHref(personal.phone)),
+      hyperlinkRun(personal.phone, phoneHref(personal.phone), look),
     );
   }
   if (personal.email) {
     pushSep();
     contactChildren.push(
-      hyperlinkRun(personal.email, emailHref(personal.email)),
+      hyperlinkRun(personal.email, emailHref(personal.email), look),
     );
   }
   if (personal.linkedin) {
@@ -105,12 +145,23 @@ function buildResumeHeader(
       hyperlinkRun(
         linkedInDisplay(personal.linkedin),
         linkedInHref(personal.linkedin),
+        look,
+      ),
+    );
+  }
+  if (personal.portfolio) {
+    pushSep();
+    contactChildren.push(
+      hyperlinkRun(
+        websiteDisplay(personal.portfolio),
+        linkedInHref(personal.portfolio),
+        look,
       ),
     );
   }
   if (personal.location) {
     pushSep();
-    contactChildren.push(plainContactRun(personal.location));
+    contactChildren.push(plainContactRun(personal.location, look));
   }
 
   return [
@@ -119,11 +170,11 @@ function buildResumeHeader(
       spacing: { after: headline ? 40 : 100 },
       children: [
         new TextRun({
-          text: personal.name.toUpperCase(),
+          text: displayName(personal.name, look),
           bold: true,
-          size: 40,
-          font: "Calibri",
-          color: "1A1A1A",
+          size: look.nameSize,
+          font: docxFont(look),
+          color: look.ink,
         }),
       ],
     }),
@@ -136,9 +187,9 @@ function buildResumeHeader(
               new TextRun({
                 text: headline,
                 italics: true,
-                size: 22,
-                font: "Calibri",
-                color: "1F4E79",
+                size: look.headingSize,
+                font: docxFont(look),
+                color: look.accent,
               }),
             ],
           }),
@@ -151,7 +202,7 @@ function buildResumeHeader(
         bottom: {
           style: BorderStyle.SINGLE,
           size: 12,
-          color: "1F4E79",
+          color: look.accent,
           space: 10,
         },
       },
@@ -160,32 +211,42 @@ function buildResumeHeader(
   ];
 }
 
-function runsFromText(text: string, keywords: string[], size = 20) {
+function runsFromText(
+  text: string,
+  keywords: string[],
+  size: number,
+  look: ResumeLook,
+) {
   return segmentWithKeywords(text, keywords).map(
     (seg) =>
       new TextRun({
         text: seg.text,
         bold: seg.bold,
         size,
-        font: "Calibri",
+        font: docxFont(look),
       }),
   );
 }
 
-function sectionHeading(text: string) {
+function sectionHeading(text: string, look: ResumeLook) {
   return new Paragraph({
     spacing: { before: 280, after: 120 },
     border: {
-      bottom: { style: BorderStyle.SINGLE, size: 12, color: "222222", space: 6 },
+      bottom: {
+        style: BorderStyle.SINGLE,
+        size: 12,
+        color: look.headingRule,
+        space: 6,
+      },
     },
     children: [
       new TextRun({
-        text,
+        text: headingLabel(text, look),
         bold: true,
-        size: 22,
-        font: "Calibri",
-        allCaps: true,
-        color: "1F4E79",
+        size: look.headingSize,
+        font: docxFont(look),
+        allCaps: look.headingAllCaps,
+        color: look.accent,
       }),
     ],
   });
@@ -195,6 +256,7 @@ function skillGroupParagraph(
   category: string,
   items: string[],
   keywords: string[],
+  look: ResumeLook,
 ) {
   return new Paragraph({
     spacing: { after: 80 },
@@ -202,10 +264,10 @@ function skillGroupParagraph(
       new TextRun({
         text: `${category}: `,
         bold: true,
-        size: 20,
-        font: "Calibri",
+        size: look.bodySize,
+        font: docxFont(look),
       }),
-      ...runsFromText(items.join(", "), keywords, 20),
+      ...runsFromText(items.join(", "), keywords, look.bodySize, look),
     ],
   });
 }
@@ -213,21 +275,23 @@ function skillGroupParagraph(
 export async function buildResumeDocx(
   personal: PersonalInfo,
   resume: TailoredResume,
+  format?: ResumeFormat | null,
 ): Promise<Buffer> {
+  const look = resumeLook(format);
   const kw = resume.keywords;
 
   const children: Paragraph[] = [
-    ...buildResumeHeader(personal, resume.headline),
-    sectionHeading("Summary"),
+    ...buildResumeHeader(personal, resume.headline, look),
+    sectionHeading("Summary", look),
     new Paragraph({
       spacing: { after: 140, line: 276 },
-      children: runsFromText(resume.summary, kw, 20),
+      children: runsFromText(resume.summary, kw, look.bodySize, look),
     }),
-    sectionHeading("Skills"),
+    sectionHeading("Skills", look),
     ...resume.skills.map((group) =>
-      skillGroupParagraph(group.category, group.items, kw),
+      skillGroupParagraph(group.category, group.items, kw, look),
     ),
-    sectionHeading("Experience"),
+    sectionHeading("Experience", look),
   ];
 
   for (const [expIndex, exp] of resume.experiences.entries()) {
@@ -238,8 +302,8 @@ export async function buildResumeDocx(
           new TextRun({
             text: exp.title,
             bold: true,
-            size: 22,
-            font: "Calibri",
+            size: look.headingSize,
+            font: docxFont(look),
           }),
         ],
       }),
@@ -249,8 +313,8 @@ export async function buildResumeDocx(
           new TextRun({
             text: `${exp.company}  |  ${exp.location}  |  ${exp.period}`,
             italics: true,
-            size: 20,
-            font: "Calibri",
+            size: look.bodySize,
+            font: docxFont(look),
           }),
         ],
       }),
@@ -261,8 +325,8 @@ export async function buildResumeDocx(
               children: [
                 new TextRun({
                   text: exp.overview,
-                  size: 20,
-                  font: "Calibri",
+                  size: look.bodySize,
+                  font: docxFont(look),
                   italics: true,
                   color: "444444",
                 }),
@@ -275,13 +339,13 @@ export async function buildResumeDocx(
           new Paragraph({
             spacing: { after: 90, line: 276 },
             bullet: { level: 0 },
-            children: runsFromText(bullet, kw, 20),
+            children: runsFromText(bullet, kw, look.bodySize, look),
           }),
       ),
     );
   }
 
-  children.push(sectionHeading("Education"));
+  children.push(sectionHeading("Education", look));
   for (const [eduIndex, edu] of resume.education.entries()) {
     children.push(
       new Paragraph({
@@ -290,8 +354,8 @@ export async function buildResumeDocx(
           new TextRun({
             text: edu.degree,
             bold: true,
-            size: 22,
-            font: "Calibri",
+            size: look.headingSize,
+            font: docxFont(look),
           }),
         ],
       }),
@@ -299,10 +363,10 @@ export async function buildResumeDocx(
         spacing: { after: 100 },
         children: [
           new TextRun({
-            text: `${edu.school}  |  ${edu.location}  |  ${edu.period}`,
+            text: educationSubline(edu),
             italics: true,
-            size: 20,
-            font: "Calibri",
+            size: look.bodySize,
+            font: docxFont(look),
           }),
         ],
       }),
@@ -310,11 +374,25 @@ export async function buildResumeDocx(
   }
 
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: look.docxFont,
+          },
+        },
+      },
+    },
     sections: [
       {
         properties: {
           page: {
-            margin: { top: 720, bottom: 720, left: 720, right: 720 },
+            margin: {
+              top: look.marginTwip,
+              bottom: look.marginTwip,
+              left: look.marginTwip,
+              right: look.marginTwip,
+            },
           },
         },
         children,
@@ -331,7 +409,9 @@ export async function buildCoverLetterDocx(
   jobTitle: string,
   coverLetter: string,
   keywords: string[],
+  format?: ResumeFormat | null,
 ): Promise<Buffer> {
+  const look = resumeLook(format);
   const today = new Date().toLocaleDateString("en-US", {
     year: "numeric",
     month: "long",
@@ -344,19 +424,37 @@ export async function buildCoverLetterDocx(
     .filter(Boolean);
 
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: look.docxFont,
+          },
+        },
+      },
+    },
     sections: [
       {
         properties: {
           page: {
-            margin: { top: 720, bottom: 720, left: 720, right: 720 },
+            margin: {
+              top: look.marginTwip,
+              bottom: look.marginTwip,
+              left: look.marginTwip,
+              right: look.marginTwip,
+            },
           },
         },
         children: [
-          ...buildResumeHeader(personal),
+          ...buildResumeHeader(personal, undefined, look),
           new Paragraph({
             spacing: { before: 160, after: 200 },
             children: [
-              new TextRun({ text: today, size: 20, font: "Calibri" }),
+              new TextRun({
+                text: today,
+                size: look.bodySize,
+                font: docxFont(look),
+              }),
             ],
           }),
           new Paragraph({
@@ -364,15 +462,19 @@ export async function buildCoverLetterDocx(
             children: [
               new TextRun({
                 text: `Hiring Manager`,
-                size: 20,
-                font: "Calibri",
+                size: look.bodySize,
+                font: docxFont(look),
               }),
             ],
           }),
           new Paragraph({
             spacing: { after: 60 },
             children: [
-              new TextRun({ text: company, size: 20, font: "Calibri" }),
+              new TextRun({
+                text: company,
+                size: look.bodySize,
+                font: docxFont(look),
+              }),
             ],
           }),
           new Paragraph({
@@ -381,8 +483,8 @@ export async function buildCoverLetterDocx(
               new TextRun({
                 text: `Re: ${jobTitle}`,
                 bold: true,
-                size: 20,
-                font: "Calibri",
+                size: look.bodySize,
+                font: docxFont(look),
               }),
             ],
           }),
@@ -390,7 +492,7 @@ export async function buildCoverLetterDocx(
             (p) =>
               new Paragraph({
                 spacing: { after: 160 },
-                children: runsFromText(p, keywords, 20),
+                children: runsFromText(p, keywords, look.bodySize, look),
               }),
           ),
           new Paragraph({
@@ -398,8 +500,8 @@ export async function buildCoverLetterDocx(
             children: [
               new TextRun({
                 text: "Sincerely,",
-                size: 20,
-                font: "Calibri",
+                size: look.bodySize,
+                font: docxFont(look),
               }),
             ],
           }),
@@ -409,8 +511,8 @@ export async function buildCoverLetterDocx(
               new TextRun({
                 text: personal.name,
                 bold: true,
-                size: 20,
-                font: "Calibri",
+                size: look.bodySize,
+                font: docxFont(look),
               }),
             ],
           }),
@@ -426,23 +528,23 @@ function drawSegmentedLine(
   doc: PDFKit.PDFDocument,
   text: string,
   keywords: string[],
+  look: ResumeLook,
   options: { fontSize?: number; continued?: boolean } = {},
 ) {
-  const fontSize = options.fontSize ?? 10.5;
+  const fontSize = options.fontSize ?? look.pdfBodySize;
   const segments = segmentWithKeywords(text, keywords);
   if (!segments.length) {
-    doc.font("Helvetica").fontSize(fontSize).text(" ");
+    doc.font(look.pdfRegular).fontSize(fontSize).text(" ");
     return;
   }
 
-  // Keep PDFKit cursor valid after long continued runs
   if (!Number.isFinite(doc.x)) doc.x = doc.page.margins.left;
   if (!Number.isFinite(doc.y)) doc.y = doc.page.margins.top;
 
   segments.forEach((seg, i) => {
     doc
       .fillColor("#000000")
-      .font(seg.bold ? "Helvetica-Bold" : "Helvetica")
+      .font(seg.bold ? look.pdfBold : look.pdfRegular)
       .fontSize(fontSize)
       .text(seg.text, {
         continued: i < segments.length - 1,
@@ -454,14 +556,16 @@ function drawSegmentedLine(
 function drawPdfContactLine(
   doc: PDFKit.PDFDocument,
   parts: Array<{ label: string; href?: string }>,
+  look: ResumeLook,
 ) {
   const left = doc.page.margins.left;
   const usableWidth =
     doc.page.width - doc.page.margins.left - doc.page.margins.right;
   const y = Number.isFinite(doc.y) ? doc.y : doc.page.margins.top + 40;
   const sep = " | ";
+  const accent = `#${look.accent}`;
 
-  doc.font("Helvetica").fontSize(9);
+  doc.font(look.pdfRegular).fontSize(look.pdfMetaSize);
   const full = parts.map((p) => p.label).join(sep);
   let fullWidth = 0;
   try {
@@ -476,7 +580,7 @@ function drawPdfContactLine(
   if (!Number.isFinite(x) || !Number.isFinite(y) || !parts.length) {
     doc.x = left;
     doc.y = Number.isFinite(y) ? y : 80;
-    doc.fillColor("#555555").text(full || " ", {
+    doc.fillColor(`#${look.muted}`).text(full || " ", {
       width: usableWidth,
       align: "center",
     });
@@ -486,17 +590,16 @@ function drawPdfContactLine(
   for (let i = 0; i < parts.length; i++) {
     if (i > 0) {
       const sepWidth = doc.widthOfString(sep);
-      doc.fillColor("#555555").text(sep, x, y, { lineBreak: false });
+      doc.fillColor(`#${look.muted}`).text(sep, x, y, { lineBreak: false });
       x += sepWidth;
     }
 
     const part = parts[i];
     const width = doc.widthOfString(part.label);
     doc
-      .fillColor(part.href ? "#1F4E79" : "#555555")
+      .fillColor(part.href ? accent : `#${look.muted}`)
       .text(part.label, x, y, { lineBreak: false });
 
-    // Annotation only — no underline (Word Hyperlink style can force one; PDF drawn line removed)
     if (part.href && Number.isFinite(x) && Number.isFinite(width)) {
       doc.link(x, y - 1, width, 12, part.href);
     }
@@ -511,42 +614,50 @@ function drawPdfContactLine(
 export async function buildResumePdf(
   personal: PersonalInfo,
   resume: TailoredResume,
+  format?: ResumeFormat | null,
 ): Promise<Buffer> {
+  const parsed = parseResumeFormat(format);
+  const look = resumeLook(parsed);
   const kw = resume.keywords;
+  const accent = `#${look.accent}`;
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({
-      margin: 50,
+      margin: look.pdfMargin,
       size: "LETTER",
       info: {
         Title: `${personal.name} - Resume`,
         Author: personal.name,
       },
     });
+    const pdf = registerResumePdfFonts(doc, parsed.font);
+    look.pdfRegular = pdf.regular;
+    look.pdfBold = pdf.bold;
+    look.pdfItalic = pdf.italic;
     const chunks: Buffer[] = [];
     doc.on("data", (chunk) => chunks.push(chunk as Buffer));
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     doc.on("error", reject);
 
     doc
-      .font("Helvetica-Bold")
-      .fontSize(20)
-      .fillColor("#1A1A1A")
-      .text(personal.name.toUpperCase(), {
+      .font(look.pdfBold)
+      .fontSize(look.pdfNameSize)
+      .fillColor(`#${look.ink}`)
+      .text(displayName(personal.name, look), {
         align: "center",
         width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
       });
     if (resume.headline) {
       doc.moveDown(0.15);
       doc
-        .font("Helvetica-Oblique")
-        .fontSize(11)
-        .fillColor("#1F4E79")
+        .font(look.pdfItalic)
+        .fontSize(look.pdfHeadingSize)
+        .fillColor(accent)
         .text(resume.headline, {
           align: "center",
           width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
         });
-      doc.fillColor("#1A1A1A");
+      doc.fillColor(`#${look.ink}`);
     }
     doc.moveDown(0.3);
 
@@ -569,17 +680,23 @@ export async function buildResumePdf(
         href: linkedInHref(personal.linkedin),
       });
     }
+    if (personal.portfolio) {
+      contactParts.push({
+        label: websiteDisplay(personal.portfolio),
+        href: linkedInHref(personal.portfolio),
+      });
+    }
     if (personal.location) {
       contactParts.push({ label: personal.location });
     }
 
-    drawPdfContactLine(doc, contactParts);
+    drawPdfContactLine(doc, contactParts, look);
 
     const lineY = Number.isFinite(doc.y) ? doc.y + 2 : 90;
     doc
       .moveTo(doc.page.margins.left, lineY)
       .lineTo(doc.page.width - doc.page.margins.right, lineY)
-      .strokeColor("#1F4E79")
+      .strokeColor(accent)
       .lineWidth(1.2)
       .stroke();
     doc.x = doc.page.margins.left;
@@ -592,15 +709,15 @@ export async function buildResumePdf(
       doc.x = doc.page.margins.left;
       doc.y = y;
       doc
-        .font("Helvetica-Bold")
-        .fontSize(11)
-        .fillColor("#1F4E79")
-        .text(label.toUpperCase());
+        .font(look.pdfBold)
+        .fontSize(look.pdfHeadingSize)
+        .fillColor(accent)
+        .text(headingLabel(label, look));
       const ruleY = Number.isFinite(doc.y) ? doc.y + 3 : y + 14;
       doc
         .moveTo(doc.page.margins.left, ruleY)
         .lineTo(doc.page.width - doc.page.margins.right, ruleY)
-        .strokeColor("#222222")
+        .strokeColor(`#${look.headingRule}`)
         .lineWidth(1)
         .stroke();
       doc.x = doc.page.margins.left;
@@ -609,42 +726,49 @@ export async function buildResumePdf(
     };
 
     heading("Summary");
-    drawSegmentedLine(doc, resume.summary, kw, { fontSize: 10.5 });
+    drawSegmentedLine(doc, resume.summary, kw, look, {
+      fontSize: look.pdfBodySize,
+    });
     doc.moveDown(0.7);
 
     heading("Skills");
     for (const group of resume.skills) {
-      doc.font("Helvetica-Bold").fontSize(10.5).text(`${group.category}: `, {
-        continued: true,
+      doc
+        .font(look.pdfBold)
+        .fontSize(look.pdfBodySize)
+        .text(`${group.category}: `, {
+          continued: true,
+        });
+      drawSegmentedLine(doc, group.items.join(", "), kw, look, {
+        fontSize: look.pdfBodySize,
       });
-      drawSegmentedLine(doc, group.items.join(", "), kw, { fontSize: 10.5 });
       doc.moveDown(0.35);
     }
 
     heading("Experience");
     for (const [expIndex, exp] of resume.experiences.entries()) {
       doc.moveDown(expIndex === 0 ? 0.35 : 0.7);
-      doc.font("Helvetica-Bold").fontSize(11).text(exp.title);
+      doc.font(look.pdfBold).fontSize(look.pdfHeadingSize).text(exp.title);
       doc.moveDown(0.08);
       doc
-        .font("Helvetica-Oblique")
-        .fontSize(10)
+        .font(look.pdfItalic)
+        .fontSize(look.pdfMetaSize)
         .text(`${exp.company}  |  ${exp.location}  |  ${exp.period}`);
       if (exp.overview) {
         doc.moveDown(0.45);
         doc
-          .font("Helvetica-Oblique")
-          .fontSize(10)
+          .font(look.pdfItalic)
+          .fontSize(look.pdfMetaSize)
           .fillColor("#444444")
           .text(exp.overview, { lineGap: 2 });
         doc.fillColor("#000000");
       }
       doc.moveDown(0.5);
       for (const bullet of exp.bullets) {
-        doc.font("Helvetica").fontSize(10.5).text("•  ", {
+        doc.font(look.pdfRegular).fontSize(look.pdfBodySize).text("•  ", {
           continued: true,
         });
-        drawSegmentedLine(doc, bullet, kw, { fontSize: 10.5 });
+        drawSegmentedLine(doc, bullet, kw, look, { fontSize: look.pdfBodySize });
         doc.moveDown(0.35);
       }
     }
@@ -652,12 +776,9 @@ export async function buildResumePdf(
     heading("Education");
     for (const [eduIndex, edu] of resume.education.entries()) {
       doc.moveDown(eduIndex === 0 ? 0.3 : 0.55);
-      doc.font("Helvetica-Bold").fontSize(11).text(edu.degree);
+      doc.font(look.pdfBold).fontSize(look.pdfHeadingSize).text(edu.degree);
       doc.moveDown(0.08);
-      doc
-        .font("Helvetica-Oblique")
-        .fontSize(10)
-        .text(`${edu.school}  |  ${edu.location}  |  ${edu.period}`);
+      doc.font(look.pdfItalic).fontSize(look.pdfMetaSize).text(educationSubline(edu));
     }
 
     doc.end();

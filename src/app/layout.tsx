@@ -1,6 +1,8 @@
 import { Source_Serif_4, DM_Sans } from "next/font/google";
+import { cookies } from "next/headers";
 import "./globals.css";
 import type { Metadata } from "next";
+import { PAGE_STYLE_COOKIE, parsePageStyle } from "@/lib/appearance";
 
 const display = Source_Serif_4({
   subsets: ["latin"],
@@ -18,13 +20,20 @@ export const metadata: Metadata = {
     "Paste your background and a job description to generate ATS-optimized resumes and cover letters.",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const jar = await cookies();
+  const pageStyle = parsePageStyle(jar.get(PAGE_STYLE_COOKIE)?.value);
+
   return (
-    <html lang="en" className={`${display.variable} ${body.variable} h-full`}>
+    <html
+      lang="en"
+      data-theme={pageStyle}
+      className={`${display.variable} ${body.variable} h-full`}
+    >
       <body className="min-h-full">{children}</body>
     </html>
   );

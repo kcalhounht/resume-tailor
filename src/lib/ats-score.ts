@@ -42,7 +42,7 @@ function resumeCorpus(resume: TailoredResume): string {
       exp.overview,
       ...exp.bullets,
     ]),
-    ...resume.education.flatMap((edu) => [edu.degree, edu.school]),
+    ...resume.education.flatMap((edu) => [edu.degree, edu.school, edu.discipline]),
     ...resume.keywords,
   ];
   return normalizeToken(parts.join("\n"));

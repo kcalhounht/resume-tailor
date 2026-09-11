@@ -6,6 +6,7 @@ import { MIN_JOB_DESCRIPTION_CHARS } from "./limits";
 import { validateAndFixResume } from "./validate-resume";
 import type { JobStep } from "./progress";
 import type { CandidateProfile, ExtractedJD, PersonalInfo } from "./types";
+import type { ResumeFormat } from "./resume-format";
 
 export async function processOneJob(options: {
   index: number;
@@ -13,6 +14,7 @@ export async function processOneJob(options: {
   profile: CandidateProfile;
   personal: PersonalInfo;
   outputSuffix?: string;
+  resumeFormat?: ResumeFormat | null;
   onStep: (step: JobStep, message: string) => void;
 }): Promise<{
   index: number;
@@ -28,10 +30,12 @@ export async function processOneJob(options: {
   downloads?: {
     zipBase64: string;
     resumeDocxBase64: string;
+    resumePdfBase64: string;
     coverLetterDocxBase64: string;
   };
 }> {
-  const { index, profile, personal, outputSuffix, onStep } = options;
+  const { index, profile, personal, outputSuffix, resumeFormat, onStep } =
+    options;
   const rawText = options.jobDescription.trim().slice(0, 50000);
 
   if (rawText.length < MIN_JOB_DESCRIPTION_CHARS) {
@@ -51,7 +55,15 @@ export async function processOneJob(options: {
 
   if (!validation.ok) {
     onStep("validating", "Fixing validation issues and regenerating…");
-    tailored = await generateTailoredPackage(profile, extracted, rawText);
+    const repairHints = validation.issues
+      .filter((issue) => issue.level === "error")
+      .map((issue) => issue.message);
+    tailored = await generateTailoredPackage(
+      profile,
+      extracted,
+      rawText,
+      repairHints,
+    );
     validation = validateAndFixResume(tailored, profile, extracted);
   }
 
@@ -81,6 +93,7 @@ export async function processOneJob(options: {
     personal,
     tailored,
     suffix: outputSuffix,
+    resumeFormat,
   });
 
   return {

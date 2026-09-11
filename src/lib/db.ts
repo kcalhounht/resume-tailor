@@ -1,18 +1,68 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
+const POSTGRES_URL_RE = /^(postgres|postgresql):\/\//i;
+
+function isPostgresUrl(value: string) {
+  return POSTGRES_URL_RE.test(value);
+}
+
+function firstPostgresUrl(values: Array<string | undefined>) {
+  for (const value of values) {
+    const trimmed = value?.trim();
+    if (trimmed && isPostgresUrl(trimmed)) return trimmed;
+  }
+  return "";
+}
+
+function assembleUrlFromPgEnv() {
+  const host = process.env.PGHOST?.trim() || process.env.POSTGRES_HOST?.trim();
+  const user = process.env.PGUSER?.trim() || process.env.POSTGRES_USER?.trim();
+  const password =
+    process.env.PGPASSWORD?.trim() || process.env.POSTGRES_PASSWORD?.trim();
+  const database =
+    process.env.PGDATABASE?.trim() || process.env.POSTGRES_DATABASE?.trim();
+  if (!host || !user || !database) return "";
+  const auth = password
+    ? `${encodeURIComponent(user)}:${encodeURIComponent(password)}`
+    : encodeURIComponent(user);
+  return `postgresql://${auth}@${host}/${encodeURIComponent(database)}?sslmode=require`;
+}
+
+/**
+ * Neon / Vercel may inject DATABASE_URL, POSTGRES_URL, or a custom prefix
+ * like STORAGE_URL. Keys are read statically so Next.js includes them.
+ */
+export function getDatabaseUrl() {
+  return (
+    firstPostgresUrl([
+      process.env.DATABASE_URL,
+      process.env.POSTGRES_URL,
+      process.env.POSTGRES_PRISMA_URL,
+      process.env.STORAGE_URL,
+      process.env.STORAGE_DATABASE_URL,
+      process.env.NEON_DATABASE_URL,
+    ]) || assembleUrlFromPgEnv()
+  );
+}
+
 export function hasDatabase() {
-  return Boolean(process.env.DATABASE_URL?.trim());
+  return Boolean(getDatabaseUrl());
 }
 
 let sql: NeonQueryFunction<false, false> | null = null;
 let ready: Promise<void> | null = null;
+let sqlUrl: string | null = null;
 
 export function getSql() {
-  const url = process.env.DATABASE_URL?.trim();
+  const url = getDatabaseUrl();
   if (!url) {
     throw new Error("DATABASE_URL is not set. Add your Neon connection string.");
   }
-  if (!sql) sql = neon(url);
+  if (!sql || sqlUrl !== url) {
+    sql = neon(url);
+    sqlUrl = url;
+    ready = null;
+  }
   return sql;
 }
 
@@ -38,9 +88,13 @@ async function ensureSchema(client: NeonQueryFunction<false, false>) {
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       role TEXT NOT NULL CHECK (role IN ('admin', 'user')),
       priority TEXT NOT NULL CHECK (priority IN ('able', 'disable')),
-      profile JSONB
+      profile JSONB,
+      page_style TEXT,
+      resume_format JSONB
     )
   `;
+  await client`ALTER TABLE users ADD COLUMN IF NOT EXISTS page_style TEXT`;
+  await client`ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_format JSONB`;
   await client`
     CREATE TABLE IF NOT EXISTS tailor_records (
       id TEXT PRIMARY KEY,
@@ -64,6 +118,12 @@ async function ensureSchema(client: NeonQueryFunction<false, false>) {
   await client`CREATE INDEX IF NOT EXISTS tailor_records_created_at_idx ON tailor_records (created_at DESC)`;
   await client`CREATE INDEX IF NOT EXISTS tailor_records_zip_name_idx ON tailor_records (zip_name)`;
   await client`CREATE INDEX IF NOT EXISTS tailor_records_folder_name_idx ON tailor_records (folder_name)`;
+  await client`
+    CREATE TABLE IF NOT EXISTS settings (
+      id TEXT PRIMARY KEY,
+      payload JSONB NOT NULL
+    )
+  `;
 }
 
 export function isUniqueViolation(err: unknown) {
