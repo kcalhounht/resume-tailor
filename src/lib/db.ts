@@ -89,10 +89,12 @@ async function ensureSchema(client: NeonQueryFunction<false, false>) {
       role TEXT NOT NULL CHECK (role IN ('admin', 'user')),
       priority TEXT NOT NULL CHECK (priority IN ('able', 'disable')),
       profile JSONB,
-      page_style TEXT
+      page_style TEXT,
+      resume_format JSONB
     )
   `;
   await client`ALTER TABLE users ADD COLUMN IF NOT EXISTS page_style TEXT`;
+  await client`ALTER TABLE users ADD COLUMN IF NOT EXISTS resume_format JSONB`;
   await client`
     CREATE TABLE IF NOT EXISTS tailor_records (
       id TEXT PRIMARY KEY,

@@ -460,8 +460,75 @@ a {
   line-height: 1.35;
 }
 
+.resume-format-head {
+  margin-top: 1.4rem;
+}
+
+.format-block {
+  display: grid;
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.format-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  letter-spacing: 0.02em;
+}
+
+.format-options {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.format-option {
+  display: grid;
+  gap: 0.2rem;
+  text-align: left;
+  padding: 0.6rem 0.65rem;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+
+.format-option:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
+
+.format-option.active {
+  border-color: var(--accent-deep);
+  background: var(--accent-soft);
+}
+
+.format-option:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.format-option-name {
+  font-weight: 650;
+  font-size: 0.88rem;
+}
+
+.format-option-hint {
+  color: var(--muted);
+  font-size: 0.74rem;
+  line-height: 1.35;
+}
+
+.format-swatch {
+  display: block;
+  width: 1.35rem;
+  height: 0.7rem;
+  border: 1px solid var(--line-strong);
+}
+
 @media (max-width: 640px) {
-  .style-grid {
+  .style-grid,
+  .format-options {
     grid-template-columns: 1fr;
   }
 }
@@ -1535,6 +1602,10 @@ button {
     grid-template-columns: 1fr;
   }
 
+  .format-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .topbar-inner {
     flex-direction: column;
     align-items: flex-start;
@@ -1567,5 +1638,9 @@ button {
   .retry-btn {
     flex: 1;
     justify-content: center;
+  }
+
+  .format-options {
+    grid-template-columns: 1fr;
   }
 }

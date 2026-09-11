@@ -11,6 +11,11 @@ import {
 } from "./db";
 import { getDataRoot } from "./runtime";
 import { parsePageStyle, type PageStyle } from "./appearance";
+import {
+  DEFAULT_RESUME_FORMAT,
+  parseResumeFormat,
+  type ResumeFormat,
+} from "./resume-format";
 
 export type UserRole = "admin" | "user";
 export type UserPriority = "able" | "disable";
@@ -25,6 +30,7 @@ export type StoredUser = {
   priority: UserPriority;
   profile?: CandidateProfile;
   pageStyle?: PageStyle;
+  resumeFormat?: ResumeFormat;
 };
 
 export type PublicUser = {
@@ -51,6 +57,7 @@ type UserRow = {
   priority: string;
   profile: unknown;
   page_style?: string | null;
+  resume_format?: unknown;
 };
 
 function storePath() {
@@ -137,6 +144,7 @@ function rowToUser(row: UserRow): StoredUser {
     priority: asPriority(row.priority),
     profile: parseProfileDraft(row.profile) ?? undefined,
     pageStyle: parsePageStyle(row.page_style),
+    resumeFormat: parseResumeFormat(row.resume_format),
   };
 }
 
@@ -271,11 +279,12 @@ export async function createUser(input: {
       priority,
       profile,
       pageStyle: "forest",
+      resumeFormat: DEFAULT_RESUME_FORMAT,
     };
     try {
       await sql`
         INSERT INTO users (
-          id, name, email, password_hash, created_at, role, priority, profile, page_style
+          id, name, email, password_hash, created_at, role, priority, profile, page_style, resume_format
         ) VALUES (
           ${user.id},
           ${user.name},
@@ -285,7 +294,8 @@ export async function createUser(input: {
           ${user.role},
           ${user.priority},
           ${user.profile ?? null},
-          ${user.pageStyle}
+          ${user.pageStyle},
+          ${user.resumeFormat}
         )
       `;
     } catch (err) {
@@ -322,6 +332,7 @@ export async function createUser(input: {
           : "able",
       profile,
       pageStyle: "forest",
+      resumeFormat: DEFAULT_RESUME_FORMAT,
     };
     store.users.push(user);
     await writeStore(store);
@@ -503,6 +514,29 @@ export async function updateUserPageStyle(
     user.pageStyle = next;
     await writeStore(store);
   });
+}
+
+export async function updateUserResumeFormat(
+  userId: string,
+  format: ResumeFormat,
+): Promise<ResumeFormat> {
+  const next = parseResumeFormat(format);
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    const exists = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`;
+    if (!exists.length) throw new Error("Account not found.");
+    await sql`UPDATE users SET resume_format = ${next} WHERE id = ${userId}`;
+    return next;
+  }
+
+  await enqueue(async () => {
+    const store = await readStore();
+    const user = store.users.find((entry) => entry.id === userId);
+    if (!user) throw new Error("Account not found.");
+    user.resumeFormat = next;
+    await writeStore(store);
+  });
+  return next;
 }
 
 export async function saveUserProfile(

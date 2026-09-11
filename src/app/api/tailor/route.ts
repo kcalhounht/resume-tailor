@@ -4,6 +4,7 @@ import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
 import { getSession } from "@/app/actions/auth";
 import { findUserById, isUserAble, saveUserProfile, PRIORITY_DISABLED_MESSAGE } from "@/lib/users";
+import { parseResumeFormat } from "@/lib/resume-format";
 import { normalizeProfile } from "@/lib/profile";
 import {
   addTailorRecord,
@@ -81,6 +82,7 @@ export async function POST(request: Request) {
                 profile: payload.profile,
                 personal: payload.profile.personal,
                 outputSuffix: recordOutputSuffix(recordId),
+                resumeFormat: parseResumeFormat(user.resumeFormat),
                 onStep: (step, message) => {
                   currentStep = step;
                   send({

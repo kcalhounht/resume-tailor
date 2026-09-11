@@ -46,6 +46,7 @@ export type ProgressEvent =
       downloads?: {
         zipBase64: string;
         resumeDocxBase64: string;
+        resumePdfBase64: string;
         coverLetterDocxBase64: string;
       };
     }

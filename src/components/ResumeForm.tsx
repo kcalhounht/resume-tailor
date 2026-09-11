@@ -26,6 +26,10 @@ import type { CandidateProfile } from "@/lib/types";
 import type { SessionPayload } from "@/lib/session";
 import { saveProfile } from "@/app/actions/profile";
 import { DEFAULT_PAGE_STYLE, type PageStyle } from "@/lib/appearance";
+import {
+  DEFAULT_RESUME_FORMAT,
+  type ResumeFormat,
+} from "@/lib/resume-format";
 
 type StepStatus = "pending" | "active" | "done" | "error";
 
@@ -48,6 +52,7 @@ type JobProgress = {
   downloadUrls?: {
     zip: string;
     resumeDocx: string;
+    resumePdf: string;
     coverLetterDocx: string;
   };
 };
@@ -130,6 +135,10 @@ function markJobDone(
     ? {
         zip: base64ToObjectUrl(data.downloads.zipBase64, "application/zip"),
         resumeDocx: base64ToObjectUrl(data.downloads.resumeDocxBase64, DOCX),
+        resumePdf: base64ToObjectUrl(
+          data.downloads.resumePdfBase64,
+          "application/pdf",
+        ),
         coverLetterDocx: base64ToObjectUrl(
           data.downloads.coverLetterDocxBase64,
           DOCX,
@@ -217,11 +226,13 @@ export default function ResumeForm({
   initialProfile,
   session,
   initialPageStyle = DEFAULT_PAGE_STYLE,
+  initialResumeFormat = DEFAULT_RESUME_FORMAT,
   canOperate = true,
 }: {
   initialProfile?: CandidateProfile;
   session: SessionPayload;
   initialPageStyle?: PageStyle;
+  initialResumeFormat?: ResumeFormat;
   canOperate?: boolean;
 }) {
   const [tab, setTab] = useState<
@@ -634,6 +645,7 @@ export default function ResumeForm({
       {tab === "settings" && (
         <UserSettingsPanel
           initialStyle={initialPageStyle}
+          initialResumeFormat={initialResumeFormat}
           canOperate={canOperate}
         />
       )}
@@ -809,6 +821,7 @@ export default function ResumeForm({
                     job.folderName &&
                     job.zipName &&
                     job.resumeDocxName &&
+                    job.resumePdfName &&
                     job.coverLetterDocxName && (
                     <div className="download-row">
                       <span className="download-label">Downloads</span>
@@ -823,6 +836,17 @@ export default function ResumeForm({
                         >
                           <DownloadIcon />
                           {job.resumeDocxName}
+                        </a>
+                        <a
+                          className="download-btn"
+                          href={
+                            job.downloadUrls?.resumePdf ??
+                            `/api/download?folder=${encodeURIComponent(job.folderName)}&name=${encodeURIComponent(job.resumePdfName)}`
+                          }
+                          download={job.resumePdfName}
+                        >
+                          <DownloadIcon />
+                          {job.resumePdfName}
                         </a>
                         <a
                           className="download-btn"
