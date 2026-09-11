@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { saveOwnPageStyle } from "@/app/actions/appearance";
-import { MessageBox } from "@/components/MessageBox";
 import { PAGE_STYLES, type PageStyle } from "@/lib/appearance";
 
 export function UserSettingsPanel({
@@ -15,7 +14,7 @@ export function UserSettingsPanel({
   const [selected, setSelected] = useState<PageStyle>(initialStyle);
   const [saved, setSaved] = useState<PageStyle>(initialStyle);
   const [busy, setBusy] = useState(false);
-  const [messageBox, setMessageBox] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   return (
     <section
@@ -52,16 +51,15 @@ export function UserSettingsPanel({
               onClick={() => {
                 if (!canOperate) return;
                 setSelected(option.id);
-                setMessageBox(null);
+                setError(null);
                 document.documentElement.setAttribute("data-theme", option.id);
                 setBusy(true);
                 void saveOwnPageStyle(option.id)
                   .then(() => {
                     setSaved(option.id);
-                    setMessageBox(`${option.name} is on.`);
                   })
                   .catch((err: unknown) => {
-                    setMessageBox(
+                    setError(
                       err instanceof Error
                         ? err.message
                         : "Could not save that style.",
@@ -85,9 +83,7 @@ export function UserSettingsPanel({
           );
         })}
       </div>
-      {messageBox ? (
-        <MessageBox message={messageBox} onClose={() => setMessageBox(null)} />
-      ) : null}
+      {error ? <p className="error">{error}</p> : null}
     </section>
   );
 }
