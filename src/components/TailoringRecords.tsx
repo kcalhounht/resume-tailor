@@ -28,13 +28,10 @@ function formatDay(key: string) {
   });
 }
 
-function formatGenerated(value: string) {
+function formatTime(value: string) {
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit",
   });
@@ -211,47 +208,30 @@ export default function TailoringRecords({
                   const open = openId === record.id;
                   return (
                     <li key={record.id} className="record-card">
-                      <dl className="record-fields">
-                        <div>
-                          <dt>Name</dt>
-                          <dd>{profileName || record.userName || "—"}</dd>
-                        </div>
-                        <div>
-                          <dt>Generated</dt>
-                          <dd className="record-generated">
-                            <span>{formatGenerated(record.createdAt)}</span>
-                            {record.status === "done" &&
-                            typeof record.atsScore === "number" ? (
-                              <span
-                                className={`ats-score ${atsClass(record.atsScore)}`}
-                              >
-                                ATS {record.atsScore}/100
-                              </span>
-                            ) : record.status === "done" ? (
-                              <span className="ats-score">ATS —/100</span>
-                            ) : (
-                              <span className="record-status record-status-error">
-                                Failed
-                              </span>
-                            )}
-                          </dd>
-                        </div>
-                        <div>
-                          <dt>Role</dt>
-                          <dd>{record.jobTitle || "—"}</dd>
-                        </div>
-                      </dl>
-
-                      {record.error && <p className="error">{record.error}</p>}
-
-                      {open ? (
-                        <p className="record-summary">
-                          {record.extracted?.summary?.trim() ||
-                            "No summary saved."}
-                        </p>
-                      ) : null}
-
-                      <div className="record-card-footer">
+                      <div className="record-row">
+                        <span className="record-name">
+                          {profileName || record.userName || "—"}
+                        </span>
+                        <span className="record-role">
+                          {record.jobTitle || "—"}
+                        </span>
+                        <span className="record-time">
+                          {formatTime(record.createdAt) || "—"}
+                        </span>
+                        {record.status === "done" &&
+                        typeof record.atsScore === "number" ? (
+                          <span
+                            className={`ats-score ${atsClass(record.atsScore)}`}
+                          >
+                            ATS {record.atsScore}/100
+                          </span>
+                        ) : record.status === "done" ? (
+                          <span className="ats-score">ATS —/100</span>
+                        ) : (
+                          <span className="record-status record-status-error">
+                            Failed
+                          </span>
+                        )}
                         <button
                           type="button"
                           className="text-btn"
@@ -269,6 +249,15 @@ export default function TailoringRecords({
                           Delete
                         </button>
                       </div>
+
+                      {record.error && <p className="error">{record.error}</p>}
+
+                      {open ? (
+                        <p className="record-summary">
+                          {record.extracted?.summary?.trim() ||
+                            "No summary saved."}
+                        </p>
+                      ) : null}
                     </li>
                   );
                 })}

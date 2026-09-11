@@ -1347,6 +1347,54 @@ button {
   font-size: 0.95rem;
 }
 
+.record-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.record-name,
+.record-role {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 650;
+  font-size: 0.9rem;
+}
+
+.record-name {
+  flex: 1 1 7rem;
+}
+
+.record-role {
+  flex: 1 1 7rem;
+}
+
+.record-time,
+.record-row .ats-score,
+.record-row .record-status {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.record-time {
+  color: var(--muted);
+  font-size: 0.86rem;
+}
+
+.record-row .text-btn {
+  flex: 0 0 auto;
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.record-row .danger-btn {
+  margin-left: 0;
+}
+
 .record-fields {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;
