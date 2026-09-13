@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { redirect, unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import {
@@ -127,6 +127,7 @@ export async function signup(
     });
     await setSessionCookie(user);
   } catch (err) {
+    unstable_rethrow(err);
     return {
       message:
         err instanceof Error ? err.message : "Could not create the account.",
@@ -157,6 +158,7 @@ export async function signin(
 
     await setSessionCookie(user);
   } catch (err) {
+    unstable_rethrow(err);
     const message =
       err instanceof Error ? err.message : "Could not sign in.";
     if (message === HOST_NEEDS_DATABASE_MESSAGE) {

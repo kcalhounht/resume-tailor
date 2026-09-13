@@ -24,7 +24,7 @@ export default function GlobalError({
               {error.digest ? (
                 <p className="hint">Reference: {error.digest}</p>
               ) : null}
-              <Link href="/signin" className="primary">
+              <Link href="/api/auth/clear" className="primary">
                 Sign in
               </Link>
               <p className="hint">

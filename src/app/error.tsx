@@ -22,7 +22,7 @@ export default function Error({
             <p className="hint">Reference: {error.digest}</p>
           ) : null}
           <div className="error-actions">
-            <Link href="/signin" className="primary">
+            <Link href="/api/auth/clear" className="primary">
               Sign in
             </Link>
             <Link href="/api/auth/clear" className="text-btn">
