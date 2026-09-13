@@ -5,6 +5,8 @@ import { getDefaultLlmModel } from "@/lib/llm";
 import { getSettings, toPublicSettings } from "@/lib/settings";
 import { parsePageStyle } from "@/lib/appearance";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Settings | Resume Tailor",
   description: "Administrator settings for accounts and generation.",

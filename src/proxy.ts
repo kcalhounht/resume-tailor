@@ -1,19 +1,19 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { SESSION_COOKIE, readSessionToken } from "@/lib/session";
 
+const SESSION_COOKIE = "rt_session";
 const PUBLIC_PATHS = ["/signin", "/signup", "/api/auth/clear"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  const session = readSessionToken(request.cookies.get(SESSION_COOKIE)?.value);
   const isPublic = PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
+  const hasSessionCookie = Boolean(request.cookies.get(SESSION_COOKIE)?.value);
 
-  if (!session && !isPublic) {
+  if (!hasSessionCookie && !isPublic) {
     const signin = new URL("/signin", request.url);
-    if (pathname !== "/api/auth/clear") {
+    if (!pathname.startsWith("/api/auth/clear")) {
       signin.searchParams.set("next", pathname);
     }
     return NextResponse.redirect(signin);

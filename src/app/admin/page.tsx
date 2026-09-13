@@ -6,6 +6,8 @@ import { getSettings } from "@/lib/settings";
 import { listPublicUsers } from "@/lib/users";
 import { parsePageStyle } from "@/lib/appearance";
 
+export const dynamic = "force-dynamic";
+
 export const metadata = {
   title: "Database | Resume Tailor",
   description: "Administrator database for accounts, profiles, and tailoring records.",

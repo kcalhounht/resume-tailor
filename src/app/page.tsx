@@ -5,6 +5,8 @@ import { isAdminUser, isUserAble, profileFromUser } from "@/lib/users";
 import { parsePageStyle } from "@/lib/appearance";
 import { parseResumeFormat } from "@/lib/resume-format";
 
+export const dynamic = "force-dynamic";
+
 export default async function Home() {
   const { session, user } = await requireCurrentUser();
 
