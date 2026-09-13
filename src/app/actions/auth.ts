@@ -95,20 +95,27 @@ export async function getSession(): Promise<SessionPayload | null> {
 }
 
 export async function requireSession(): Promise<SessionPayload> {
-  const session = await getSession();
-  if (!session) redirect("/signin");
-  const user = await findUserById(session.userId);
-  if (!user) {
-    // Cookie deletes are not allowed during Server Component render.
-    redirect("/api/auth/clear");
-  }
+  const { session } = await requireCurrentUser();
   return session;
 }
 
+export async function requireCurrentUser(): Promise<{
+  session: SessionPayload;
+  user: StoredUser;
+}> {
+  const session = await getSession();
+  if (!session) redirect("/signin");
+  try {
+    const user = await findUserById(session.userId);
+    if (user) return { session, user };
+  } catch {
+    redirect("/api/auth/clear");
+  }
+  redirect("/api/auth/clear");
+}
+
 export async function requireAbleUser(): Promise<StoredUser> {
-  const session = await requireSession();
-  const user = await findUserById(session.userId);
-  if (!user) redirect("/api/auth/clear");
+  const { user } = await requireCurrentUser();
   if (!isUserAble(user)) {
     throw new Error(PRIORITY_DISABLED_MESSAGE);
   }

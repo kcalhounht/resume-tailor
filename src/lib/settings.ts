@@ -133,27 +133,39 @@ function needsPersist(raw: unknown): boolean {
 }
 
 export async function getSettings(): Promise<AppSettings> {
-  if (hasDatabase()) {
-    const sql = await withDatabase();
-    const rows = (await sql`
-      SELECT payload FROM settings WHERE id = ${SETTINGS_ID} LIMIT 1
-    `) as Array<{ payload: unknown }>;
-    const raw = rows[0]?.payload ?? null;
-    const settings = parseSettings(raw);
-    if (needsPersist(raw)) {
-      return persistSettings(settings);
+  try {
+    if (hasDatabase()) {
+      const sql = await withDatabase();
+      const rows = (await sql`
+        SELECT payload FROM settings WHERE id = ${SETTINGS_ID} LIMIT 1
+      `) as Array<{ payload: unknown }>;
+      const raw = rows[0]?.payload ?? null;
+      const settings = parseSettings(raw);
+      if (needsPersist(raw)) {
+        try {
+          return await persistSettings(settings);
+        } catch {
+          return settings;
+        }
+      }
+      return settings;
     }
-    return settings;
-  }
 
-  return enqueue(async () => {
-    const raw = await readJsonFile();
-    const settings = parseSettings(raw);
-    if (needsPersist(raw)) {
-      return persistSettings(settings);
-    }
-    return settings;
-  });
+    return enqueue(async () => {
+      const raw = await readJsonFile();
+      const settings = parseSettings(raw);
+      if (needsPersist(raw)) {
+        try {
+          return await persistSettings(settings);
+        } catch {
+          return settings;
+        }
+      }
+      return settings;
+    });
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
 }
 
 export async function saveSettings(

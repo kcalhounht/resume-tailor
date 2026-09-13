@@ -5,7 +5,6 @@ import "./globals.css";
 
 export default function GlobalError({
   error,
-  unstable_retry,
 }: {
   error: Error & { digest?: string };
   unstable_retry: () => void;
@@ -20,18 +19,14 @@ export default function GlobalError({
               <p className="brand">Resume Tailor</p>
               <h1>Something went wrong</h1>
               <p className="hint">
-                The app hit an unexpected error. Try again to reload.
+                The app hit an unexpected error. Sign in again to continue.
               </p>
               {error.digest ? (
                 <p className="hint">Reference: {error.digest}</p>
               ) : null}
-              <button
-                type="button"
-                className="primary"
-                onClick={() => unstable_retry()}
-              >
-                Try again
-              </button>
+              <Link href="/signin" className="primary">
+                Sign in
+              </Link>
               <p className="hint">
                 <Link href="/api/auth/clear">Sign out</Link>
               </p>
