@@ -1,4 +1,6 @@
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { connection } from "next/server";
+import { isEphemeralFilesystem } from "./runtime";
 
 const POSTGRES_URL_RE = /^(postgres|postgresql):\/\//i;
 
@@ -45,8 +47,18 @@ export function getDatabaseUrl() {
   );
 }
 
-export function hasDatabase() {
+export async function accountsUseDatabase() {
+  await connection();
   return Boolean(getDatabaseUrl());
+}
+
+export const HOST_NEEDS_DATABASE_MESSAGE =
+  "This host cannot keep accounts after you sign out. In Vercel, add DATABASE_URL with your Neon connection string, redeploy, then create the account again.";
+
+export async function assertPersistentAccounts() {
+  if (isEphemeralFilesystem() && !(await accountsUseDatabase())) {
+    throw new Error(HOST_NEEDS_DATABASE_MESSAGE);
+  }
 }
 
 let sql: NeonQueryFunction<false, false> | null = null;
@@ -67,6 +79,7 @@ export function getSql() {
 }
 
 export async function withDatabase() {
+  await connection();
   const client = getSql();
   if (!ready) {
     ready = ensureSchema(client).catch((err) => {

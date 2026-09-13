@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
-import { hasDatabase, withDatabase } from "./db";
+import { accountsUseDatabase, withDatabase } from "./db";
 import { getDataRoot } from "./runtime";
 import type { UserPriority, UserRole } from "./users";
 
@@ -110,7 +110,7 @@ async function writeJsonStore(settings: AppSettings) {
 }
 
 async function persistSettings(settings: AppSettings): Promise<AppSettings> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const payload = JSON.stringify(settings);
     await sql`
@@ -134,7 +134,7 @@ function needsPersist(raw: unknown): boolean {
 
 export async function getSettings(): Promise<AppSettings> {
   try {
-    if (hasDatabase()) {
+    if (await accountsUseDatabase()) {
       const sql = await withDatabase();
       const rows = (await sql`
         SELECT payload FROM settings WHERE id = ${SETTINGS_ID} LIMIT 1
@@ -183,7 +183,7 @@ export async function saveSettings(
       settingsVersion: CURRENT_SETTINGS_VERSION,
     });
 
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const current = await getSettings();
     const settings = merge(current);
     return persistSettings(settings);

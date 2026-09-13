@@ -5,7 +5,8 @@ import type { CandidateProfile } from "./types";
 import { emptyProfile, parseProfileDraft } from "./profile";
 import {
   asIsoDate,
-  hasDatabase,
+  accountsUseDatabase,
+  assertPersistentAccounts,
   isUniqueViolation,
   withDatabase,
 } from "./db";
@@ -213,10 +214,10 @@ export const PRIORITY_DISABLED_MESSAGE =
 
 export async function findUserByEmail(email: string): Promise<StoredUser | null> {
   const needle = email.trim().toLowerCase();
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const rows = (await sql`
-      SELECT * FROM users WHERE email = ${needle} LIMIT 1
+      SELECT * FROM users WHERE lower(email) = ${needle} LIMIT 1
     `) as UserRow[];
     return rows[0] ? rowToUser(rows[0]) : null;
   }
@@ -225,7 +226,7 @@ export async function findUserByEmail(email: string): Promise<StoredUser | null>
 }
 
 export async function findUserById(id: string): Promise<StoredUser | null> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const rows = (await sql`
       SELECT * FROM users WHERE id = ${id} LIMIT 1
@@ -243,7 +244,7 @@ export async function promoteAdminIdentity(
   if (!isAdminIdentity(user.name, user.email)) return user;
   if (user.role === "admin" && user.priority === "able") return user;
 
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     await sql`
       UPDATE users
@@ -265,7 +266,7 @@ export async function promoteAdminIdentity(
 }
 
 export async function hasAnyUser(): Promise<boolean> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const rows = await sql`SELECT id FROM users LIMIT 1`;
     return rows.length > 0;
@@ -275,7 +276,7 @@ export async function hasAnyUser(): Promise<boolean> {
 }
 
 export async function listPublicUsers(): Promise<PublicUser[]> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     await ensureNamedAdmin();
     const sql = await withDatabase();
     const rows = (await sql`
@@ -297,6 +298,7 @@ export async function createUser(input: {
   role?: UserRole;
   priority?: UserPriority;
 }): Promise<StoredUser> {
+  await assertPersistentAccounts();
   const email = input.email.trim().toLowerCase();
   const name = input.name.trim();
   const profile = {
@@ -308,7 +310,7 @@ export async function createUser(input: {
     },
   };
 
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const existing = await sql`SELECT id FROM users WHERE email = ${email} LIMIT 1`;
     if (existing.length) {
@@ -407,7 +409,7 @@ export async function updateUserAccount(
   const nextRole = input.role === "admin" ? "admin" : "user";
   const nextPriority = input.priority === "disable" ? "disable" : "able";
 
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const rows = (await sql`
       SELECT * FROM users WHERE id = ${userId} LIMIT 1
@@ -511,7 +513,7 @@ export async function updateUserAccount(
 }
 
 export async function deleteUser(userId: string): Promise<void> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const rows = (await sql`
       SELECT role FROM users WHERE id = ${userId} LIMIT 1
@@ -551,7 +553,7 @@ export async function updateUserPageStyle(
   pageStyle: PageStyle,
 ): Promise<void> {
   const next = parsePageStyle(pageStyle);
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const exists = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`;
     if (!exists.length) throw new Error("Account not found.");
@@ -573,7 +575,7 @@ export async function updateUserResumeFormat(
   format: ResumeFormat,
 ): Promise<ResumeFormat> {
   const next = parseResumeFormat(format);
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const exists = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`;
     if (!exists.length) throw new Error("Account not found.");
@@ -596,7 +598,7 @@ export async function saveUserProfile(
   profile: CandidateProfile,
 ): Promise<void> {
   const next = parseProfileDraft(profile) ?? emptyProfile();
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const exists = await sql`SELECT id FROM users WHERE id = ${userId} LIMIT 1`;
     if (!exists.length) throw new Error("Account not found.");

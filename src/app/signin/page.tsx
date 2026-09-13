@@ -1,4 +1,6 @@
 import SignInForm from "@/components/SignInForm";
+import { accountsUseDatabase, HOST_NEEDS_DATABASE_MESSAGE } from "@/lib/db";
+import { isEphemeralFilesystem } from "@/lib/runtime";
 
 function safeNextPath(value: string | string[] | undefined): string {
   const next = Array.isArray(value) ? value[0] : value;
@@ -18,6 +20,10 @@ export default async function SignInPage({
 }) {
   const params = await searchParams;
   const cleared = params.cleared === "1" || params.cleared?.[0] === "1";
+  const persistWarning =
+    isEphemeralFilesystem() && !(await accountsUseDatabase())
+      ? HOST_NEEDS_DATABASE_MESSAGE
+      : null;
   return (
     <div className="page">
       <div className="atmosphere" aria-hidden />
@@ -26,9 +32,11 @@ export default async function SignInPage({
           <p className="brand">Resume Tailor</p>
           <h1>Sign in</h1>
           <p className="hint">
-            {cleared
-              ? "Signed out. Use your email and password to continue."
-              : "Use your account to open Profile and Generate resume."}
+            {persistWarning
+              ? persistWarning
+              : cleared
+                ? "Signed out. Use your email and password to continue."
+                : "Use your account to open Profile and Generate resume."}
           </p>
           <SignInForm next={safeNextPath(params.next)} />
         </div>

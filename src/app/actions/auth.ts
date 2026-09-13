@@ -21,6 +21,10 @@ import {
   RESUME_FORMAT_COOKIE,
 } from "@/lib/resume-format";
 import { createUser, findUserByEmail, hasAnyUser } from "@/lib/users";
+import {
+  HOST_NEEDS_DATABASE_MESSAGE,
+  assertPersistentAccounts,
+} from "@/lib/db";
 
 export type AuthFormState = {
   message?: string;
@@ -105,6 +109,7 @@ export async function signup(
   }
 
   try {
+    await assertPersistentAccounts();
     const [settings, siteHasUser] = await Promise.all([
       getSettings(),
       hasAnyUser(),
@@ -143,19 +148,30 @@ export async function signin(
     return { errors: parsed.error.flatten().fieldErrors };
   }
 
-  const user = await findUserByEmail(parsed.data.email);
-  if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
-    return { message: "Email or password is incorrect." };
+  try {
+    await assertPersistentAccounts();
+    const user = await findUserByEmail(parsed.data.email);
+    if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
+      return { message: "Email or password is incorrect." };
+    }
+
+    await setSessionCookie(user);
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Could not sign in.";
+    if (message === HOST_NEEDS_DATABASE_MESSAGE) {
+      return { message };
+    }
+    console.error("signin failed", err);
+    return {
+      message:
+        "Could not reach the account database. Check DATABASE_URL and try again.",
+    };
   }
 
-  await setSessionCookie(user);
   redirect(safeNextPath(formData.get("next")));
 }
 
 export async function signout() {
-  const jar = await cookies();
-  jar.delete(SESSION_COOKIE);
-  jar.delete(PAGE_STYLE_COOKIE);
-  jar.delete(RESUME_FORMAT_COOKIE);
-  redirect("/signin");
+  redirect("/api/auth/clear");
 }
