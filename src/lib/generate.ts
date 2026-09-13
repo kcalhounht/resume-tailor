@@ -22,7 +22,7 @@ Hard rules:
    Years of experience in the Summary MUST match the candidate's work history periods (use yearsOfExperience from the user payload). Do not invent a larger or smaller number.
 3. Skills MUST be classified into compact groups (not one skill per line). Use 6-8 groups such as:
    Languages, Frameworks/Libraries, Cloud/DevOps, Data/AI, Databases, Tools/Practices, Methodologies, Platforms.
-   The skill set MUST contain MORE THAN 40 distinct skill items in total across all groups (not 40 groups; 41+ items required, aim for 45-60).
+   The skill set MUST contain MORE THAN 40 and UNDER 50 distinct skill items in total across all groups (not 40 groups; 41-49 items required, aim for 45).
    Each group has a short category name and 6-10 comma-ready item strings.
 4. Each experience MUST include:
    - overview: 1-2 sentences (about 25-45 words) describing what the company does and the candidate's core responsibility in that role, tailored toward the target JD.
@@ -50,7 +50,7 @@ JSON shape:
   },
   "coverLetter": string
 }
-summary must be more than 90 words and must use yearsOfExperience from the candidate profile. skills.items across all groups must contain more than 40 distinct items.`;
+summary must be more than 90 words and must use yearsOfExperience from the candidate profile. skills.items across all groups must contain 41-49 distinct items (more than 40 and under 50).`;
 
 export async function generateTailoredPackage(
   profile: CandidateProfile,
@@ -83,7 +83,7 @@ export async function generateTailoredPackage(
       {
         role: "user",
         content:
-          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Summary must be more than 90 words and must use the profile years of experience. Include more than 40 distinct skill items across all groups. No markdown, no commentary.",
+          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Summary must be more than 90 words and must use the profile years of experience. Include 41-49 distinct skill items across all groups (more than 40 and under 50). No markdown, no commentary.",
       },
     ]);
     try {
@@ -118,7 +118,7 @@ function buildGenerateUserPrompt(
   const lines = [
     "Return JSON only.",
     "Summary length MUST be more than 90 words.",
-    "The skill set MUST contain more than 40 distinct skill items across all groups.",
+    "The skill set MUST contain 41-49 distinct skill items across all groups (more than 40 and under 50).",
   ];
   if (yearsOfExperience) {
     lines.push(

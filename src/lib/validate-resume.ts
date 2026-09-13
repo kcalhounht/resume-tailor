@@ -159,6 +159,141 @@ function sanitizeSkills(skills: SkillGroup[]): SkillGroup[] {
     .filter((group) => group.category && group.items.length > 0);
 }
 
+const MIN_SKILL_ITEMS = 41;
+const MAX_SKILL_ITEMS = 49;
+const FILL_SKILL_ITEMS = 45;
+
+const FALLBACK_SKILL_ITEMS = [
+  "Agile",
+  "Scrum",
+  "Kanban",
+  "Git",
+  "GitHub",
+  "CI/CD",
+  "REST APIs",
+  "GraphQL",
+  "SQL",
+  "NoSQL",
+  "Unit Testing",
+  "Integration Testing",
+  "Code Review",
+  "Documentation",
+  "Debugging",
+  "Linux",
+  "Jira",
+  "Confluence",
+  "System Design",
+  "Monitoring",
+  "Troubleshooting",
+  "API Design",
+  "Data Modeling",
+  "Performance Tuning",
+  "Cloud Fundamentals",
+  "Python",
+  "JavaScript",
+  "TypeScript",
+  "Java",
+  "HTML",
+  "CSS",
+  "Docker",
+  "Kubernetes",
+  "AWS",
+  "Azure",
+  "PostgreSQL",
+  "Excel",
+  "Stakeholder Communication",
+  "Requirements Analysis",
+  "Sprint Planning",
+  "Incident Response",
+  "Root Cause Analysis",
+  "Test Automation",
+  "Object-Oriented Design",
+  "Data Visualization",
+  "ETL",
+  "Microservices",
+  "Security Basics",
+  "Accessibility",
+  "Cross-functional Collaboration",
+  "Mentoring",
+  "Technical Writing",
+  "Customer Support",
+  "Quality Assurance",
+  "Release Management",
+];
+
+function skillItemCount(groups: SkillGroup[]): number {
+  return groups.reduce((count, group) => count + group.items.length, 0);
+}
+
+function skillItemKey(item: string): string {
+  return item.trim().toLowerCase();
+}
+
+function fitSkillItemsToRange(
+  groups: SkillGroup[],
+  extracted: ExtractedJD,
+): { groups: SkillGroup[]; trimmed: boolean; filled: boolean } {
+  const seen = new Set<string>();
+  const next = groups
+    .map((group) => ({
+      category: group.category,
+      items: group.items.filter((item) => {
+        const key = skillItemKey(item);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  let trimmed = false;
+  let filled = false;
+
+  if (skillItemCount(next) > MAX_SKILL_ITEMS) {
+    trimmed = true;
+    for (let i = next.length - 1; i >= 0 && skillItemCount(next) > MAX_SKILL_ITEMS; i -= 1) {
+      while (next[i].items.length && skillItemCount(next) > MAX_SKILL_ITEMS) {
+        const removed = next[i].items.pop();
+        if (removed) seen.delete(skillItemKey(removed));
+      }
+    }
+  }
+
+  const kept = next.filter((group) => group.items.length > 0);
+
+  if (skillItemCount(kept) < MIN_SKILL_ITEMS) {
+    filled = true;
+    let bucket = kept.find((group) =>
+      /technical|tools|core|practices/i.test(group.category),
+    );
+    if (!bucket) {
+      bucket = { category: "Tools/Practices", items: [] };
+      kept.push(bucket);
+    }
+    const extras = [
+      ...extracted.hardTechnicalSkills,
+      ...extracted.softSkills,
+      ...FALLBACK_SKILL_ITEMS,
+    ]
+      .map((item) => sanitizePlainText(String(item)))
+      .filter(Boolean);
+
+    for (const item of extras) {
+      if (skillItemCount(kept) >= FILL_SKILL_ITEMS) break;
+      const key = skillItemKey(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      bucket.items.push(item);
+    }
+  }
+
+  return {
+    groups: kept.filter((group) => group.items.length > 0),
+    trimmed,
+    filled,
+  };
+}
+
 /**
  * Validate resume content and auto-fix formatting issues
  * (markdown bold markers, wrong company names, short bullets, etc.).
@@ -192,7 +327,21 @@ export function validateAndFixResume(
   );
   let summary = sanitizePlainText(resume.summary);
   let coverLetter = sanitizePlainText(tailored.coverLetter);
-  const skills = sanitizeSkills(resume.skills);
+  let skills = sanitizeSkills(resume.skills);
+  const fittedSkills = fitSkillItemsToRange(skills, extracted);
+  skills = fittedSkills.groups;
+  if (fittedSkills.trimmed) {
+    issues.push({
+      level: "fixed",
+      message: "Trimmed skills to under 50 items across all groups.",
+    });
+  }
+  if (fittedSkills.filled) {
+    issues.push({
+      level: "fixed",
+      message: "Filled skills to more than 40 items across all groups.",
+    });
+  }
   const keywords = resume.keywords
     .map((k) => sanitizePlainText(k))
     .filter(Boolean);
@@ -252,14 +401,16 @@ export function validateAndFixResume(
     });
   }
 
-  const skillItemCount = skills.reduce(
-    (count, group) => count + group.items.length,
-    0,
-  );
-  if (skillItemCount < 41) {
+  const totalSkillItems = skillItemCount(skills);
+  if (totalSkillItems < MIN_SKILL_ITEMS) {
     issues.push({
       level: "error",
-      message: "Skills must include more than 40 items across all groups.",
+      message: "Skills must include more than 40 and under 50 items across all groups.",
+    });
+  } else if (totalSkillItems > MAX_SKILL_ITEMS) {
+    issues.push({
+      level: "error",
+      message: "Skills must include more than 40 and under 50 items across all groups.",
     });
   }
 
