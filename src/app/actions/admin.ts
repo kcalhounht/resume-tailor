@@ -3,7 +3,7 @@
 import { z } from "zod";
 import { requireAdmin } from "@/lib/dal";
 import { hashPassword } from "@/lib/password";
-import { parseProfileDraft } from "@/lib/profile";
+import { parseProfileDraft, initializeProfileFromAccount } from "@/lib/profile";
 import { deleteJobOutput } from "@/lib/package";
 import {
   deleteTailorRecord,
@@ -13,6 +13,7 @@ import {
   createUser,
   deleteUser,
   profileFromUser,
+  findUserById,
   saveUserProfile,
   updateUserAccount,
   type PublicUser,
@@ -148,5 +149,27 @@ export async function saveAccountProfile(
   const parsed = parseProfileDraft(profile);
   if (!parsed) throw new Error("Invalid profile.");
   await saveUserProfile(userId, parsed);
+}
+
+export async function initializeAccountProfile(
+  userId: string,
+): Promise<PublicUser> {
+  await requireAdmin();
+  const user = await findUserById(userId);
+  if (!user) throw new Error("Account not found.");
+  const profile = initializeProfileFromAccount({
+    name: user.name,
+    email: user.email,
+  });
+  await saveUserProfile(userId, profile);
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    priority: user.priority,
+    createdAt: user.createdAt,
+    profile,
+  };
 }
 

@@ -6,6 +6,7 @@ import { MessageBox, type ConfirmRequest } from "@/components/MessageBox";
 import TailoringRecords from "@/components/TailoringRecords";
 import {
   createAccount,
+  initializeAccountProfile,
   removeAccount,
   saveAccountProfile,
   updateAccount,
@@ -15,6 +16,7 @@ import {
   isProfileReady,
   isValidProfileEmail,
   listProfileFieldIssues,
+  profileHasDetailsBeyondAccount,
   REQUIRED_PROFILE_MESSAGE,
 } from "@/lib/profile";
 import type { CandidateProfile } from "@/lib/types";
@@ -264,6 +266,7 @@ function ProfileTab({
   onBusy,
   onUsersChange,
   onNotice,
+  onConfirm,
 }: {
   selected: PublicUser;
   busy: boolean;
@@ -273,9 +276,21 @@ function ProfileTab({
     nextSelectedId?: string,
   ) => void;
   onNotice: (message: string) => void;
+  onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [profile, setProfile] = useState<CandidateProfile>(selected.profile);
   const [showProfileErrors, setShowProfileErrors] = useState(false);
+
+  function initializeProfile() {
+    void onBusy("Profile initialized.", async () => {
+      const updated = await initializeAccountProfile(selected.id);
+      setProfile(updated.profile);
+      setShowProfileErrors(false);
+      onUsersChange((current) =>
+        current.map((user) => (user.id === updated.id ? updated : user)),
+      );
+    });
+  }
 
   return (
     <>
@@ -284,8 +299,29 @@ function ProfileTab({
           <h2>Profile</h2>
           <p className="hint">
             Saved to this account. They will see it on the Profile tab.
+            Initialize fills name and email from the account and clears the
+            other fields.
           </p>
         </div>
+        <button
+          type="button"
+          className="text-btn"
+          disabled={busy}
+          onClick={() => {
+            if (profileHasDetailsBeyondAccount(profile, selected)) {
+              onConfirm({
+                message:
+                  "Initialize this profile? Name and email stay from the account. Other profile fields are cleared.",
+                confirmLabel: "Initialize",
+                work: initializeProfile,
+              });
+              return;
+            }
+            initializeProfile();
+          }}
+        >
+          Initialize
+        </button>
       </div>
 
       <CandidateForm
@@ -734,6 +770,7 @@ export default function AdminPanel({
                   onBusy={run}
                   onUsersChange={changeUsers}
                   onNotice={setMessageBox}
+                  onConfirm={setConfirm}
                 />
               )}
               {userTab === "tailoring" && (

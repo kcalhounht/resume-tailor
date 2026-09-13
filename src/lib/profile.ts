@@ -52,6 +52,22 @@ export function emptyProfile(): CandidateProfile {
   };
 }
 
+/** Blank profile with the account name and email already filled. */
+export function initializeProfileFromAccount(account: {
+  name: string;
+  email: string;
+}): CandidateProfile {
+  return {
+    personal: {
+      ...emptyPersonal(),
+      name: account.name.trim(),
+      email: account.email.trim(),
+    },
+    experiences: [emptyExperience()],
+    education: [emptyEducation()],
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
@@ -189,6 +205,31 @@ function hasEducationValues(edu: EducationInput): boolean {
       edu.discipline.trim() ||
       edu.degree.trim() ||
       edu.period.trim(),
+  );
+}
+
+export function profileHasDetailsBeyondAccount(
+  profile: CandidateProfile,
+  account: { name: string; email: string },
+): boolean {
+  const personal = profile.personal;
+  if (
+    personal.phone.trim() ||
+    personal.linkedin.trim() ||
+    personal.portfolio.trim() ||
+    personal.location.trim()
+  ) {
+    return true;
+  }
+  if (personal.name.trim() !== account.name.trim()) return true;
+  if (
+    personal.email.trim().toLowerCase() !== account.email.trim().toLowerCase()
+  ) {
+    return true;
+  }
+  return (
+    profile.experiences.some(hasExperienceValues) ||
+    profile.education.some(hasEducationValues)
   );
 }
 
