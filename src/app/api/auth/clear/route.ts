@@ -32,6 +32,7 @@ export async function GET(request: Request) {
   const url = new URL("/signin", request.url);
   url.searchParams.set("cleared", "1");
   const response = NextResponse.redirect(url);
+  response.headers.set("Cache-Control", "no-store, max-age=0");
   expire(response, SESSION_COOKIE, sessionCookieOptions());
   expire(response, PAGE_STYLE_COOKIE, pageStyleCookieOptions());
   expire(response, RESUME_FORMAT_COOKIE, resumeFormatCookieOptions());

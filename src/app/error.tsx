@@ -1,7 +1,5 @@
 "use client";
 
-import Link from "next/link";
-
 export default function Error({
   error,
 }: {
@@ -22,12 +20,12 @@ export default function Error({
             <p className="hint">Reference: {error.digest}</p>
           ) : null}
           <div className="error-actions">
-            <Link href="/api/auth/clear" className="primary">
+            <a href="/api/auth/clear" className="primary">
               Sign in
-            </Link>
-            <Link href="/api/auth/clear" className="text-btn">
+            </a>
+            <a href="/api/auth/clear" className="text-btn">
               Sign out
-            </Link>
+            </a>
           </div>
         </div>
       </main>

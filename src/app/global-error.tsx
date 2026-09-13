@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import "./globals.css";
 
 export default function GlobalError({
@@ -24,11 +23,11 @@ export default function GlobalError({
               {error.digest ? (
                 <p className="hint">Reference: {error.digest}</p>
               ) : null}
-              <Link href="/api/auth/clear" className="primary">
+              <a href="/api/auth/clear" className="primary">
                 Sign in
-              </Link>
+              </a>
               <p className="hint">
-                <Link href="/api/auth/clear">Sign out</Link>
+                <a href="/api/auth/clear">Sign out</a>
               </p>
             </div>
           </main>

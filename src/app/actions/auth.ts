@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect, unstable_rethrow } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import {
@@ -28,6 +28,7 @@ import {
 
 export type AuthFormState = {
   message?: string;
+  redirectTo?: string;
   errors?: {
     name?: string[];
     email?: string[];
@@ -134,7 +135,7 @@ export async function signup(
     };
   }
 
-  redirect("/");
+  return { redirectTo: "/" };
 }
 
 export async function signin(
@@ -171,9 +172,5 @@ export async function signin(
     };
   }
 
-  redirect(safeNextPath(formData.get("next")));
-}
-
-export async function signout() {
-  redirect("/api/auth/clear");
+  return { redirectTo: safeNextPath(formData.get("next")) };
 }
