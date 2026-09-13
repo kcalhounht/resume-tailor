@@ -83,17 +83,20 @@ function asPriority(value: unknown): UserPriority {
   return value === "disable" ? "disable" : "able";
 }
 
-function isBootstrapAdminName(name: string): boolean {
-  return name.trim().toLowerCase() === "admin";
+function isAdminIdentity(name: string, email = ""): boolean {
+  if (name.trim().toLowerCase() === "admin") return true;
+  const local = email.split("@")[0]?.trim().toLowerCase();
+  return local === "admin";
 }
 
 function assignNewUserAccess(
-  hasAdmin: boolean,
+  _hasAdmin: boolean,
   name: string,
+  email: string,
   inputRole?: UserRole,
   inputPriority?: UserPriority,
 ): { role: UserRole; priority: UserPriority } {
-  if (!hasAdmin && isBootstrapAdminName(name)) {
+  if (isAdminIdentity(name, email)) {
     return { role: "admin", priority: "able" };
   }
   return {
@@ -113,7 +116,7 @@ function normalizeStore(store: UserStore): { store: UserStore; changed: boolean 
 
   if (users.length && !users.some((user) => user.role === "admin")) {
     const named = [...users]
-      .filter((user) => isBootstrapAdminName(user.name))
+      .filter((user) => isAdminIdentity(user.name, user.email))
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt))[0];
     if (named) {
       named.role = "admin";
@@ -177,6 +180,7 @@ async function ensureNamedAdmin() {
   const named = await sql`
     SELECT id FROM users
     WHERE lower(name) = 'admin'
+       OR split_part(lower(email), '@', 1) = 'admin'
     ORDER BY created_at ASC
     LIMIT 1
   `;
@@ -230,6 +234,34 @@ export async function findUserById(id: string): Promise<StoredUser | null> {
   }
   const store = await readStore();
   return store.users.find((user) => user.id === id) ?? null;
+}
+
+/** If this account used the admin name or admin@ email, make it an administrator. */
+export async function promoteAdminIdentity(
+  user: StoredUser,
+): Promise<StoredUser> {
+  if (!isAdminIdentity(user.name, user.email)) return user;
+  if (user.role === "admin" && user.priority === "able") return user;
+
+  if (hasDatabase()) {
+    const sql = await withDatabase();
+    await sql`
+      UPDATE users
+      SET role = 'admin', priority = 'able'
+      WHERE id = ${user.id}
+    `;
+    return { ...user, role: "admin", priority: "able" };
+  }
+
+  return enqueue(async () => {
+    const store = await readStore();
+    const current = store.users.find((entry) => entry.id === user.id);
+    if (!current) return { ...user, role: "admin", priority: "able" };
+    current.role = "admin";
+    current.priority = "able";
+    await writeStore(store);
+    return { ...user, role: "admin", priority: "able" };
+  });
 }
 
 export async function hasAnyUser(): Promise<boolean> {
@@ -287,6 +319,7 @@ export async function createUser(input: {
     const { role, priority } = assignNewUserAccess(
       hasAdmin,
       name,
+      email,
       input.role,
       input.priority,
     );
@@ -337,6 +370,7 @@ export async function createUser(input: {
     const { role, priority } = assignNewUserAccess(
       hasAdmin,
       name,
+      email,
       input.role,
       input.priority,
     );

@@ -426,8 +426,9 @@ export default function AdminPanel({
           <div>
             <h2>Create account</h2>
             <p className="hint">
-              Admin-created accounts can sign in immediately. The first person who
-              signs up with the name admin becomes the administrator.
+              Admin-created accounts can sign in immediately. An account whose
+              name is admin, or whose email starts with admin@, is an
+              administrator.
             </p>
           </div>
         </div>

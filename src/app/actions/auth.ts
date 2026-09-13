@@ -29,6 +29,7 @@ import {
   hasAnyUser,
   isAdminUser,
   isUserAble,
+  promoteAdminIdentity,
   PRIORITY_DISABLED_MESSAGE,
   type StoredUser,
 } from "@/lib/users";
@@ -105,13 +106,10 @@ export async function requireCurrentUser(): Promise<{
 }> {
   const session = await getSession();
   if (!session) redirect("/signin");
-  try {
-    const user = await findUserById(session.userId);
-    if (user) return { session, user };
-  } catch {
-    redirect("/api/auth/clear");
-  }
-  redirect("/api/auth/clear");
+  const found = await findUserById(session.userId).catch(() => null);
+  if (!found) redirect("/api/auth/clear");
+  const user = await promoteAdminIdentity(found).catch(() => found);
+  return { session, user };
 }
 
 export async function requireAbleUser(): Promise<StoredUser> {
@@ -138,9 +136,8 @@ export async function requireAdmin(): Promise<{
   session: SessionPayload;
   user: StoredUser;
 }> {
-  const session = await requireSession();
-  const user = await findUserById(session.userId);
-  if (!user || !isAdminUser(user)) redirect("/");
+  const { session, user } = await requireCurrentUser();
+  if (!isAdminUser(user)) redirect("/");
   return { session, user };
 }
 
