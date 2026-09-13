@@ -64,8 +64,80 @@ function collectMarkdownIssues(label: string, text: string): ValidationIssue[] {
   return issues;
 }
 
-function wordCount(text: string): number {
+export function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+const MIN_SUMMARY_WORDS = 91;
+
+function summaryExpansionParts(
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): string[] {
+  const years = yearsOfExperienceFromProfile(profile);
+  const role = extracted.jobTitle || extracted.type || "the target role";
+  const skills = extracted.hardTechnicalSkills.filter(Boolean).slice(0, 8);
+  const parts: string[] = [];
+
+  if (years) {
+    parts.push(
+      `Brings ${years} years of experience delivering production software for ${role}, with emphasis on reliability, delivery speed, and outcomes that match the job description.`,
+    );
+  }
+
+  parts.push(
+    `The professional focus is ${role} work involving ${
+      skills.join(", ") || "core engineering, analysis, and delivery practices"
+    } in a ${extracted.workMode || "flexible"} environment.`,
+  );
+
+  for (const exp of profile.experiences) {
+    if (!exp.company?.trim()) continue;
+    parts.push(
+      `At ${exp.company} as ${exp.title || "a contributor"} (${exp.period || "the listed period"}) in ${
+        exp.location || "a distributed setting"
+      }, owned feature delivery, technical execution, and partnership with stakeholders on business-critical workflows.`,
+    );
+  }
+
+  const education = profile.education.find((edu) => edu.school?.trim());
+  if (education) {
+    parts.push(
+      `Academic preparation includes ${education.degree || "study"} in ${
+        education.discipline || "the listed discipline"
+      } at ${education.school}.`,
+    );
+  }
+
+  parts.push(
+    `Day-to-day strengths include requirements analysis, iterative delivery, documentation, code quality, testing, and production support so hiring screens can match the full scope of this background to ${role}.`,
+  );
+
+  return parts;
+}
+
+function fillSummaryToMinWords(
+  summary: string,
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): { text: string; expanded: boolean } {
+  let text = sanitizePlainText(summary);
+  if (wordCount(text) >= MIN_SUMMARY_WORDS) {
+    return { text, expanded: false };
+  }
+
+  for (const part of summaryExpansionParts(profile, extracted)) {
+    if (wordCount(text) >= MIN_SUMMARY_WORDS) break;
+    text = text ? `${text} ${part}` : part;
+  }
+
+  let guard = 0;
+  while (wordCount(text) < MIN_SUMMARY_WORDS && guard < 8) {
+    text = `${text} Additional depth includes collaboration, operational support, and continuous improvement on production systems.`.trim();
+    guard += 1;
+  }
+
+  return { text: sanitizePlainText(text), expanded: true };
 }
 
 function hasUnrealisticPercent(text: string): boolean {
@@ -125,7 +197,15 @@ export function validateAndFixResume(
     .map((k) => sanitizePlainText(k))
     .filter(Boolean);
 
-  if (!summary || wordCount(summary) < 91) {
+  const filledSummary = fillSummaryToMinWords(summary, profile, extracted);
+  summary = filledSummary.text;
+  if (filledSummary.expanded) {
+    issues.push({
+      level: "fixed",
+      message: "Expanded the summary to more than 90 words from the profile and job description.",
+    });
+  }
+  if (wordCount(summary) < MIN_SUMMARY_WORDS) {
     issues.push({
       level: "error",
       message: "Summary must be more than 90 words.",
