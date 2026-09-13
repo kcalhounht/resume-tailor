@@ -1,4 +1,3 @@
-import Link from "next/link";
 import SignOutButton from "@/components/SignOutButton";
 import { PageStyleSync } from "@/components/PageStyleSync";
 import {
@@ -18,10 +17,12 @@ function NavItem({
   if (current) {
     return <span className="text-btn current">{children}</span>;
   }
+  // Full document navigation so a stale client cache cannot reuse a
+  // signed-out redirect for Database / Settings.
   return (
-    <Link href={href} className="text-btn">
+    <a href={href} className="text-btn">
       {children}
-    </Link>
+    </a>
   );
 }
 

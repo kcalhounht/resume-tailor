@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { requireAbleUser } from "@/app/actions/auth";
+import { requireAbleUser } from "@/lib/dal";
 import {
   PAGE_STYLE_COOKIE,
   parsePageStyle,

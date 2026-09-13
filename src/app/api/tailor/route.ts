@@ -2,7 +2,7 @@ import { ZodError } from "zod";
 import { processOneJob } from "@/lib/process-job";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
-import { getSession } from "@/app/actions/auth";
+import { getSession } from "@/lib/dal";
 import { cookies } from "next/headers";
 import { findUserById, isUserAble, saveUserProfile, PRIORITY_DISABLED_MESSAGE } from "@/lib/users";
 import {

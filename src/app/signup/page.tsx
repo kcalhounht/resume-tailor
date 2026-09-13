@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { connection } from "next/server";
 import SignUpForm from "@/components/SignUpForm";
-import { getSession } from "@/app/actions/auth";
+import { getSession } from "@/lib/dal";
 import { DEFAULT_SETTINGS, getSettings } from "@/lib/settings";
 import { hasAnyUser } from "@/lib/users";
 

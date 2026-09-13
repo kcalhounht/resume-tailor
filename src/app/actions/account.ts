@@ -10,7 +10,7 @@ import {
   sessionCookieOptions,
 } from "@/lib/session";
 import { findUserById, isUserAble, PRIORITY_DISABLED_MESSAGE, updateUserAccount } from "@/lib/users";
-import { requireSession } from "@/app/actions/auth";
+import { requireSession } from "@/lib/dal";
 
 export type AccountFormState = {
   message?: string;

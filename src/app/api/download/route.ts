@@ -3,7 +3,7 @@ import { createReadStream, existsSync } from "fs";
 import path from "path";
 import { Readable } from "stream";
 import { getOutputRoot } from "@/lib/package";
-import { getSession } from "@/app/actions/auth";
+import { getSession } from "@/lib/dal";
 import { findUserById, isAdminUser } from "@/lib/users";
 import { findTailorRecordByOutput } from "@/lib/tailor-records";
 

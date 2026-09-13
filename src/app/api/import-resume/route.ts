@@ -1,4 +1,4 @@
-import { getSession } from "@/app/actions/auth";
+import { getSession } from "@/lib/dal";
 import { extractProfileFromResume } from "@/lib/extract-resume";
 import { MAX_RESUME_PDF_BYTES } from "@/lib/limits";
 import { extractPdfText } from "@/lib/pdf-text";

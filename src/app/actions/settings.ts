@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { requireAdmin } from "@/app/actions/auth";
+import { requireAdmin } from "@/lib/dal";
 import {
   getSettings,
   saveSettings,

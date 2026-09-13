@@ -1,6 +1,6 @@
 "use server";
 
-import { requireAbleUser } from "@/app/actions/auth";
+import { requireAbleUser } from "@/lib/dal";
 import { parseProfileDraft, profileBlockReason } from "@/lib/profile";
 import { saveUserProfile } from "@/lib/users";
 import type { CandidateProfile } from "@/lib/types";

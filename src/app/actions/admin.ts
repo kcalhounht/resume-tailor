@@ -1,20 +1,17 @@
 "use server";
 
 import { z } from "zod";
-import { requireAdmin } from "@/app/actions/auth";
+import { requireAdmin } from "@/lib/dal";
 import { hashPassword } from "@/lib/password";
 import { parseProfileDraft } from "@/lib/profile";
 import { deleteJobOutput } from "@/lib/package";
 import {
   deleteTailorRecord,
   deleteTailorRecordsForUser,
-  listTailorRecords,
-  type TailorRecord,
 } from "@/lib/tailor-records";
 import {
   createUser,
   deleteUser,
-  listPublicUsers,
   profileFromUser,
   saveUserProfile,
   updateUserAccount,
@@ -24,25 +21,7 @@ import {
 } from "@/lib/users";
 import type { CandidateProfile } from "@/lib/types";
 
-export type AdminTailorRecord = TailorRecord & {
-  userName: string;
-  userEmail: string;
-};
-
-async function toAdminRecords(
-  records: TailorRecord[],
-): Promise<AdminTailorRecord[]> {
-  const users = await listPublicUsers();
-  const byId = new Map(users.map((user) => [user.id, user]));
-  return records.map((record) => {
-    const user = byId.get(record.userId);
-    return {
-      ...record,
-      userName: user?.name || "Deleted user",
-      userEmail: user?.email || "",
-    };
-  });
-}
+export type { AdminTailorRecord } from "@/lib/admin-records";
 
 const accountSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters."),
@@ -136,11 +115,6 @@ export async function removeAccount(userId: string): Promise<void> {
     ),
   );
   await deleteUser(userId);
-}
-
-export async function listAdminTailorRecords(): Promise<AdminTailorRecord[]> {
-  await requireAdmin();
-  return toAdminRecords(await listTailorRecords());
 }
 
 export async function removeTailorRecord(recordId: string): Promise<void> {

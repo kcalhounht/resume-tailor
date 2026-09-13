@@ -7,9 +7,7 @@ import { hashPassword, verifyPassword } from "@/lib/password";
 import {
   SESSION_COOKIE,
   createSessionToken,
-  readSessionToken,
   sessionCookieOptions,
-  type SessionPayload,
 } from "@/lib/session";
 import { getSettings } from "@/lib/settings";
 import {
@@ -22,17 +20,7 @@ import {
   resumeFormatCookieOptions,
   RESUME_FORMAT_COOKIE,
 } from "@/lib/resume-format";
-import {
-  createUser,
-  findUserByEmail,
-  findUserById,
-  hasAnyUser,
-  isAdminUser,
-  isUserAble,
-  promoteAdminIdentity,
-  PRIORITY_DISABLED_MESSAGE,
-  type StoredUser,
-} from "@/lib/users";
+import { createUser, findUserByEmail, hasAnyUser } from "@/lib/users";
 
 export type AuthFormState = {
   message?: string;
@@ -90,36 +78,6 @@ async function setSessionCookie(user: {
   );
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const jar = await cookies();
-  return readSessionToken(jar.get(SESSION_COOKIE)?.value);
-}
-
-export async function requireSession(): Promise<SessionPayload> {
-  const { session } = await requireCurrentUser();
-  return session;
-}
-
-export async function requireCurrentUser(): Promise<{
-  session: SessionPayload;
-  user: StoredUser;
-}> {
-  const session = await getSession();
-  if (!session) redirect("/signin");
-  const found = await findUserById(session.userId).catch(() => null);
-  if (!found) redirect("/api/auth/clear");
-  const user = await promoteAdminIdentity(found).catch(() => found);
-  return { session, user };
-}
-
-export async function requireAbleUser(): Promise<StoredUser> {
-  const { user } = await requireCurrentUser();
-  if (!isUserAble(user)) {
-    throw new Error(PRIORITY_DISABLED_MESSAGE);
-  }
-  return user;
-}
-
 function safeNextPath(value: unknown): string {
   if (typeof value !== "string") return "/";
   const next = value.trim();
@@ -130,15 +88,6 @@ function safeNextPath(value: unknown): string {
   if (next.startsWith("/signin") || next.startsWith("/signup")) return "/";
   if (next.startsWith("/api/")) return "/";
   return next;
-}
-
-export async function requireAdmin(): Promise<{
-  session: SessionPayload;
-  user: StoredUser;
-}> {
-  const { session, user } = await requireCurrentUser();
-  if (!isAdminUser(user)) redirect("/");
-  return { session, user };
 }
 
 export async function signup(

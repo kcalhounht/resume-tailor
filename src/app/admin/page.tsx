@@ -1,7 +1,8 @@
+import { connection } from "next/server";
 import AdminPanel from "@/components/AdminPanel";
 import SiteHeader from "@/components/SiteHeader";
-import { listAdminTailorRecords } from "@/app/actions/admin";
-import { requireAdmin } from "@/app/actions/auth";
+import { listAdminTailorRecords } from "@/lib/admin-records";
+import { requireAdmin } from "@/lib/dal";
 import { getSettings } from "@/lib/settings";
 import { listPublicUsers } from "@/lib/users";
 import { parsePageStyle } from "@/lib/appearance";
@@ -14,6 +15,7 @@ export const metadata = {
 };
 
 export default async function AdminPage() {
+  await connection();
   const { session, user } = await requireAdmin();
   const [users, records, settings] = await Promise.all([
     listPublicUsers(),
