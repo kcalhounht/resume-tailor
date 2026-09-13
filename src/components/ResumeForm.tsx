@@ -1,12 +1,13 @@
 "use client";
 
-import { FormEvent, useMemo, useState, type ClipboardEvent } from "react";
+import { FormEvent, useMemo, useRef, useState, type ClipboardEvent } from "react";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
   type JobStep,
   type ProgressEvent,
 } from "@/lib/progress";
+import { GENERATION_STOPPED_MESSAGE, isAbortError } from "@/lib/abort";
 import { MIN_JOB_DESCRIPTION_CHARS } from "@/lib/limits";
 import {
   emptyProfile,
@@ -36,7 +37,7 @@ type StepStatus = "pending" | "active" | "done" | "error";
 type JobProgress = {
   index: number;
   jobDescription: string;
-  status: "queued" | "running" | "done" | "error";
+  status: "queued" | "running" | "done" | "error" | "stopped";
   currentStep: JobStep | null;
   stepStatuses: Record<JobStep, StepStatus>;
   stepMessage: string;
@@ -165,6 +166,18 @@ function markJobDone(
   };
 }
 
+function markJobStopped(job: JobProgress): JobProgress {
+  const stepStatuses = { ...job.stepStatuses };
+  if (job.currentStep) stepStatuses[job.currentStep] = "error";
+
+  return {
+    ...job,
+    status: "stopped",
+    stepMessage: GENERATION_STOPPED_MESSAGE,
+    error: undefined,
+  };
+}
+
 function markJobError(
   job: JobProgress,
   data: Extract<ProgressEvent, { type: "job_error" }>,
@@ -196,6 +209,14 @@ function DownloadIcon() {
   );
 }
 
+function StopIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <rect x="6" y="6" width="12" height="12" rx="1.5" />
+    </svg>
+  );
+}
+
 function RetryIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -218,7 +239,9 @@ function StatusBadge({ status }: { status: JobProgress["status"] }) {
         ? "Running"
         : status === "done"
           ? "Done"
-          : "Failed";
+          : status === "stopped"
+            ? "Stopped"
+            : "Failed";
   return <span className={`badge badge-${status}`}>{label}</span>;
 }
 
@@ -252,6 +275,7 @@ export default function ResumeForm({
   const [saving, setSaving] = useState(false);
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [status, setStatus] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
   const [appliedSessionName, setAppliedSessionName] = useState(session.name);
   const [resumeFormat, setResumeFormat] = useState(initialResumeFormat);
 
@@ -289,7 +313,8 @@ export default function ResumeForm({
     const done = jobs.filter((j) => j.status === "done").length;
     const failed = jobs.filter((j) => j.status === "error").length;
     const running = jobs.filter((j) => j.status === "running").length;
-    return { done, failed, running, total: jobs.length };
+    const stopped = jobs.filter((j) => j.status === "stopped").length;
+    return { done, failed, running, stopped, total: jobs.length };
   }, [jobs]);
 
   function isRetrying(index: number) {
@@ -359,11 +384,16 @@ export default function ResumeForm({
       setStatus(`Retrying job ${target.index}…`);
     }
 
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
+
     try {
       const response = await fetch("/api/tailor", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
+        signal: abort.signal,
         body: JSON.stringify({
           profile: normalizeProfile(profile),
           jobDescriptions: targets.map((t) => t.jobDescription),
@@ -422,9 +452,23 @@ export default function ResumeForm({
         }
       }
     } catch (err) {
+      if (isAbortError(err)) {
+        if (abortRef.current !== abort) return;
+        setJobs((prev) =>
+          prev.map((job) =>
+            job.status === "running" || job.status === "queued"
+              ? markJobStopped(job)
+              : job,
+          ),
+        );
+        setStatus(GENERATION_STOPPED_MESSAGE);
+        setError(null);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Unexpected error");
       setStatus(null);
     } finally {
+      if (abortRef.current === abort) abortRef.current = null;
       if (mode === "batch") {
         setLoading(false);
       } else {
@@ -480,6 +524,10 @@ export default function ResumeForm({
       [{ jobDescription: job.jobDescription, index: job.index }],
       "retry",
     );
+  }
+
+  function stopGeneration() {
+    abortRef.current?.abort();
   }
 
   const batchBusy = loading || retryingIndices.length > 0;
@@ -750,7 +798,9 @@ export default function ResumeForm({
             <p className="hint">
               {jobs.length === 0
                 ? "Results appear here after you generate."
-                : `${summary.done} done · ${summary.running} running · ${summary.failed} failed`}
+                : `${summary.done} done · ${summary.running} running · ${summary.failed} failed${
+                    summary.stopped ? ` · ${summary.stopped} stopped` : ""
+                  }`}
             </p>
           </div>
         </div>
@@ -777,7 +827,11 @@ export default function ResumeForm({
                       <div className="job-title-row">
                         <strong>
                           {job.company ||
-                            (job.status === "error" ? "Failed" : "Job posting")}
+                            (job.status === "error"
+                              ? "Failed"
+                              : job.status === "stopped"
+                                ? "Stopped"
+                                : "Job posting")}
                         </strong>
                         <StatusBadge status={job.status} />
                         {typeof job.atsScore === "number" && (
@@ -816,8 +870,18 @@ export default function ResumeForm({
                     ))}
                   </ol>
 
-                  {job.status === "running" && (
-                    <p className="job-live">{job.stepMessage}</p>
+                  {(job.status === "running" || job.status === "queued") && (
+                    <div className="retry-row">
+                      <p className="job-live">{job.stepMessage}</p>
+                      <button
+                        type="button"
+                        className="stop-btn"
+                        onClick={stopGeneration}
+                      >
+                        <StopIcon />
+                        Stop
+                      </button>
+                    </div>
                   )}
                   {job.error && <p className="job-error">{job.error}</p>}
 
@@ -878,7 +942,7 @@ export default function ResumeForm({
                     </div>
                   )}
 
-                  {job.status === "error" && (
+                  {(job.status === "error" || job.status === "stopped") && (
                     <div className="retry-row">
                       <button
                         type="button"

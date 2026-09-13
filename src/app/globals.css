@@ -1098,6 +1098,11 @@ button {
   background: var(--danger-soft);
 }
 
+.job-row.status-stopped {
+  border-color: var(--line-strong);
+  background: var(--surface-2);
+}
+
 .job-list-main {
   padding: 1rem 1.05rem 1.05rem;
   display: grid;
@@ -1173,6 +1178,11 @@ button {
 }
 
 .badge-queued {
+  border-color: var(--line-strong);
+  color: var(--muted);
+}
+
+.badge-stopped {
   border-color: var(--line-strong);
   color: var(--muted);
 }
@@ -1284,6 +1294,8 @@ button {
 
 .job-live {
   margin: 0;
+  flex: 1;
+  min-width: 0;
   color: var(--accent);
   font-size: 0.84rem;
 }
@@ -1372,6 +1384,26 @@ button {
 .retry-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
+}
+
+.stop-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.5rem 0.7rem;
+  background: transparent;
+  border: 1px solid rgba(240, 113, 120, 0.45);
+  color: var(--danger);
+  font-size: 0.8rem;
+  font-weight: 650;
+  white-space: nowrap;
+  transition: border-color 150ms ease, background 150ms ease, transform 150ms ease;
+}
+
+.stop-btn:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+  transform: translateY(-1px);
 }
 
 @keyframes pulse {
@@ -1681,7 +1713,8 @@ button {
   }
 
   .download-btn,
-  .retry-btn {
+  .retry-btn,
+  .stop-btn {
     flex: 1;
     justify-content: center;
   }

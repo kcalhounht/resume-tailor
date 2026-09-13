@@ -1,4 +1,5 @@
 import { scoreAtsMatch } from "./ats-score";
+import { throwIfAborted } from "./abort";
 import { extractJobDescription } from "./extract";
 import { generateTailoredPackage } from "./generate";
 import { saveJobPackage } from "./package";
@@ -15,6 +16,7 @@ export async function processOneJob(options: {
   personal: PersonalInfo;
   outputSuffix?: string;
   resumeFormat?: ResumeFormat | null;
+  signal?: AbortSignal;
   onStep: (step: JobStep, message: string) => void;
 }): Promise<{
   index: number;
@@ -34,7 +36,7 @@ export async function processOneJob(options: {
     coverLetterDocxBase64: string;
   };
 }> {
-  const { index, profile, personal, outputSuffix, resumeFormat, onStep } =
+  const { index, profile, personal, outputSuffix, resumeFormat, signal, onStep } =
     options;
   const rawText = options.jobDescription.trim().slice(0, 50000);
 
@@ -44,16 +46,26 @@ export async function processOneJob(options: {
     );
   }
 
+  throwIfAborted(signal);
   onStep("extracting", "Extracting structured JD…");
-  const extracted = await extractJobDescription(rawText);
+  const extracted = await extractJobDescription(rawText, signal);
 
+  throwIfAborted(signal);
   onStep("generating", "Generating resume & cover letter…");
-  let tailored = await generateTailoredPackage(profile, extracted, rawText);
+  let tailored = await generateTailoredPackage(
+    profile,
+    extracted,
+    rawText,
+    [],
+    signal,
+  );
 
+  throwIfAborted(signal);
   onStep("validating", "Validating resume format and content…");
   let validation = validateAndFixResume(tailored, profile, extracted);
 
   if (!validation.ok) {
+    throwIfAborted(signal);
     onStep("validating", "Fixing validation issues and regenerating…");
     const repairHints = validation.issues
       .filter((issue) => issue.level === "error")
@@ -63,7 +75,9 @@ export async function processOneJob(options: {
       extracted,
       rawText,
       repairHints,
+      signal,
     );
+    throwIfAborted(signal);
     validation = validateAndFixResume(tailored, profile, extracted);
   }
 
@@ -81,6 +95,7 @@ export async function processOneJob(options: {
 
   const fixedCount = validation.issues.filter((i) => i.level === "fixed").length;
   const ats = scoreAtsMatch(tailored.resume, extracted, rawText);
+  throwIfAborted(signal);
   onStep(
     "zipping",
     `Validated${fixedCount ? ` (${fixedCount} fixes)` : ""} · ATS ${ats.score}/100 · packaging…`,

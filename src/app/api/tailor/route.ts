@@ -15,6 +15,7 @@ import {
   newTailorRecordId,
   recordOutputSuffix,
 } from "@/lib/tailor-records";
+import { isAbortError } from "@/lib/abort";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -72,10 +73,16 @@ export async function POST(request: Request) {
   );
 
   const encoder = new TextEncoder();
+  const signal = request.signal;
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: ProgressEvent) => {
-        controller.enqueue(encoder.encode(encodeSse(event)));
+        if (signal.aborted) return;
+        try {
+          controller.enqueue(encoder.encode(encodeSse(event)));
+        } catch {
+          // Stream already closed after the client stopped.
+        }
       };
 
       try {
@@ -93,6 +100,7 @@ export async function POST(request: Request) {
                 personal: payload.profile.personal,
                 outputSuffix: recordOutputSuffix(recordId),
                 resumeFormat,
+                signal,
                 onStep: (step, message) => {
                   currentStep = step;
                   send({
@@ -141,6 +149,9 @@ export async function POST(request: Request) {
 
               return { ok: true as const };
             } catch (err) {
+              if (signal.aborted || isAbortError(err)) {
+                return { ok: false as const };
+              }
               const message =
                 err instanceof Error
                   ? err.message
@@ -170,12 +181,15 @@ export async function POST(request: Request) {
         );
 
         const succeeded = outcomes.filter((o) => o.ok).length;
-        send({
-          type: "done",
-          succeeded,
-          failed: outcomes.length - succeeded,
-        });
+        if (!signal.aborted) {
+          send({
+            type: "done",
+            succeeded,
+            failed: outcomes.length - succeeded,
+          });
+        }
       } catch (err) {
+        if (signal.aborted || isAbortError(err)) return;
         send({
           type: "fatal",
           error: err instanceof Error ? err.message : "Unexpected error",

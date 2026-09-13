@@ -35,14 +35,18 @@ function normalizeWorkMode(value: string): WorkMode {
   return "Onsite";
 }
 
-export async function extractJobDescription(rawJd: string): Promise<ExtractedJD> {
+export async function extractJobDescription(
+  rawJd: string,
+  signal?: AbortSignal,
+): Promise<ExtractedJD> {
   const client = await getLlmClient();
 
-  const completion = await client.chat.completions.create({
-    model: await getLlmModel(),
-    temperature: 0.2,
-    response_format: { type: "json_object" },
-    messages: [
+  const completion = await client.chat.completions.create(
+    {
+      model: await getLlmModel(),
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
       {
         role: "system",
         content: `You extract structured hiring information from job postings.
@@ -65,7 +69,9 @@ Escape quotes inside strings.`,
 ${rawJd.slice(0, 20000)}`,
       },
     ],
-  });
+    },
+    signal ? { signal } : undefined,
+  );
 
   const content = completion.choices[0]?.message?.content;
   if (!content) {

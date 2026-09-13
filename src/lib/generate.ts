@@ -57,6 +57,7 @@ export async function generateTailoredPackage(
   extracted: ExtractedJD,
   rawJd: string,
   repairHints: string[] = [],
+  signal?: AbortSignal,
 ): Promise<TailoredPackage> {
   const client = await getLlmClient();
   const model = await getLlmModel();
@@ -67,25 +68,35 @@ export async function generateTailoredPackage(
     repairHints,
   );
 
-  let content = await requestJson(client, model, [
-    { role: "system", content: SYSTEM_PROMPT },
-    { role: "user", content: userPayload },
-  ]);
+  let content = await requestJson(
+    client,
+    model,
+    [
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userPayload },
+    ],
+    signal,
+  );
 
   let parsed: TailoredPackage;
   try {
     parsed = parseModelJson<TailoredPackage>(content);
   } catch (firstError) {
-    content = await requestJson(client, model, [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userPayload },
-      { role: "assistant", content },
-      {
-        role: "user",
-        content:
-          "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Summary must be more than 90 words and must use the profile years of experience. Include 41-49 distinct skill items across all groups (more than 40 and under 50). No markdown, no commentary.",
-      },
-    ]);
+    content = await requestJson(
+      client,
+      model,
+      [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: userPayload },
+        { role: "assistant", content },
+        {
+          role: "user",
+          content:
+            "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Summary must be more than 90 words and must use the profile years of experience. Include 41-49 distinct skill items across all groups (more than 40 and under 50). No markdown, no commentary.",
+        },
+      ],
+      signal,
+    );
     try {
       parsed = parseModelJson<TailoredPackage>(content);
     } catch {
@@ -151,13 +162,17 @@ async function requestJson(
   client: OpenAI,
   model: string,
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
+  signal?: AbortSignal,
 ): Promise<string> {
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0.3,
-    response_format: { type: "json_object" },
-    messages,
-  });
+  const completion = await client.chat.completions.create(
+    {
+      model,
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      messages,
+    },
+    signal ? { signal } : undefined,
+  );
 
   const content = completion.choices[0]?.message?.content;
   if (!content?.trim()) {
