@@ -1,5 +1,5 @@
 import { cache } from "react";
-import { cookies } from "next/headers";
+import { cookies, headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { connection } from "next/server";
 import { SESSION_COOKIE, readSessionToken, type SessionPayload } from "@/lib/session";
@@ -18,15 +18,31 @@ export type CurrentUser = {
   user: StoredUser;
 };
 
-export const getSession = cache(async (): Promise<SessionPayload | null> => {
-  const jar = await cookies();
-  return readSessionToken(jar.get(SESSION_COOKIE)?.value);
-});
+function tokenFromCookieHeader(header: string) {
+  for (const part of header.split(";")) {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith(`${SESSION_COOKIE}=`)) continue;
+    try {
+      return decodeURIComponent(trimmed.slice(SESSION_COOKIE.length + 1));
+    } catch {
+      return trimmed.slice(SESSION_COOKIE.length + 1);
+    }
+  }
+  return undefined;
+}
 
-export const requireCurrentUser = cache(async (): Promise<CurrentUser> => {
+export async function getSession(): Promise<SessionPayload | null> {
   await connection();
+  const jar = await cookies();
+  const fromJar = jar.get(SESSION_COOKIE)?.value;
+  const token =
+    fromJar || tokenFromCookieHeader((await headers()).get("cookie") ?? "");
+  return readSessionToken(token);
+}
+
+export async function loadCurrentUser(): Promise<CurrentUser | null> {
   const session = await getSession();
-  if (!session) redirect("/signin");
+  if (!session) return null;
 
   let found: StoredUser | null;
   try {
@@ -35,13 +51,19 @@ export const requireCurrentUser = cache(async (): Promise<CurrentUser> => {
       found = await findUserByEmail(session.email);
     }
   } catch (error) {
-    console.error("requireCurrentUser: failed to load user", error);
+    console.error("loadCurrentUser: failed to load user", error);
     throw error;
   }
 
-  if (!found) redirect("/signin");
+  if (!found) return null;
   const user = await promoteAdminIdentity(found).catch(() => found);
   return { session, user };
+}
+
+export const requireCurrentUser = cache(async (): Promise<CurrentUser> => {
+  const current = await loadCurrentUser();
+  if (!current) redirect("/signin");
+  return current;
 });
 
 export async function requireSession(): Promise<SessionPayload> {

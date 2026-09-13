@@ -2,9 +2,9 @@ import { ZodError } from "zod";
 import { processOneJob } from "@/lib/process-job";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
-import { getSession } from "@/lib/dal";
+import { loadCurrentUser } from "@/lib/dal";
 import { cookies } from "next/headers";
-import { findUserById, isUserAble, saveUserProfile, PRIORITY_DISABLED_MESSAGE } from "@/lib/users";
+import { isUserAble, saveUserProfile, PRIORITY_DISABLED_MESSAGE } from "@/lib/users";
 import {
   parseResumeFormat,
   RESUME_FORMAT_COOKIE,
@@ -24,14 +24,14 @@ function encodeSse(event: ProgressEvent): string {
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
-  const user = session ? await findUserById(session.userId) : null;
-  if (!session || !user) {
+  const current = await loadCurrentUser();
+  if (!current) {
     return new Response(JSON.stringify({ ok: false, error: "Sign in required" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
   }
+  const { session, user } = current;
   if (!isUserAble(user)) {
     return new Response(
       JSON.stringify({ ok: false, error: PRIORITY_DISABLED_MESSAGE }),

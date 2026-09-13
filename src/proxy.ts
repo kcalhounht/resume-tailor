@@ -15,15 +15,19 @@ function hasSessionCookie(request: NextRequest) {
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  // API routes read the session themselves. Proxy must not redirect POSTs
+  // such as resume upload to the HTML sign-in page.
+  if (pathname.startsWith("/api/")) {
+    return NextResponse.next();
+  }
+
   const isPublic = PUBLIC_PATHS.some(
     (path) => pathname === path || pathname.startsWith(`${path}/`),
   );
 
   if (!hasSessionCookie(request) && !isPublic) {
     const signin = new URL("/signin", request.url);
-    if (!pathname.startsWith("/api/auth/clear")) {
-      signin.searchParams.set("next", pathname);
-    }
+    signin.searchParams.set("next", pathname);
     return NextResponse.redirect(signin);
   }
 

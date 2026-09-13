@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/dal";
+import { loadCurrentUser } from "@/lib/dal";
 import { extractProfileFromResume } from "@/lib/extract-resume";
 import { MAX_RESUME_PDF_BYTES } from "@/lib/limits";
 import { extractPdfText } from "@/lib/pdf-text";
@@ -8,7 +8,7 @@ import {
   type ImportProgressEvent,
   type ImportStep,
 } from "@/lib/progress";
-import { findUserById, isUserAble, PRIORITY_DISABLED_MESSAGE } from "@/lib/users";
+import { isUserAble, PRIORITY_DISABLED_MESSAGE } from "@/lib/users";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -22,12 +22,11 @@ function encodeSse(event: ImportProgressEvent): string {
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
-  const user = session ? await findUserById(session.userId) : null;
-  if (!session || !user) {
+  const current = await loadCurrentUser();
+  if (!current) {
     return errorResponse("Sign in required", 401);
   }
-  if (!isUserAble(user)) {
+  if (!isUserAble(current.user)) {
     return errorResponse(PRIORITY_DISABLED_MESSAGE, 403);
   }
 

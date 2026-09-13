@@ -362,6 +362,7 @@ export default function ResumeForm({
     try {
       const response = await fetch("/api/tailor", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           profile: normalizeProfile(profile),

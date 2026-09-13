@@ -120,6 +120,7 @@ export function ResumePdfImport({
     const response = await fetch("/api/import-resume", {
       method: "POST",
       body,
+      credentials: "include",
     });
 
     if (!response.ok || !response.body) {
