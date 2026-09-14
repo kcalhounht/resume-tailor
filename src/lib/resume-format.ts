@@ -157,10 +157,7 @@ function asBoldKeywords(value: unknown): boolean {
   if (value === false || value === "false" || value === 0 || value === "0") {
     return false;
   }
-  if (value === true || value === "true" || value === 1 || value === "1") {
-    return true;
-  }
-  return DEFAULT_RESUME_FORMAT.boldKeywords;
+  return true;
 }
 
 export const RESUME_FORMAT_COOKIE = "rt_resume_format";

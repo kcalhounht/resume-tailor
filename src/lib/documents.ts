@@ -240,16 +240,18 @@ function buildResumeHeader(
       return new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { after: last ? 160 : 40 },
-        border: last
+        ...(last
           ? {
-              bottom: {
-                style: BorderStyle.SINGLE,
-                size: 12,
-                color: look.accent,
-                space: 10,
+              border: {
+                bottom: {
+                  style: BorderStyle.SINGLE,
+                  size: 12,
+                  color: look.accent,
+                  space: 10,
+                },
               },
             }
-          : undefined,
+          : {}),
         children: contactLineChildren(line, look, sep),
       });
     }),
@@ -266,7 +268,7 @@ function runsFromText(
     (seg) =>
       new TextRun({
         text: seg.text,
-        bold: Boolean(look.boldKeywords && seg.bold),
+        bold: look.boldKeywords !== false && seg.bold,
         size,
         font: docxFont(look),
       }),
@@ -589,7 +591,11 @@ function drawSegmentedLine(
   segments.forEach((seg, i) => {
     doc
       .fillColor("#000000")
-      .font(look.boldKeywords && seg.bold ? look.pdfBold : look.pdfRegular)
+      .font(
+        look.boldKeywords !== false && seg.bold
+          ? look.pdfBold
+          : look.pdfRegular,
+      )
       .fontSize(fontSize)
       .text(seg.text, {
         continued: i < segments.length - 1,
@@ -638,7 +644,7 @@ function drawPdfContactLine(
   for (const line of lines) {
     const full = line.map((part) => part.label).join(sep);
     const fullWidth = measure(full);
-    if (fullWidth <= usableWidth) {
+    if (fullWidth <= maxWidth) {
       let x = left + Math.max(0, (usableWidth - fullWidth) / 2);
       for (let i = 0; i < line.length; i++) {
         if (i > 0) {

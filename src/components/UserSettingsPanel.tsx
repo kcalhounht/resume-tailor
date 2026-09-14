@@ -34,6 +34,7 @@ export function UserSettingsPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const look = resumeLook(resumeFormat);
+  const boldKeywords = resumeFormat.boldKeywords !== false;
   const fontOption =
     RESUME_FONT_OPTIONS.find((option) => option.id === resumeFormat.font) ??
     RESUME_FONT_OPTIONS[0];
@@ -180,15 +181,15 @@ export function UserSettingsPanel({
         <p className="format-preview-body">
           {fontOption.name} · {styleOption.name} · {accentOption.name}. Sample
           line with{" "}
-          <span style={{ fontWeight: resumeFormat.boldKeywords ? 700 : 400 }}>
+          <span style={{ fontWeight: boldKeywords ? 700 : 400 }}>
             AWS
           </span>
           ,{" "}
-          <span style={{ fontWeight: resumeFormat.boldKeywords ? 700 : 400 }}>
+          <span style={{ fontWeight: boldKeywords ? 700 : 400 }}>
             Kubernetes
           </span>
           , and{" "}
-          <span style={{ fontWeight: resumeFormat.boldKeywords ? 700 : 400 }}>
+          <span style={{ fontWeight: boldKeywords ? 700 : 400 }}>
             Terraform
           </span>
           .
@@ -278,7 +279,7 @@ export function UserSettingsPanel({
         <p className="format-label">Keyword emphasis</p>
         <div className="format-options keyword-options">
           {RESUME_KEYWORD_OPTIONS.map((option) => {
-            const active = resumeFormat.boldKeywords === option.id;
+            const active = boldKeywords === option.id;
             return (
               <button
                 key={String(option.id)}
