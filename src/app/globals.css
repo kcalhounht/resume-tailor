@@ -885,13 +885,20 @@ select:focus {
 .jd-item .jd-item-head,
 .profile-card .jd-item-head {
   min-height: 1.75rem;
-  padding-right: 5.5rem;
+  padding-right: 8.5rem;
 }
 
-.jd-item .section-remove {
+.jd-item-actions {
   position: absolute;
   top: 0;
   right: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.jd-item .section-remove {
+  position: static;
   margin-left: 0;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState, type ClipboardEvent } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
@@ -333,27 +333,22 @@ export default function ResumeForm({
     );
   }
 
-  function onPasteJob(
-    slot: number,
-    event: ClipboardEvent<HTMLTextAreaElement>,
-  ) {
-    const pasted = event.clipboardData.getData("text");
-    if (!pasted) return;
-    event.preventDefault();
-    const el = event.currentTarget;
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    setJobText(slot, el.value.slice(0, start) + pasted + el.value.slice(end));
-  }
-
   function addJob() {
     setJobTexts((prev) => [...prev, { id: crypto.randomUUID(), text: "" }]);
+  }
+
+  function clearJob(slot: number) {
+    setJobTexts((prev) =>
+      prev.map((job, i) =>
+        i === slot ? { id: crypto.randomUUID(), text: "" } : job,
+      ),
+    );
   }
 
   function removeJob(slot: number) {
     setJobTexts((prev) =>
       prev.length === 1
-        ? [{ id: prev[0].id, text: "" }]
+        ? [{ id: crypto.randomUUID(), text: "" }]
         : prev.filter((_, i) => i !== slot),
     );
   }
@@ -741,22 +736,34 @@ export default function ResumeForm({
                   {job.text.trim().length.toLocaleString()}/
                   {MIN_JOB_DESCRIPTION_CHARS} chars
                 </span>
-                {jobTexts.length > 1 && (
-                  <button
-                    type="button"
-                    className="text-btn section-remove"
-                    onClick={() => removeJob(slot)}
-                  >
-                    Remove
-                  </button>
-                )}
+                {job.text.trim() || jobTexts.length > 1 ? (
+                  <div className="jd-item-actions">
+                    {job.text ? (
+                      <button
+                        type="button"
+                        className="text-btn section-remove"
+                        onClick={() => clearJob(slot)}
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                    {jobTexts.length > 1 && (
+                      <button
+                        type="button"
+                        className="text-btn section-remove"
+                        onClick={() => removeJob(slot)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ) : null}
               </div>
               <textarea
                 id={`jd-${job.id}`}
                 rows={8}
-                value={job.text}
+                defaultValue={job.text}
                 onChange={(e) => setJobText(slot, e.target.value)}
-                onPaste={(e) => onPasteJob(slot, e)}
                 placeholder="Paste the full job description here…"
                 spellCheck={false}
               />
