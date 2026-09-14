@@ -16,6 +16,7 @@ import {
   recordOutputSuffix,
 } from "@/lib/tailor-records";
 import { isAbortError } from "@/lib/abort";
+import { toOpenRouterError } from "@/lib/openrouter-errors";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -152,10 +153,10 @@ export async function POST(request: Request) {
               if (signal.aborted || isAbortError(err)) {
                 return { ok: false as const };
               }
-              const message =
-                err instanceof Error
-                  ? err.message
-                  : "Unknown error for this job.";
+              const message = toOpenRouterError(
+                err,
+                "Unknown error for this job.",
+              ).message;
               try {
                 await addTailorRecord({
                   id: newTailorRecordId(),
@@ -192,7 +193,7 @@ export async function POST(request: Request) {
         if (signal.aborted || isAbortError(err)) return;
         send({
           type: "fatal",
-          error: err instanceof Error ? err.message : "Unexpected error",
+          error: toOpenRouterError(err, "Unexpected error").message,
         });
       } finally {
         controller.close();

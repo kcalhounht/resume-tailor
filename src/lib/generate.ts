@@ -7,6 +7,7 @@ import type {
 } from "./types";
 import type OpenAI from "openai";
 import { getLlmClient, getLlmModel } from "./llm";
+import { toOpenRouterError } from "./openrouter-errors";
 import { parseModelJson } from "./parse-json";
 import { buildResumeHeadline } from "./headline";
 import { yearsOfExperienceFromProfile } from "./experience-years";
@@ -59,7 +60,12 @@ export async function generateTailoredPackage(
   repairHints: string[] = [],
   signal?: AbortSignal,
 ): Promise<TailoredPackage> {
-  const client = await getLlmClient();
+  let client;
+  try {
+    client = await getLlmClient();
+  } catch (err) {
+    throw toOpenRouterError(err);
+  }
   const model = await getLlmModel();
   const userPayload = buildGenerateUserPrompt(
     profile,
@@ -164,15 +170,20 @@ async function requestJson(
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
   signal?: AbortSignal,
 ): Promise<string> {
-  const completion = await client.chat.completions.create(
-    {
-      model,
-      temperature: 0.3,
-      response_format: { type: "json_object" },
-      messages,
-    },
-    signal ? { signal } : undefined,
-  );
+  let completion;
+  try {
+    completion = await client.chat.completions.create(
+      {
+        model,
+        temperature: 0.3,
+        response_format: { type: "json_object" },
+        messages,
+      },
+      signal ? { signal } : undefined,
+    );
+  } catch (err) {
+    throw toOpenRouterError(err);
+  }
 
   const content = completion.choices[0]?.message?.content;
   if (!content?.trim()) {

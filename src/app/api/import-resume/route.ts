@@ -1,6 +1,7 @@
 import { loadCurrentUser } from "@/lib/dal";
 import { extractProfileFromResume } from "@/lib/extract-resume";
 import { MAX_RESUME_PDF_BYTES } from "@/lib/limits";
+import { toOpenRouterError } from "@/lib/openrouter-errors";
 import { extractPdfText } from "@/lib/pdf-text";
 import {
   IMPORT_STEP_LABELS,
@@ -73,18 +74,20 @@ export async function POST(request: Request) {
         const bytes = new Uint8Array(await file.arrayBuffer());
         const { text, links } = await extractPdfText(bytes);
         sendStep("extract", "Extracting profile…");
-        const { profile, source } = await extractProfileFromResume(
+        const { profile, source, warning } = await extractProfileFromResume(
           text,
           links,
           (message) => sendStep("extract", message),
         );
         sendStep("fill", "Filling fields…");
-        send({ type: "done", percent: 100, profile, source });
+        send({ type: "done", percent: 100, profile, source, warning });
       } catch (err) {
         send({
           type: "error",
-          error:
-            err instanceof Error ? err.message : "Could not read that resume.",
+          error: toOpenRouterError(
+            err,
+            "Could not read that resume.",
+          ).message,
         });
       } finally {
         controller.close();

@@ -76,7 +76,11 @@ export function ResumePdfImport({
 }: {
   disabled?: boolean;
   buttonLabel?: string;
-  onImported: (profile: CandidateProfile, source: "llm" | "text") => void;
+  onImported: (
+    profile: CandidateProfile,
+    source: "llm" | "text",
+    warning?: string,
+  ) => void;
   onError: (message: string) => void;
 }) {
   const fileRef = useRef<HTMLInputElement>(null);
@@ -139,6 +143,7 @@ export function ResumePdfImport({
         error?: string;
         profile?: CandidateProfile;
         source?: "llm" | "text";
+        warning?: string;
       };
       if (!payload.ok) {
         throw new Error(payload.error || "Could not read that resume.");
@@ -147,7 +152,7 @@ export function ResumePdfImport({
       if (!profile) {
         throw new Error("Could not read a profile from that resume.");
       }
-      onImported(profile, payload.source === "llm" ? "llm" : "text");
+      onImported(profile, payload.source === "llm" ? "llm" : "text", payload.warning);
       await waitForCircleFill();
       return;
     }
@@ -175,7 +180,7 @@ export function ResumePdfImport({
           if (!profile) {
             throw new Error("Could not read a profile from that resume.");
           }
-          onImported(profile, event.source);
+          onImported(profile, event.source, event.warning);
           imported = true;
         } else if (event.type === "error") {
           throw new Error(event.error || "Could not read that resume.");

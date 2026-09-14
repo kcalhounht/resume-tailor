@@ -94,6 +94,7 @@ export type ImportProgressEvent =
       percent: 100;
       profile: unknown;
       source: "llm" | "text";
+      warning?: string;
     }
   | {
       type: "error";
