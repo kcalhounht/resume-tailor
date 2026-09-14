@@ -329,14 +329,16 @@ function ProfileTab({
           <ResumePdfImport
             disabled={busy}
             buttonLabel="Upload resume"
-            onImported={(imported, source) => {
+            onImported={(imported, source, warning) => {
               const next = mergeImportedProfile(profile, imported);
               setProfile(next);
               setShowProfileErrors(false);
               void onBusy(
                 source === "llm"
                   ? "Filled with OpenRouter and saved to this account."
-                  : "Filled from the PDF text and saved to this account.",
+                  : warning
+                    ? `${warning} Saved to this account.`
+                    : "Filled from the PDF text and saved to this account.",
                 async () => {
                   await saveAccountProfile(selected.id, next);
                   onUsersChange((current) =>

@@ -1,5 +1,6 @@
 import type { ExtractedJD, JobType, WorkMode } from "./types";
 import { getLlmClient, getLlmModel } from "./llm";
+import { toOpenRouterError } from "./openrouter-errors";
 import { parseModelJson } from "./parse-json";
 
 const JOB_TYPES: JobType[] = [
@@ -39,17 +40,18 @@ export async function extractJobDescription(
   rawJd: string,
   signal?: AbortSignal,
 ): Promise<ExtractedJD> {
-  const client = await getLlmClient();
-
-  const completion = await client.chat.completions.create(
-    {
-      model: await getLlmModel(),
-      temperature: 0.2,
-      response_format: { type: "json_object" },
-      messages: [
+  let completion;
+  try {
+    const client = await getLlmClient();
+    completion = await client.chat.completions.create(
       {
-        role: "system",
-        content: `You extract structured hiring information from job postings.
+        model: await getLlmModel(),
+        temperature: 0.2,
+        response_format: { type: "json_object" },
+        messages: [
+        {
+          role: "system",
+          content: `You extract structured hiring information from job postings.
 Return ONLY valid JSON (no markdown) with keys:
 - company (string)
 - jobTitle (string)
@@ -62,16 +64,19 @@ Return ONLY valid JSON (no markdown) with keys:
 
 Infer company and title from the posting text when they are not explicit. Prefer specific skill names.
 Escape quotes inside strings.`,
-      },
-      {
-        role: "user",
-        content: `Job posting text:
+        },
+        {
+          role: "user",
+          content: `Job posting text:
 ${rawJd.slice(0, 20000)}`,
+        },
+      ],
       },
-    ],
-    },
-    signal ? { signal } : undefined,
-  );
+      signal ? { signal } : undefined,
+    );
+  } catch (err) {
+    throw toOpenRouterError(err);
+  }
 
   const content = completion.choices[0]?.message?.content;
   if (!content) {

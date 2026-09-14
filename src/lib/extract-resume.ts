@@ -1,5 +1,12 @@
 import type { CandidateProfile, EducationInput, ExperienceInput } from "./types";
 import { getLlmApiKey, getLlmClient, getLlmModel } from "./llm";
+import {
+  OPENROUTER_KEY_MISSING_MESSAGE,
+  isOpenRouterConfigError,
+  openRouterUserMessage,
+  toOpenRouterError,
+  withFilledFromTextNotice,
+} from "./openrouter-errors";
 import { parseModelJson } from "./parse-json";
 import { emptyProfile, parseProfileDraft } from "./profile";
 
@@ -420,14 +427,19 @@ async function completeJson(
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>,
   useJsonObject: boolean,
 ) {
-  const client = await getLlmClient();
-  const completion = await client.chat.completions.create({
-    model,
-    temperature: 0,
-    max_tokens: 4000,
-    ...(useJsonObject ? { response_format: { type: "json_object" as const } } : {}),
-    messages,
-  });
+  let completion;
+  try {
+    const client = await getLlmClient();
+    completion = await client.chat.completions.create({
+      model,
+      temperature: 0,
+      max_tokens: 4000,
+      ...(useJsonObject ? { response_format: { type: "json_object" as const } } : {}),
+      messages,
+    });
+  } catch (err) {
+    throw toOpenRouterError(err);
+  }
   const content = completion.choices[0]?.message?.content;
   if (!content?.trim()) {
     throw new Error("Empty response while reading the resume.");
@@ -448,7 +460,8 @@ async function extractProfileWithLlm(
   let content: string;
   try {
     content = await completeJson(model, messages, true);
-  } catch {
+  } catch (err) {
+    if (isOpenRouterConfigError(err)) throw toOpenRouterError(err);
     content = await completeJson(model, messages, false);
   }
 
@@ -489,14 +502,26 @@ export async function extractProfileFromResume(
   text: string,
   links: string[] = [],
   onProgress?: (message: string) => void,
-): Promise<{ profile: CandidateProfile; source: "llm" | "text" }> {
+): Promise<{
+  profile: CandidateProfile;
+  source: "llm" | "text";
+  warning?: string;
+}> {
   const fallback = extractProfileFromResumeText(text);
+  const textProfile = applyRemoteLocations(
+    mergeResumeHints(fallback, fallback, text, links),
+  );
+
   if (!(await getLlmApiKey())) {
     onProgress?.("Parsing resume text…");
-    return {
-      profile: applyRemoteLocations(mergeResumeHints(fallback, fallback, text, links)),
-      source: "text",
-    };
+    if (usefulProfile(textProfile)) {
+      return {
+        profile: textProfile,
+        source: "text",
+        warning: withFilledFromTextNotice(OPENROUTER_KEY_MISSING_MESSAGE),
+      };
+    }
+    throw new Error(OPENROUTER_KEY_MISSING_MESSAGE);
   }
 
   try {
@@ -510,16 +535,22 @@ export async function extractProfileFromResume(
     }
     throw new Error("OpenRouter did not find profile fields in that resume.");
   } catch (err) {
-    const message =
-      err instanceof Error ? err.message : "Could not read that resume.";
-    if (usefulProfile(fallback)) {
+    const mapped = openRouterUserMessage(err);
+    if (mapped && usefulProfile(textProfile)) {
       return {
-        profile: applyRemoteLocations(
-          mergeResumeHints(fallback, fallback, text, links),
-        ),
+        profile: textProfile,
         source: "text",
+        warning: withFilledFromTextNotice(mapped),
       };
     }
+    if (mapped) {
+      throw new Error(mapped);
+    }
+    if (usefulProfile(textProfile)) {
+      return { profile: textProfile, source: "text" };
+    }
+    const message =
+      err instanceof Error ? err.message : "Could not read that resume.";
     throw new Error(
       /openrouter|api key|json|empty response|profile/i.test(message)
         ? message

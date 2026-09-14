@@ -32,6 +32,7 @@ import {
   DEFAULT_RESUME_FORMAT,
   type ResumeFormat,
 } from "@/lib/resume-format";
+import { isOpenRouterUserMessage } from "@/lib/openrouter-errors";
 
 type StepStatus = "pending" | "active" | "done" | "error";
 
@@ -384,6 +385,12 @@ export default function ResumeForm({
     abortRef.current?.abort();
     const abort = new AbortController();
     abortRef.current = abort;
+    let openRouterNotice: string | null = null;
+    const noteOpenRouter = (message: string) => {
+      if (openRouterNotice || !isOpenRouterUserMessage(message)) return;
+      openRouterNotice = message;
+      setMessageBox(message);
+    };
 
     try {
       const response = await fetch("/api/tailor", {
@@ -432,6 +439,7 @@ export default function ResumeForm({
             patchJob(event.index, (job) => markJobDone(job, event));
           } else if (event.type === "job_error") {
             patchJob(event.index, (job) => markJobError(job, event));
+            noteOpenRouter(event.error);
           } else if (event.type === "done") {
             setStatus(
               mode === "retry"
@@ -444,6 +452,7 @@ export default function ResumeForm({
             );
           } else if (event.type === "fatal") {
             setError(event.error);
+            noteOpenRouter(event.error);
             setStatus(null);
           }
         }
@@ -463,6 +472,7 @@ export default function ResumeForm({
         return;
       }
       setError(err instanceof Error ? err.message : "Unexpected error");
+      noteOpenRouter(err instanceof Error ? err.message : "Unexpected error");
       setStatus(null);
     } finally {
       if (abortRef.current === abort) abortRef.current = null;
@@ -530,7 +540,8 @@ export default function ResumeForm({
   const batchBusy = loading || retryingIndices.length > 0;
   const dialogMessage =
     messageBox ||
-    (error === REQUIRED_PROFILE_MESSAGE ? REQUIRED_PROFILE_MESSAGE : null);
+    (error === REQUIRED_PROFILE_MESSAGE ? REQUIRED_PROFILE_MESSAGE : null) ||
+    (error && isOpenRouterUserMessage(error) ? error : null);
 
   return (
     <div className="workspace">
@@ -610,15 +621,16 @@ export default function ResumeForm({
             </div>
             <ResumePdfImport
               disabled={saving || batchBusy || !canOperate}
-              onImported={(imported, source) => {
+              onImported={(imported, source, warning) => {
                 setError(null);
                 setProfile((current) =>
                   mergeImportedProfile(current, imported),
                 );
                 setMessageBox(
-                  source === "llm"
-                    ? "Filled with OpenRouter. Review the fields, then Save."
-                    : "Filled from the PDF text. Add an OpenRouter key in Admin Settings for better results.",
+                  warning ||
+                    (source === "llm"
+                      ? "Filled with OpenRouter. Review the fields, then Save."
+                      : "Filled from the PDF text. Add an OpenRouter key in Admin Settings for better results."),
                 );
               }}
               onError={(message) => {

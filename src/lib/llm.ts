@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 
+import { OPENROUTER_KEY_MISSING_MESSAGE } from "./openrouter-errors";
 import { getSettings } from "./settings";
 
 const DEFAULT_MODEL = "deepseek/deepseek-v4-flash";
@@ -21,9 +22,7 @@ export async function getLlmApiKey() {
 export async function getLlmClient() {
   const apiKey = await getLlmApiKey();
   if (!apiKey) {
-    throw new Error(
-      "OpenRouter API key is not set. Add it on Admin → Settings, or set OPENROUTER_API_KEY.",
-    );
+    throw new Error(OPENROUTER_KEY_MISSING_MESSAGE);
   }
 
   return new OpenAI({
