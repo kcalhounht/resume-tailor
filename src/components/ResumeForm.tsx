@@ -27,6 +27,7 @@ import type { CandidateProfile } from "@/lib/types";
 import type { SessionPayload } from "@/lib/session";
 import { saveProfile } from "@/app/actions/profile";
 import { DEFAULT_PAGE_STYLE, type PageStyle } from "@/lib/appearance";
+import { applyPageStyle } from "@/lib/appearance-client";
 import {
   DEFAULT_RESUME_FORMAT,
   type ResumeFormat,
@@ -278,6 +279,7 @@ export default function ResumeForm({
   const abortRef = useRef<AbortController | null>(null);
   const [appliedSessionName, setAppliedSessionName] = useState(session.name);
   const [resumeFormat, setResumeFormat] = useState(initialResumeFormat);
+  const [pageStyle, setPageStyle] = useState(initialPageStyle);
 
   if (session.name !== appliedSessionName) {
     setAppliedSessionName(session.name);
@@ -690,9 +692,13 @@ export default function ResumeForm({
       )}
       {tab === "settings" && (
         <UserSettingsPanel
-          initialStyle={initialPageStyle}
-          initialResumeFormat={resumeFormat}
+          pageStyle={pageStyle}
+          resumeFormat={resumeFormat}
           canOperate={canOperate}
+          onPageStyleChange={(next) => {
+            setPageStyle(next);
+            applyPageStyle(next);
+          }}
           onResumeFormatChange={setResumeFormat}
         />
       )}

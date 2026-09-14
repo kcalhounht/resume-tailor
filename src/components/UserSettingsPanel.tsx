@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { saveOwnPageStyle } from "@/app/actions/appearance";
 import { saveOwnResumeFormat } from "@/app/actions/resume-format";
+import { applyPageStyle, persistResumeFormatCookie } from "@/lib/appearance-client";
 import { PAGE_STYLES, type PageStyle } from "@/lib/appearance";
 import {
   parseResumeFormat,
+  resumeLook,
   RESUME_ACCENT_OPTIONS,
   RESUME_FONT_OPTIONS,
   RESUME_STYLE_OPTIONS,
@@ -16,38 +18,65 @@ import {
 } from "@/lib/resume-format";
 
 export function UserSettingsPanel({
-  initialStyle,
-  initialResumeFormat,
+  pageStyle,
+  resumeFormat,
   canOperate = true,
+  onPageStyleChange,
   onResumeFormatChange,
 }: {
-  initialStyle: PageStyle;
-  initialResumeFormat: ResumeFormat;
+  pageStyle: PageStyle;
+  resumeFormat: ResumeFormat;
   canOperate?: boolean;
+  onPageStyleChange?: (style: PageStyle) => void;
   onResumeFormatChange?: (format: ResumeFormat) => void;
 }) {
-  const [selected, setSelected] = useState<PageStyle>(initialStyle);
-  const [saved, setSaved] = useState<PageStyle>(initialStyle);
-  const [resumeFormat, setResumeFormat] = useState<ResumeFormat>(
-    initialResumeFormat,
-  );
-  const [savedResumeFormat, setSavedResumeFormat] =
-    useState<ResumeFormat>(initialResumeFormat);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const look = resumeLook(resumeFormat);
+  const fontOption =
+    RESUME_FONT_OPTIONS.find((option) => option.id === resumeFormat.font) ??
+    RESUME_FONT_OPTIONS[0];
+  const styleOption =
+    RESUME_STYLE_OPTIONS.find((option) => option.id === resumeFormat.style) ??
+    RESUME_STYLE_OPTIONS[0];
+  const accentOption =
+    RESUME_ACCENT_OPTIONS.find((option) => option.id === resumeFormat.accent) ??
+    RESUME_ACCENT_OPTIONS[0];
+
+  function savePageStyle(next: PageStyle) {
+    if (!canOperate || busy) return;
+    const previous = pageStyle;
+    onPageStyleChange?.(next);
+    applyPageStyle(next);
+    setError(null);
+    setBusy(true);
+    void saveOwnPageStyle(next)
+      .then((saved) => {
+        onPageStyleChange?.(saved.pageStyle);
+        applyPageStyle(saved.pageStyle);
+      })
+      .catch((err: unknown) => {
+        setError(
+          err instanceof Error ? err.message : "Could not save that style.",
+        );
+        onPageStyleChange?.(previous);
+        applyPageStyle(previous);
+      })
+      .finally(() => setBusy(false));
+  }
 
   function saveResumePatch(patch: Partial<ResumeFormat>) {
-    if (!canOperate) return;
+    if (!canOperate || busy) return;
+    const previous = resumeFormat;
     const next = parseResumeFormat({ ...resumeFormat, ...patch });
-    setResumeFormat(next);
     onResumeFormatChange?.(next);
+    persistResumeFormatCookie(next);
     setError(null);
     setBusy(true);
     void saveOwnResumeFormat(next)
       .then((savedFormat) => {
-        setResumeFormat(savedFormat.resumeFormat);
-        setSavedResumeFormat(savedFormat.resumeFormat);
         onResumeFormatChange?.(savedFormat.resumeFormat);
+        persistResumeFormatCookie(savedFormat.resumeFormat);
       })
       .catch((err: unknown) => {
         setError(
@@ -55,8 +84,8 @@ export function UserSettingsPanel({
             ? err.message
             : "Could not save resume format.",
         );
-        setResumeFormat(savedResumeFormat);
-        onResumeFormatChange?.(savedResumeFormat);
+        onResumeFormatChange?.(previous);
+        persistResumeFormatCookie(previous);
       })
       .finally(() => setBusy(false));
   }
@@ -86,7 +115,7 @@ export function UserSettingsPanel({
 
       <div className="style-grid">
         {PAGE_STYLES.map((option) => {
-          const active = selected === option.id;
+          const active = pageStyle === option.id;
           return (
             <button
               key={option.id}
@@ -94,27 +123,7 @@ export function UserSettingsPanel({
               className={`style-card${active ? " active" : ""}`}
               disabled={busy || !canOperate}
               aria-pressed={active}
-              onClick={() => {
-                if (!canOperate) return;
-                setSelected(option.id);
-                setError(null);
-                document.documentElement.setAttribute("data-theme", option.id);
-                setBusy(true);
-                void saveOwnPageStyle(option.id)
-                  .then(() => {
-                    setSaved(option.id);
-                  })
-                  .catch((err: unknown) => {
-                    setError(
-                      err instanceof Error
-                        ? err.message
-                        : "Could not save that style.",
-                    );
-                    setSelected(saved);
-                    document.documentElement.setAttribute("data-theme", saved);
-                  })
-                  .finally(() => setBusy(false));
-              }}
+              onClick={() => savePageStyle(option.id)}
             >
               <span
                 className="style-swatch"
@@ -135,9 +144,42 @@ export function UserSettingsPanel({
           <h2>Resume format</h2>
           <p className="hint">
             Font, layout, and accent color for generated resumes and cover
-            letters. Changes apply the next time you generate.
+            letters. Changes apply to the next package you generate.
           </p>
         </div>
+      </div>
+
+      <div
+        className="format-preview"
+        style={{ fontFamily: fontOption.cssFamily }}
+      >
+        <p
+          className="format-preview-name"
+          style={{
+            color: `#${look.nameColor}`,
+            textTransform: look.nameAllCaps ? "uppercase" : "none",
+            letterSpacing: look.nameAllCaps ? "0.08em" : "0",
+          }}
+        >
+          Jane Doe
+        </p>
+        <p className="format-preview-role" style={{ color: `#${look.accent}` }}>
+          Product Manager | SQL, Python, Tableau
+        </p>
+        <p
+          className="format-preview-heading"
+          style={{
+            color: `#${look.accent}`,
+            borderBottomColor: `#${look.headingRule}`,
+            textTransform: look.headingAllCaps ? "uppercase" : "none",
+          }}
+        >
+          Summary
+        </p>
+        <p className="format-preview-body">
+          {fontOption.name} · {styleOption.name} · {accentOption.name}. This is
+          how headings and body text will look in the generated resume.
+        </p>
       </div>
 
       <div className="format-block">

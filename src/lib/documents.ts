@@ -167,14 +167,14 @@ function buildResumeHeader(
   return [
     new Paragraph({
       alignment: AlignmentType.CENTER,
-      spacing: { after: headline ? 40 : 100 },
+      spacing: { after: headline ? look.nameSpacing : look.nameSpacing + 40 },
       children: [
         new TextRun({
           text: displayName(personal.name, look),
           bold: true,
           size: look.nameSize,
           font: docxFont(look),
-          color: look.ink,
+          color: look.nameColor,
         }),
       ],
     }),
@@ -230,11 +230,11 @@ function runsFromText(
 
 function sectionHeading(text: string, look: ResumeLook) {
   return new Paragraph({
-    spacing: { before: 280, after: 120 },
+    spacing: { before: look.sectionSpacing, after: 120 },
     border: {
       bottom: {
         style: BorderStyle.SINGLE,
-        size: 12,
+        size: look.headingRuleWidth,
         color: look.headingRule,
         space: 6,
       },
@@ -378,7 +378,7 @@ export async function buildResumeDocx(
       default: {
         document: {
           run: {
-            font: look.docxFont,
+            font: docxFont(look),
           },
         },
       },
@@ -428,7 +428,7 @@ export async function buildCoverLetterDocx(
       default: {
         document: {
           run: {
-            font: look.docxFont,
+            font: docxFont(look),
           },
         },
       },
@@ -642,7 +642,7 @@ export async function buildResumePdf(
     doc
       .font(look.pdfBold)
       .fontSize(look.pdfNameSize)
-      .fillColor(`#${look.ink}`)
+      .fillColor(`#${look.nameColor}`)
       .text(displayName(personal.name, look), {
         align: "center",
         width: doc.page.width - doc.page.margins.left - doc.page.margins.right,
@@ -697,7 +697,7 @@ export async function buildResumePdf(
       .moveTo(doc.page.margins.left, lineY)
       .lineTo(doc.page.width - doc.page.margins.right, lineY)
       .strokeColor(accent)
-      .lineWidth(1.2)
+      .lineWidth(look.headingRuleWidth >= 10 ? 1.4 : 1.1)
       .stroke();
     doc.x = doc.page.margins.left;
     doc.y = lineY + 16;
@@ -718,7 +718,7 @@ export async function buildResumePdf(
         .moveTo(doc.page.margins.left, ruleY)
         .lineTo(doc.page.width - doc.page.margins.right, ruleY)
         .strokeColor(`#${look.headingRule}`)
-        .lineWidth(1)
+        .lineWidth(look.headingRuleWidth >= 10 ? 1.15 : 0.8)
         .stroke();
       doc.x = doc.page.margins.left;
       doc.y = ruleY + 12;

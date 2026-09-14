@@ -1,7 +1,6 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
 import { requireAbleUser } from "@/lib/dal";
 import {
   PAGE_STYLE_COOKIE,
@@ -22,8 +21,5 @@ export async function saveOwnPageStyle(style: string): Promise<{
     pageStyle,
     pageStyleCookieOptions(),
   );
-  revalidatePath("/");
-  revalidatePath("/admin");
-  revalidatePath("/admin/settings");
   return { pageStyle };
 }

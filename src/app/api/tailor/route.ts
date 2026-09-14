@@ -68,8 +68,8 @@ export async function POST(request: Request) {
 
   const resumeFormat = parseResumeFormat(
     payload.resumeFormat ??
-      (await cookies()).get(RESUME_FORMAT_COOKIE)?.value ??
-      user.resumeFormat,
+      user.resumeFormat ??
+      (await cookies()).get(RESUME_FORMAT_COOKIE)?.value,
   );
 
   const encoder = new TextEncoder();

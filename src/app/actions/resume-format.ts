@@ -1,7 +1,6 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { revalidatePath } from "next/cache";
 import { requireAbleUser } from "@/lib/dal";
 import {
   parseResumeFormat,
@@ -26,6 +25,5 @@ export async function saveOwnResumeFormat(input: {
     JSON.stringify(resumeFormat),
     resumeFormatCookieOptions(),
   );
-  revalidatePath("/");
   return { resumeFormat };
 }

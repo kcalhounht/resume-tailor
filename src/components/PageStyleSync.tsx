@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
+import { applyPageStyle, currentPageStyle } from "@/lib/appearance-client";
 import type { PageStyle } from "@/lib/appearance";
 
 export function PageStyleSync({ style }: { style: PageStyle }) {
-  useEffect(() => {
-    document.documentElement.setAttribute("data-theme", style);
+  useLayoutEffect(() => {
+    applyPageStyle(currentPageStyle(style));
   }, [style]);
   return null;
 }

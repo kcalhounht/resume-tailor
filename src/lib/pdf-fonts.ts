@@ -67,6 +67,14 @@ const BUILTIN: Record<
   },
 };
 
+const PROBE_FILES = [
+  "source-sans-3-regular.ttf",
+  "carlito-regular.ttf",
+  "arimo-regular.ttf",
+  "tinos-regular.ttf",
+  "gelasio-regular.ttf",
+];
+
 function fontsDir() {
   const candidates = [
     path.join(process.cwd(), "src/lib/fonts"),
@@ -74,7 +82,7 @@ function fontsDir() {
     path.join(__dirname, "fonts"),
   ];
   return candidates.find((dir) =>
-    existsSync(path.join(dir, "carlito-regular.ttf")),
+    PROBE_FILES.some((file) => existsSync(path.join(dir, file))),
   );
 }
 
@@ -93,12 +101,15 @@ export function registerResumePdfFonts(
     return BUILTIN[font];
   }
 
-  doc.registerFont("Resume-Regular", regular);
-  doc.registerFont("Resume-Bold", bold);
-  doc.registerFont("Resume-Italic", italic);
+  const regularName = `Resume-${font}-Regular`;
+  const boldName = `Resume-${font}-Bold`;
+  const italicName = `Resume-${font}-Italic`;
+  doc.registerFont(regularName, regular);
+  doc.registerFont(boldName, bold);
+  doc.registerFont(italicName, italic);
   return {
-    regular: "Resume-Regular",
-    bold: "Resume-Bold",
-    italic: "Resume-Italic",
+    regular: regularName,
+    bold: boldName,
+    italic: italicName,
   };
 }

@@ -104,6 +104,7 @@ export type ResumeLook = {
   accent: string;
   ink: string;
   muted: string;
+  nameColor: string;
   nameSize: number;
   headingSize: number;
   bodySize: number;
@@ -117,6 +118,9 @@ export type ResumeLook = {
   pdfBodySize: number;
   pdfMetaSize: number;
   headingRule: string;
+  headingRuleWidth: number;
+  nameSpacing: number;
+  sectionSpacing: number;
 };
 
 function asFont(value: unknown): ResumeFont {
@@ -217,27 +221,32 @@ export function resumeLook(format?: ResumeFormat | null): ResumeLook {
   const compact = next.style === "compact";
   const modern = next.style === "modern";
   const executive = next.style === "executive";
+  const accent = ACCENT_MAP[next.accent];
 
   return {
     docxFont: font.docx,
     pdfRegular: font.pdfRegular,
     pdfBold: font.pdfBold,
     pdfItalic: font.pdfItalic,
-    accent: ACCENT_MAP[next.accent],
+    accent,
     ink: "1A1A1A",
     muted: "555555",
-    nameSize: compact ? 34 : 40,
-    headingSize: compact ? 20 : 22,
+    nameColor: modern ? accent : "1A1A1A",
+    nameSize: compact ? 32 : modern ? 44 : executive ? 36 : 40,
+    headingSize: compact ? 18 : executive ? 20 : 22,
     bodySize: compact ? 18 : 20,
     contactSize: compact ? 16 : 18,
-    nameAllCaps: !modern && !executive,
-    headingAllCaps: !modern,
-    marginTwip: compact ? 540 : 720,
-    pdfMargin: compact ? 40 : 50,
-    pdfNameSize: compact ? 17 : 20,
-    pdfHeadingSize: compact ? 10 : 11,
-    pdfBodySize: compact ? 9.5 : 10.5,
-    pdfMetaSize: compact ? 9 : 10,
-    headingRule: modern ? "CCCCCC" : "222222",
+    nameAllCaps: next.style === "classic",
+    headingAllCaps: next.style === "classic" || compact,
+    marginTwip: compact ? 480 : executive ? 900 : modern ? 800 : 720,
+    pdfMargin: compact ? 36 : executive ? 58 : modern ? 54 : 50,
+    pdfNameSize: compact ? 16 : modern ? 22 : executive ? 18 : 20,
+    pdfHeadingSize: compact ? 9.5 : 11,
+    pdfBodySize: compact ? 9 : executive ? 10.5 : 10.5,
+    pdfMetaSize: compact ? 8.5 : 10,
+    headingRule: modern ? accent : executive ? "888888" : "222222",
+    headingRuleWidth: modern ? 8 : executive ? 6 : 12,
+    nameSpacing: compact ? 40 : modern ? 80 : 60,
+    sectionSpacing: compact ? 180 : modern ? 340 : 280,
   };
 }

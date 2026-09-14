@@ -572,6 +572,46 @@ a {
   border: 1px solid var(--line-strong);
 }
 
+.format-preview {
+  margin: 0 0 1.1rem;
+  padding: 1rem 1.05rem 1.05rem;
+  background: #fff;
+  color: #1a1a1a;
+  border: 1px solid var(--line-strong);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.12);
+}
+
+.format-preview-name {
+  margin: 0;
+  font-size: 1.45rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.15;
+}
+
+.format-preview-role {
+  margin: 0.25rem 0 0.7rem;
+  text-align: center;
+  font-size: 0.82rem;
+  font-style: italic;
+}
+
+.format-preview-heading {
+  margin: 0 0 0.4rem;
+  padding-bottom: 0.28rem;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #222;
+}
+
+.format-preview-body {
+  margin: 0;
+  font-size: 0.86rem;
+  line-height: 1.45;
+  color: #333;
+}
+
 @media (max-width: 640px) {
   .style-grid,
   .format-options {
