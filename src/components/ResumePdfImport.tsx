@@ -70,10 +70,12 @@ function CircleChart({
 
 export function ResumePdfImport({
   disabled,
+  buttonLabel = "Upload resume PDF",
   onImported,
   onError,
 }: {
   disabled?: boolean;
+  buttonLabel?: string;
   onImported: (profile: CandidateProfile, source: "llm" | "text") => void;
   onError: (message: string) => void;
 }) {
@@ -226,7 +228,7 @@ export function ResumePdfImport({
         disabled={disabled || busy}
         onClick={() => fileRef.current?.click()}
       >
-        Upload resume PDF
+        {buttonLabel}
       </button>
     </div>
   );

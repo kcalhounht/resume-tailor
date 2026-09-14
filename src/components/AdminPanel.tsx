@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import CandidateForm from "@/components/CandidateForm";
 import { MessageBox, type ConfirmRequest } from "@/components/MessageBox";
 import TailoringRecords from "@/components/TailoringRecords";
+import { ResumePdfImport } from "@/components/ResumePdfImport";
 import {
   createAccount,
   initializeAccountProfile,
@@ -16,6 +17,7 @@ import {
   isProfileReady,
   isValidProfileEmail,
   listProfileFieldIssues,
+  mergeImportedProfile,
   profileHasDetailsBeyondAccount,
   REQUIRED_PROFILE_MESSAGE,
 } from "@/lib/profile";
@@ -300,28 +302,54 @@ function ProfileTab({
           <p className="hint">
             Saved to this account. They will see it on the Profile tab.
             Initialize fills name and email from the account and clears the
-            other fields.
+            other fields. Upload a resume PDF to extract the profile and save
+            it.
           </p>
         </div>
-        <button
-          type="button"
-          className="text-btn"
-          disabled={busy}
-          onClick={() => {
-            if (profileHasDetailsBeyondAccount(profile, selected)) {
-              onConfirm({
-                message:
-                  "Initialize this profile? Name and email stay from the account. Other profile fields are cleared.",
-                confirmLabel: "Initialize",
-                work: initializeProfile,
-              });
-              return;
-            }
-            initializeProfile();
-          }}
-        >
-          Initialize
-        </button>
+        <div className="section-head-actions">
+          <button
+            type="button"
+            className="text-btn"
+            disabled={busy}
+            onClick={() => {
+              if (profileHasDetailsBeyondAccount(profile, selected)) {
+                onConfirm({
+                  message:
+                    "Initialize this profile? Name and email stay from the account. Other profile fields are cleared.",
+                  confirmLabel: "Initialize",
+                  work: initializeProfile,
+                });
+                return;
+              }
+              initializeProfile();
+            }}
+          >
+            Initialize
+          </button>
+          <ResumePdfImport
+            disabled={busy}
+            buttonLabel="Upload resume"
+            onImported={(imported, source) => {
+              const next = mergeImportedProfile(profile, imported);
+              setProfile(next);
+              setShowProfileErrors(false);
+              void onBusy(
+                source === "llm"
+                  ? "Filled with OpenRouter and saved to this account."
+                  : "Filled from the PDF text and saved to this account.",
+                async () => {
+                  await saveAccountProfile(selected.id, next);
+                  onUsersChange((current) =>
+                    current.map((user) =>
+                      user.id === selected.id ? { ...user, profile: next } : user,
+                    ),
+                  );
+                },
+              );
+            }}
+            onError={(message) => onNotice(message)}
+          />
+        </div>
       </div>
 
       <CandidateForm

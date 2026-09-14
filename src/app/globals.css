@@ -631,6 +631,15 @@ a {
   border-top: 1px solid var(--line);
 }
 
+.section-head-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.65rem;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+}
+
 .resume-import {
   display: flex;
   flex-direction: row;
@@ -1434,8 +1443,6 @@ button {
 
 .admin-user-list {
   min-width: 0;
-  max-height: min(72vh, 44rem);
-  overflow: auto;
 }
 
 .admin-editor .tabs {
@@ -1448,6 +1455,9 @@ button {
   padding: 0;
   display: grid;
   gap: 0.4rem;
+  max-height: min(40vh, 18.5rem);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .admin-user-item {
@@ -1494,6 +1504,9 @@ button {
   display: grid;
   gap: 1.15rem;
   margin-top: 1rem;
+  max-height: min(48vh, 26rem);
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 
 .record-day-head {
