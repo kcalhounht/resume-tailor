@@ -1,29 +1,44 @@
 "use client";
 
-import { FormEvent, useMemo, useState, type ClipboardEvent } from "react";
+import { FormEvent, useMemo, useRef, useState } from "react";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
   type JobStep,
   type ProgressEvent,
 } from "@/lib/progress";
+import { GENERATION_STOPPED_MESSAGE, isAbortError } from "@/lib/abort";
 import { MIN_JOB_DESCRIPTION_CHARS } from "@/lib/limits";
 import {
   emptyProfile,
   isProfileReady,
+  listProfileFieldIssues,
+  mergeImportedProfile,
   normalizeProfile,
-  profileBlockReason,
+  REQUIRED_PROFILE_MESSAGE,
+  GENERATE_PROFILE_MESSAGE,
 } from "@/lib/profile";
 import CandidateForm from "@/components/CandidateForm";
+import { AccountPanel } from "@/components/AccountPanel";
+import { MessageBox } from "@/components/MessageBox";
+import { ResumePdfImport } from "@/components/ResumePdfImport";
+import { UserSettingsPanel } from "@/components/UserSettingsPanel";
 import type { CandidateProfile } from "@/lib/types";
+import type { SessionPayload } from "@/lib/session";
 import { saveProfile } from "@/app/actions/profile";
+import { DEFAULT_PAGE_STYLE, type PageStyle } from "@/lib/appearance";
+import { applyPageStyle } from "@/lib/appearance-client";
+import {
+  DEFAULT_RESUME_FORMAT,
+  type ResumeFormat,
+} from "@/lib/resume-format";
 
 type StepStatus = "pending" | "active" | "done" | "error";
 
 type JobProgress = {
   index: number;
   jobDescription: string;
-  status: "queued" | "running" | "done" | "error";
+  status: "queued" | "running" | "done" | "error" | "stopped";
   currentStep: JobStep | null;
   stepStatuses: Record<JobStep, StepStatus>;
   stepMessage: string;
@@ -39,6 +54,7 @@ type JobProgress = {
   downloadUrls?: {
     zip: string;
     resumeDocx: string;
+    resumePdf: string;
     coverLetterDocx: string;
   };
 };
@@ -121,6 +137,10 @@ function markJobDone(
     ? {
         zip: base64ToObjectUrl(data.downloads.zipBase64, "application/zip"),
         resumeDocx: base64ToObjectUrl(data.downloads.resumeDocxBase64, DOCX),
+        resumePdf: base64ToObjectUrl(
+          data.downloads.resumePdfBase64,
+          "application/pdf",
+        ),
         coverLetterDocx: base64ToObjectUrl(
           data.downloads.coverLetterDocxBase64,
           DOCX,
@@ -144,6 +164,18 @@ function markJobDone(
     atsScore: data.atsScore,
     error: undefined,
     downloadUrls,
+  };
+}
+
+function markJobStopped(job: JobProgress): JobProgress {
+  const stepStatuses = { ...job.stepStatuses };
+  if (job.currentStep) stepStatuses[job.currentStep] = "error";
+
+  return {
+    ...job,
+    status: "stopped",
+    stepMessage: GENERATION_STOPPED_MESSAGE,
+    error: undefined,
   };
 }
 
@@ -178,6 +210,14 @@ function DownloadIcon() {
   );
 }
 
+function StopIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+      <rect x="6" y="6" width="12" height="12" rx="1.5" />
+    </svg>
+  );
+}
+
 function RetryIcon() {
   return (
     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" aria-hidden>
@@ -200,30 +240,60 @@ function StatusBadge({ status }: { status: JobProgress["status"] }) {
         ? "Running"
         : status === "done"
           ? "Done"
-          : "Failed";
+          : status === "stopped"
+            ? "Stopped"
+            : "Failed";
   return <span className={`badge badge-${status}`}>{label}</span>;
 }
 
 export default function ResumeForm({
   initialProfile,
+  session,
+  initialPageStyle = DEFAULT_PAGE_STYLE,
+  initialResumeFormat = DEFAULT_RESUME_FORMAT,
+  canOperate = true,
 }: {
   initialProfile?: CandidateProfile;
+  session: SessionPayload;
+  initialPageStyle?: PageStyle;
+  initialResumeFormat?: ResumeFormat;
+  canOperate?: boolean;
 }) {
-  const [tab, setTab] = useState<"profile" | "generate">("profile");
+  const [tab, setTab] = useState<
+    "profile" | "generate" | "account" | "settings"
+  >("profile");
   const [profile, setProfile] = useState<CandidateProfile>(
     () => initialProfile ?? emptyProfile(),
   );
-  const [jobTexts, setJobTexts] = useState<string[]>([""]);
+  const [jobTexts, setJobTexts] = useState<{ id: string; text: string }[]>(() => [
+    { id: crypto.randomUUID(), text: "" },
+  ]);
   const [loading, setLoading] = useState(false);
   const [retryingIndices, setRetryingIndices] = useState<number[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [showProfileErrors, setShowProfileErrors] = useState(false);
+  const [messageBox, setMessageBox] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [jobs, setJobs] = useState<JobProgress[]>([]);
   const [status, setStatus] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const [appliedSessionName, setAppliedSessionName] = useState(session.name);
+  const [resumeFormat, setResumeFormat] = useState(initialResumeFormat);
+  const [pageStyle, setPageStyle] = useState(initialPageStyle);
+
+  if (session.name !== appliedSessionName) {
+    setAppliedSessionName(session.name);
+    setProfile((current) => {
+      if (current.personal.name === session.name) return current;
+      return {
+        ...current,
+        personal: { ...current.personal, name: session.name },
+      };
+    });
+  }
 
   const jobEntries = useMemo(
-    () => jobTexts.map((text, i) => ({ text: text.trim(), slot: i })),
+    () => jobTexts.map((job, i) => ({ text: job.text.trim(), slot: i })),
     [jobTexts],
   );
   const readyJobs = useMemo(
@@ -233,14 +303,20 @@ export default function ResumeForm({
       ),
     [jobEntries],
   );
-  const hasAnyJd = jobEntries.some((entry) => entry.text.length > 0);
   const profileReady = isProfileReady(profile);
+
+  function showIncompleteProfile(message = REQUIRED_PROFILE_MESSAGE) {
+    setShowProfileErrors(true);
+    setTab("profile");
+    setMessageBox(message);
+  }
 
   const summary = useMemo(() => {
     const done = jobs.filter((j) => j.status === "done").length;
     const failed = jobs.filter((j) => j.status === "error").length;
     const running = jobs.filter((j) => j.status === "running").length;
-    return { done, failed, running, total: jobs.length };
+    const stopped = jobs.filter((j) => j.status === "stopped").length;
+    return { done, failed, running, stopped, total: jobs.length };
   }, [jobs]);
 
   function isRetrying(index: number) {
@@ -254,29 +330,28 @@ export default function ResumeForm({
   }
 
   function setJobText(slot: number, value: string) {
-    setJobTexts((prev) => prev.map((text, i) => (i === slot ? value : text)));
-  }
-
-  function onPasteJob(
-    slot: number,
-    event: ClipboardEvent<HTMLTextAreaElement>,
-  ) {
-    const pasted = event.clipboardData.getData("text");
-    if (!pasted) return;
-    event.preventDefault();
-    const el = event.currentTarget;
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    setJobText(slot, el.value.slice(0, start) + pasted + el.value.slice(end));
+    setJobTexts((prev) =>
+      prev.map((job, i) => (i === slot ? { ...job, text: value } : job)),
+    );
   }
 
   function addJob() {
-    setJobTexts((prev) => [...prev, ""]);
+    setJobTexts((prev) => [...prev, { id: crypto.randomUUID(), text: "" }]);
+  }
+
+  function clearJob(slot: number) {
+    setJobTexts((prev) =>
+      prev.map((job, i) =>
+        i === slot ? { id: crypto.randomUUID(), text: "" } : job,
+      ),
+    );
   }
 
   function removeJob(slot: number) {
     setJobTexts((prev) =>
-      prev.length === 1 ? [""] : prev.filter((_, i) => i !== slot),
+      prev.length === 1
+        ? [{ id: crypto.randomUUID(), text: "" }]
+        : prev.filter((_, i) => i !== slot),
     );
   }
 
@@ -306,14 +381,21 @@ export default function ResumeForm({
       setStatus(`Retrying job ${target.index}…`);
     }
 
+    abortRef.current?.abort();
+    const abort = new AbortController();
+    abortRef.current = abort;
+
     try {
       const response = await fetch("/api/tailor", {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
+        signal: abort.signal,
         body: JSON.stringify({
           profile: normalizeProfile(profile),
           jobDescriptions: targets.map((t) => t.jobDescription),
           indices: targets.map((t) => t.index),
+          resumeFormat,
         }),
       });
 
@@ -367,9 +449,23 @@ export default function ResumeForm({
         }
       }
     } catch (err) {
+      if (isAbortError(err)) {
+        if (abortRef.current !== abort) return;
+        setJobs((prev) =>
+          prev.map((job) =>
+            job.status === "running" || job.status === "queued"
+              ? markJobStopped(job)
+              : job,
+          ),
+        );
+        setStatus(GENERATION_STOPPED_MESSAGE);
+        setError(null);
+        return;
+      }
       setError(err instanceof Error ? err.message : "Unexpected error");
       setStatus(null);
     } finally {
+      if (abortRef.current === abort) abortRef.current = null;
       if (mode === "batch") {
         setLoading(false);
       } else {
@@ -384,12 +480,15 @@ export default function ResumeForm({
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
 
+    if (!canOperate) {
+      setError(
+        "This account is disabled. An administrator must set priority to able before you can generate resumes.",
+      );
+      return;
+    }
+
     if (!isProfileReady(profile)) {
-      const reason =
-        profileBlockReason(profile) ||
-        "Fill your profile, then generate.";
-      setError(reason);
-      setTab("profile");
+      showIncompleteProfile(GENERATE_PROFILE_MESSAGE);
       return;
     }
 
@@ -411,6 +510,12 @@ export default function ResumeForm({
   }
 
   async function onRetry(job: JobProgress) {
+    if (!canOperate) {
+      setError(
+        "This account is disabled. An administrator must set priority to able before you can generate resumes.",
+      );
+      return;
+    }
     if (isRetrying(job.index)) return;
     await runJobs(
       [{ jobDescription: job.jobDescription, index: job.index }],
@@ -418,10 +523,25 @@ export default function ResumeForm({
     );
   }
 
+  function stopGeneration() {
+    abortRef.current?.abort();
+  }
+
   const batchBusy = loading || retryingIndices.length > 0;
+  const dialogMessage =
+    messageBox ||
+    (error === REQUIRED_PROFILE_MESSAGE ? REQUIRED_PROFILE_MESSAGE : null);
 
   return (
     <div className="workspace">
+      {!canOperate ? (
+        <p className="priority-banner" role="status">
+          This account is disabled. You can sign in and look around, but you
+          cannot generate, save a profile, import a resume, change account
+          details, or change page style until an administrator sets priority to
+          able.
+        </p>
+      ) : null}
       <div className="tabs" role="tablist" aria-label="Resume Tailor">
         <button
           type="button"
@@ -448,6 +568,28 @@ export default function ResumeForm({
         >
           Generate resume
         </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-account"
+          aria-selected={tab === "account"}
+          aria-controls="panel-account"
+          className={`tab${tab === "account" ? " active" : ""}`}
+          onClick={() => setTab("account")}
+        >
+          Account
+        </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-settings"
+          aria-selected={tab === "settings"}
+          aria-controls="panel-settings"
+          className={`tab${tab === "settings" ? " active" : ""}`}
+          onClick={() => setTab("settings")}
+        >
+          Settings
+        </button>
       </div>
 
       {tab === "profile" && (
@@ -461,16 +603,42 @@ export default function ResumeForm({
             <div>
               <h2>Your profile</h2>
               <p className="hint">
-                Required before generate: name plus one experience with company,
-                title, period, and location.
+                All fields are required except Portfolio. Include at least one
+                experience and one education, or upload a resume PDF to fill
+                them.
               </p>
             </div>
+            <ResumePdfImport
+              disabled={saving || batchBusy || !canOperate}
+              onImported={(imported, source) => {
+                setError(null);
+                setProfile((current) =>
+                  mergeImportedProfile(current, imported),
+                );
+                setMessageBox(
+                  source === "llm"
+                    ? "Filled with OpenRouter. Review the fields, then Save."
+                    : "Filled from the PDF text. Add an OpenRouter key in Admin Settings for better results.",
+                );
+              }}
+              onError={(message) => {
+                setMessageBox(message);
+              }}
+            />
           </div>
+
+          {error &&
+            tab === "profile" &&
+            error !== REQUIRED_PROFILE_MESSAGE && (
+              <p className="error" role="alert">
+                {error}
+              </p>
+            )}
 
           <CandidateForm
             profile={profile}
+            issues={showProfileErrors ? listProfileFieldIssues(profile) : []}
             onChange={(next) => {
-              setSaveMessage(null);
               setProfile(next);
             }}
             disabled={saving || batchBusy}
@@ -480,17 +648,33 @@ export default function ResumeForm({
             <button
               type="button"
               className="primary"
-              disabled={saving || batchBusy}
+              disabled={saving || batchBusy || !canOperate}
               onClick={() => {
                 void (async () => {
                   setError(null);
-                  setSaveMessage(null);
+                  if (!canOperate) {
+                    setMessageBox(
+                      "This account is disabled. An administrator must set priority to able before you can save a profile.",
+                    );
+                    return;
+                  }
+                  const issues = listProfileFieldIssues(profile);
+                  if (issues.length) {
+                    showIncompleteProfile();
+                    return;
+                  }
+                  setShowProfileErrors(false);
                   setSaving(true);
                   try {
                     await saveProfile(profile);
-                    setSaveMessage("Profile saved.");
-                  } catch {
-                    setError("Could not save your profile.");
+                    setMessageBox("Profile saved.");
+                    setShowProfileErrors(false);
+                  } catch (err) {
+                    setMessageBox(
+                      err instanceof Error
+                        ? err.message
+                        : "Could not save your profile.",
+                    );
                   } finally {
                     setSaving(false);
                   }
@@ -499,10 +683,24 @@ export default function ResumeForm({
             >
               {saving ? "Saving…" : "Save"}
             </button>
-            {saveMessage && <p className="inline-status">{saveMessage}</p>}
-            {error && tab === "profile" && <p className="error">{error}</p>}
           </div>
         </section>
+      )}
+
+      {tab === "account" && (
+        <AccountPanel session={session} canOperate={canOperate} />
+      )}
+      {tab === "settings" && (
+        <UserSettingsPanel
+          pageStyle={pageStyle}
+          resumeFormat={resumeFormat}
+          canOperate={canOperate}
+          onPageStyleChange={(next) => {
+            setPageStyle(next);
+            applyPageStyle(next);
+          }}
+          onResumeFormatChange={setResumeFormat}
+        />
       )}
 
       {tab === "generate" && (
@@ -529,37 +727,49 @@ export default function ResumeForm({
         </div>
 
         <div className="jd-list">
-          {jobTexts.map((text, slot) => (
-            <div key={slot} className="jd-item">
+          {jobTexts.map((job, slot) => (
+            <div key={job.id} className="jd-item">
               <div className="jd-item-head">
-                <label htmlFor={`jd-${slot}`}>Job {slot + 1}</label>
+                <label htmlFor={`jd-${job.id}`}>Job {slot + 1}</label>
                 <span
                   className={`jd-char-count${
-                    text.trim().length > 0 &&
-                    text.trim().length < MIN_JOB_DESCRIPTION_CHARS
+                    job.text.trim().length > 0 &&
+                    job.text.trim().length < MIN_JOB_DESCRIPTION_CHARS
                       ? " short"
                       : ""
                   }`}
                 >
-                  {text.trim().length.toLocaleString()}/
+                  {job.text.trim().length.toLocaleString()}/
                   {MIN_JOB_DESCRIPTION_CHARS} chars
                 </span>
-                {jobTexts.length > 1 && (
-                  <button
-                    type="button"
-                    className="text-btn"
-                    onClick={() => removeJob(slot)}
-                  >
-                    Remove
-                  </button>
-                )}
+                {job.text.trim() || jobTexts.length > 1 ? (
+                  <div className="jd-item-actions">
+                    {job.text ? (
+                      <button
+                        type="button"
+                        className="text-btn section-remove"
+                        onClick={() => clearJob(slot)}
+                      >
+                        Clear
+                      </button>
+                    ) : null}
+                    {jobTexts.length > 1 && (
+                      <button
+                        type="button"
+                        className="text-btn section-remove"
+                        onClick={() => removeJob(slot)}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                ) : null}
               </div>
               <textarea
-                id={`jd-${slot}`}
+                id={`jd-${job.id}`}
                 rows={8}
-                value={text}
+                defaultValue={job.text}
                 onChange={(e) => setJobText(slot, e.target.value)}
-                onPaste={(e) => onPasteJob(slot, e)}
                 placeholder="Paste the full job description here…"
                 spellCheck={false}
               />
@@ -571,7 +781,7 @@ export default function ResumeForm({
           <button
             type="submit"
             className="primary"
-            disabled={batchBusy || !hasAnyJd}
+            disabled={batchBusy}
           >
             {loading ? "Processing…" : "Generate packages"}
           </button>
@@ -586,7 +796,7 @@ export default function ResumeForm({
           {status && <p className="inline-status">{status}</p>}
           {!profileReady && (
             <p className="inline-status warn-status">
-              {profileBlockReason(profile)}
+              {GENERATE_PROFILE_MESSAGE}
             </p>
           )}
         </div>
@@ -601,7 +811,9 @@ export default function ResumeForm({
             <p className="hint">
               {jobs.length === 0
                 ? "Results appear here after you generate."
-                : `${summary.done} done · ${summary.running} running · ${summary.failed} failed`}
+                : `${summary.done} done · ${summary.running} running · ${summary.failed} failed${
+                    summary.stopped ? ` · ${summary.stopped} stopped` : ""
+                  }`}
             </p>
           </div>
         </div>
@@ -628,7 +840,11 @@ export default function ResumeForm({
                       <div className="job-title-row">
                         <strong>
                           {job.company ||
-                            (job.status === "error" ? "Failed" : "Job posting")}
+                            (job.status === "error"
+                              ? "Failed"
+                              : job.status === "stopped"
+                                ? "Stopped"
+                                : "Job posting")}
                         </strong>
                         <StatusBadge status={job.status} />
                         {typeof job.atsScore === "number" && (
@@ -667,8 +883,18 @@ export default function ResumeForm({
                     ))}
                   </ol>
 
-                  {job.status === "running" && (
-                    <p className="job-live">{job.stepMessage}</p>
+                  {(job.status === "running" || job.status === "queued") && (
+                    <div className="retry-row">
+                      <p className="job-live">{job.stepMessage}</p>
+                      <button
+                        type="button"
+                        className="stop-btn"
+                        onClick={stopGeneration}
+                      >
+                        <StopIcon />
+                        Stop
+                      </button>
+                    </div>
                   )}
                   {job.error && <p className="job-error">{job.error}</p>}
 
@@ -676,6 +902,7 @@ export default function ResumeForm({
                     job.folderName &&
                     job.zipName &&
                     job.resumeDocxName &&
+                    job.resumePdfName &&
                     job.coverLetterDocxName && (
                     <div className="download-row">
                       <span className="download-label">Downloads</span>
@@ -690,6 +917,17 @@ export default function ResumeForm({
                         >
                           <DownloadIcon />
                           {job.resumeDocxName}
+                        </a>
+                        <a
+                          className="download-btn"
+                          href={
+                            job.downloadUrls?.resumePdf ??
+                            `/api/download?folder=${encodeURIComponent(job.folderName)}&name=${encodeURIComponent(job.resumePdfName)}`
+                          }
+                          download={job.resumePdfName}
+                        >
+                          <DownloadIcon />
+                          {job.resumePdfName}
                         </a>
                         <a
                           className="download-btn"
@@ -717,12 +955,12 @@ export default function ResumeForm({
                     </div>
                   )}
 
-                  {job.status === "error" && (
+                  {(job.status === "error" || job.status === "stopped") && (
                     <div className="retry-row">
                       <button
                         type="button"
                         className="retry-btn"
-                        disabled={isRetrying(job.index)}
+                        disabled={isRetrying(job.index) || !canOperate}
                         onClick={() => void onRetry(job)}
                       >
                         <RetryIcon />
@@ -738,6 +976,23 @@ export default function ResumeForm({
       </section>
         </>
       )}
+      {dialogMessage ? (
+        <MessageBox
+          message={dialogMessage}
+          onClose={() => {
+            const wasProfilePrompt =
+              dialogMessage === REQUIRED_PROFILE_MESSAGE ||
+              dialogMessage === GENERATE_PROFILE_MESSAGE;
+            setMessageBox(null);
+            if (error === REQUIRED_PROFILE_MESSAGE) setError(null);
+            if (!wasProfilePrompt) return;
+            const firstId = listProfileFieldIssues(profile)[0]?.id;
+            window.setTimeout(() => {
+              document.getElementById(firstId ?? "")?.focus();
+            }, 0);
+          }}
+        />
+      ) : null}
     </div>
   );
 }

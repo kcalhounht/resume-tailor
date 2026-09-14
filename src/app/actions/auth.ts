@@ -1,27 +1,34 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { unstable_rethrow } from "next/navigation";
 import { z } from "zod";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import {
   SESSION_COOKIE,
   createSessionToken,
-  readSessionToken,
   sessionCookieOptions,
-  type SessionPayload,
 } from "@/lib/session";
+import { getSettings } from "@/lib/settings";
 import {
-  createUser,
-  findUserByEmail,
-  findUserById,
-  isAdminUser,
-  isUserAble,
-  type StoredUser,
-} from "@/lib/users";
+  PAGE_STYLE_COOKIE,
+  parsePageStyle,
+  pageStyleCookieOptions,
+} from "@/lib/appearance";
+import {
+  parseResumeFormat,
+  resumeFormatCookieOptions,
+  RESUME_FORMAT_COOKIE,
+} from "@/lib/resume-format";
+import { createUser, findUserByEmail, hasAnyUser } from "@/lib/users";
+import {
+  HOST_NEEDS_DATABASE_MESSAGE,
+  assertPersistentAccounts,
+} from "@/lib/db";
 
 export type AuthFormState = {
   message?: string;
+  redirectTo?: string;
   errors?: {
     name?: string[];
     email?: string[];
@@ -51,6 +58,8 @@ async function setSessionCookie(user: {
   id: string;
   email: string;
   name: string;
+  pageStyle?: string;
+  resumeFormat?: unknown;
 }) {
   const jar = await cookies();
   jar.set(
@@ -62,34 +71,28 @@ async function setSessionCookie(user: {
     }),
     sessionCookieOptions(),
   );
+  jar.set(
+    PAGE_STYLE_COOKIE,
+    parsePageStyle(user.pageStyle),
+    pageStyleCookieOptions(),
+  );
+  jar.set(
+    RESUME_FORMAT_COOKIE,
+    JSON.stringify(parseResumeFormat(user.resumeFormat)),
+    resumeFormatCookieOptions(),
+  );
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
-  const jar = await cookies();
-  return readSessionToken(jar.get(SESSION_COOKIE)?.value);
-}
-
-export async function requireSession(): Promise<SessionPayload> {
-  const session = await getSession();
-  if (!session) redirect("/signin");
-  const user = await findUserById(session.userId);
-  if (!user) redirect("/signin");
-  if (!isUserAble(user)) {
-    const jar = await cookies();
-    jar.delete(SESSION_COOKIE);
-    redirect("/signin");
+function safeNextPath(value: unknown): string {
+  if (typeof value !== "string") return "/";
+  const next = value.trim();
+  if (!next.startsWith("/") || next.startsWith("//") || next.includes("\\")) {
+    return "/";
   }
-  return session;
-}
-
-export async function requireAdmin(): Promise<{
-  session: SessionPayload;
-  user: StoredUser;
-}> {
-  const session = await requireSession();
-  const user = await findUserById(session.userId);
-  if (!user || !isAdminUser(user)) redirect("/");
-  return { session, user };
+  if (next.includes("://")) return "/";
+  if (next.startsWith("/signin") || next.startsWith("/signup")) return "/";
+  if (next.startsWith("/api/")) return "/";
+  return next;
 }
 
 export async function signup(
@@ -107,21 +110,32 @@ export async function signup(
   }
 
   try {
+    await assertPersistentAccounts();
+    const [settings, siteHasUser] = await Promise.all([
+      getSettings(),
+      hasAnyUser(),
+    ]);
+    if (!settings.allowSignup && siteHasUser) {
+      return { message: "Public sign-up is turned off." };
+    }
     const passwordHash = await hashPassword(parsed.data.password);
     const user = await createUser({
       name: parsed.data.name,
       email: parsed.data.email,
       passwordHash,
+      role: settings.defaultRole,
+      priority: settings.defaultPriority,
     });
     await setSessionCookie(user);
   } catch (err) {
+    unstable_rethrow(err);
     return {
       message:
         err instanceof Error ? err.message : "Could not create the account.",
     };
   }
 
-  redirect("/");
+  return { redirectTo: "/" };
 }
 
 export async function signin(
@@ -136,20 +150,27 @@ export async function signin(
     return { errors: parsed.error.flatten().fieldErrors };
   }
 
-  const user = await findUserByEmail(parsed.data.email);
-  if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
-    return { message: "Email or password is incorrect." };
-  }
-  if (!isUserAble(user)) {
-    return { message: "This account is disabled." };
+  try {
+    await assertPersistentAccounts();
+    const user = await findUserByEmail(parsed.data.email);
+    if (!user || !(await verifyPassword(parsed.data.password, user.passwordHash))) {
+      return { message: "Email or password is incorrect." };
+    }
+
+    await setSessionCookie(user);
+  } catch (err) {
+    unstable_rethrow(err);
+    const message =
+      err instanceof Error ? err.message : "Could not sign in.";
+    if (message === HOST_NEEDS_DATABASE_MESSAGE) {
+      return { message };
+    }
+    console.error("signin failed", err);
+    return {
+      message:
+        "Could not reach the account database. Check DATABASE_URL and try again.",
+    };
   }
 
-  await setSessionCookie(user);
-  redirect("/");
-}
-
-export async function signout() {
-  const jar = await cookies();
-  jar.delete(SESSION_COOKIE);
-  redirect("/signin");
+  return { redirectTo: safeNextPath(formData.get("next")) };
 }

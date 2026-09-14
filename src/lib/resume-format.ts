@@ -1,0 +1,273 @@
+export const RESUME_FONT_IDS = [
+  "aptos",
+  "calibri",
+  "times",
+  "georgia",
+  "arial",
+] as const;
+
+export const RESUME_STYLE_IDS = [
+  "classic",
+  "modern",
+  "compact",
+  "executive",
+] as const;
+
+export const RESUME_ACCENT_IDS = [
+  "navy",
+  "black",
+  "forest",
+  "burgundy",
+] as const;
+
+export type ResumeFont = (typeof RESUME_FONT_IDS)[number];
+export type ResumeLayoutStyle = (typeof RESUME_STYLE_IDS)[number];
+export type ResumeAccent = (typeof RESUME_ACCENT_IDS)[number];
+
+export type ResumeFormat = {
+  font: ResumeFont;
+  style: ResumeLayoutStyle;
+  accent: ResumeAccent;
+  boldKeywords: boolean;
+};
+
+export const DEFAULT_RESUME_FORMAT: ResumeFormat = {
+  font: "aptos",
+  style: "classic",
+  accent: "navy",
+  boldKeywords: true,
+};
+
+export const RESUME_FONT_OPTIONS: Array<{
+  id: ResumeFont;
+  name: string;
+  hint: string;
+  cssFamily: string;
+}> = [
+  {
+    id: "aptos",
+    name: "Aptos",
+    hint: "Microsoft 365 sans-serif (default)",
+    cssFamily: 'Aptos, "ResumeAptos", sans-serif',
+  },
+  {
+    id: "calibri",
+    name: "Calibri",
+    hint: "Clean sans-serif",
+    cssFamily: 'Calibri, "ResumeCalibri", sans-serif',
+  },
+  {
+    id: "times",
+    name: "Times",
+    hint: "Traditional serif",
+    cssFamily: '"Times New Roman", Times, "ResumeTimes", serif',
+  },
+  {
+    id: "georgia",
+    name: "Georgia",
+    hint: "Readable serif",
+    cssFamily: 'Georgia, "ResumeGeorgia", serif',
+  },
+  {
+    id: "arial",
+    name: "Arial",
+    hint: "Simple sans-serif",
+    cssFamily: 'Arial, "ResumeArial", Helvetica, sans-serif',
+  },
+];
+
+export const RESUME_STYLE_OPTIONS: Array<{
+  id: ResumeLayoutStyle;
+  name: string;
+  hint: string;
+}> = [
+  { id: "classic", name: "Classic", hint: "Navy headings, standard spacing" },
+  { id: "modern", name: "Modern", hint: "Title case, open layout" },
+  { id: "compact", name: "Compact", hint: "Smaller type and tighter margins" },
+  { id: "executive", name: "Executive", hint: "Formal, no all-caps name" },
+];
+
+export const RESUME_ACCENT_OPTIONS: Array<{
+  id: ResumeAccent;
+  name: string;
+  color: string;
+}> = [
+  { id: "navy", name: "Navy", color: "#1F4E79" },
+  { id: "black", name: "Black", color: "#222222" },
+  { id: "forest", name: "Forest", color: "#1F6B4A" },
+  { id: "burgundy", name: "Burgundy", color: "#6B2D3C" },
+];
+
+export const RESUME_KEYWORD_OPTIONS: Array<{
+  id: boolean;
+  name: string;
+  hint: string;
+}> = [
+  { id: true, name: "Bold", hint: "Emphasize JD keywords in body text" },
+  { id: false, name: "Plain", hint: "Keep body text the same weight" },
+];
+
+export type ResumeLook = {
+  docxFont: string;
+  pdfRegular: string;
+  pdfBold: string;
+  pdfItalic: string;
+  accent: string;
+  ink: string;
+  muted: string;
+  nameColor: string;
+  nameSize: number;
+  headingSize: number;
+  bodySize: number;
+  contactSize: number;
+  nameAllCaps: boolean;
+  headingAllCaps: boolean;
+  marginTwip: number;
+  pdfMargin: number;
+  pdfNameSize: number;
+  pdfHeadingSize: number;
+  pdfBodySize: number;
+  pdfMetaSize: number;
+  headingRule: string;
+  headingRuleWidth: number;
+  nameSpacing: number;
+  sectionSpacing: number;
+  boldKeywords: boolean;
+};
+
+function asFont(value: unknown): ResumeFont {
+  return RESUME_FONT_IDS.includes(value as ResumeFont)
+    ? (value as ResumeFont)
+    : DEFAULT_RESUME_FORMAT.font;
+}
+
+function asStyle(value: unknown): ResumeLayoutStyle {
+  return RESUME_STYLE_IDS.includes(value as ResumeLayoutStyle)
+    ? (value as ResumeLayoutStyle)
+    : DEFAULT_RESUME_FORMAT.style;
+}
+
+function asAccent(value: unknown): ResumeAccent {
+  return RESUME_ACCENT_IDS.includes(value as ResumeAccent)
+    ? (value as ResumeAccent)
+    : DEFAULT_RESUME_FORMAT.accent;
+}
+
+function asBoldKeywords(value: unknown): boolean {
+  if (value === false || value === "false" || value === 0 || value === "0") {
+    return false;
+  }
+  return true;
+}
+
+export const RESUME_FORMAT_COOKIE = "rt_resume_format";
+
+export function resumeFormatCookieOptions() {
+  return {
+    httpOnly: false,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 365 * 24 * 60 * 60,
+  };
+}
+
+export function parseResumeFormat(value: unknown): ResumeFormat {
+  if (typeof value === "string") {
+    try {
+      return parseResumeFormat(JSON.parse(value));
+    } catch {
+      return { ...DEFAULT_RESUME_FORMAT };
+    }
+  }
+  if (!value || typeof value !== "object") {
+    return { ...DEFAULT_RESUME_FORMAT };
+  }
+  const raw = value as Record<string, unknown>;
+  return {
+    font: asFont(raw.font),
+    style: asStyle(raw.style),
+    accent: asAccent(raw.accent),
+    boldKeywords: asBoldKeywords(raw.boldKeywords),
+  };
+}
+
+const FONT_MAP: Record<
+  ResumeFont,
+  { docx: string; pdfRegular: string; pdfBold: string; pdfItalic: string }
+> = {
+  calibri: {
+    docx: "Calibri",
+    pdfRegular: "Helvetica",
+    pdfBold: "Helvetica-Bold",
+    pdfItalic: "Helvetica-Oblique",
+  },
+  aptos: {
+    docx: "Aptos",
+    pdfRegular: "Helvetica",
+    pdfBold: "Helvetica-Bold",
+    pdfItalic: "Helvetica-Oblique",
+  },
+  arial: {
+    docx: "Arial",
+    pdfRegular: "Helvetica",
+    pdfBold: "Helvetica-Bold",
+    pdfItalic: "Helvetica-Oblique",
+  },
+  times: {
+    docx: "Times New Roman",
+    pdfRegular: "Times-Roman",
+    pdfBold: "Times-Bold",
+    pdfItalic: "Times-Italic",
+  },
+  georgia: {
+    docx: "Georgia",
+    pdfRegular: "Times-Roman",
+    pdfBold: "Times-Bold",
+    pdfItalic: "Times-Italic",
+  },
+};
+
+const ACCENT_MAP: Record<ResumeAccent, string> = {
+  navy: "1F4E79",
+  black: "222222",
+  forest: "1F6B4A",
+  burgundy: "6B2D3C",
+};
+
+export function resumeLook(format?: ResumeFormat | null): ResumeLook {
+  const next = parseResumeFormat(format);
+  const font = FONT_MAP[next.font];
+  const compact = next.style === "compact";
+  const modern = next.style === "modern";
+  const executive = next.style === "executive";
+  const accent = ACCENT_MAP[next.accent];
+
+  return {
+    docxFont: font.docx,
+    pdfRegular: font.pdfRegular,
+    pdfBold: font.pdfBold,
+    pdfItalic: font.pdfItalic,
+    accent,
+    ink: "1A1A1A",
+    muted: "555555",
+    nameColor: modern ? accent : "1A1A1A",
+    nameSize: compact ? 32 : modern ? 44 : executive ? 36 : 40,
+    headingSize: compact ? 18 : executive ? 20 : 22,
+    bodySize: compact ? 18 : 20,
+    contactSize: compact ? 16 : 18,
+    nameAllCaps: next.style === "classic",
+    headingAllCaps: next.style === "classic" || compact,
+    marginTwip: compact ? 480 : executive ? 900 : modern ? 800 : 720,
+    pdfMargin: compact ? 36 : executive ? 58 : modern ? 54 : 50,
+    pdfNameSize: compact ? 16 : modern ? 22 : executive ? 18 : 20,
+    pdfHeadingSize: compact ? 9.5 : 11,
+    pdfBodySize: compact ? 9 : executive ? 10.5 : 10.5,
+    pdfMetaSize: compact ? 8.5 : 10,
+    headingRule: modern ? accent : executive ? "888888" : "222222",
+    headingRuleWidth: modern ? 8 : executive ? 6 : 12,
+    nameSpacing: compact ? 40 : modern ? 80 : 60,
+    sectionSpacing: compact ? 180 : modern ? 340 : 280,
+    boldKeywords: next.boldKeywords,
+  };
+}

@@ -4,6 +4,8 @@ import { mkdir, readFile, rm, unlink, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import type { ExtractedJD, PersonalInfo, TailoredPackage } from "./types";
+import type { ResumeFormat } from "./resume-format";
+import { isEphemeralFilesystem } from "./runtime";
 import {
   buildCoverLetterDocx,
   buildResumeDocx,
@@ -16,12 +18,7 @@ import {
   sanitizeCompanyFolderName,
 } from "./filenames";
 
-/** Vercel/Lambda only allow writes under /tmp — cwd (/var/task) is read-only. */
-export function isEphemeralFilesystem() {
-  return Boolean(
-    process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME,
-  );
-}
+export { isEphemeralFilesystem } from "./runtime";
 
 export function getOutputRoot() {
   if (isEphemeralFilesystem()) {
@@ -55,6 +52,7 @@ export async function saveJobPackage(options: {
   personal: PersonalInfo;
   tailored: TailoredPackage;
   suffix?: string;
+  resumeFormat?: ResumeFormat | null;
 }): Promise<{
   folderPath: string;
   zipPath: string;
@@ -68,10 +66,12 @@ export async function saveJobPackage(options: {
   downloads?: {
     zipBase64: string;
     resumeDocxBase64: string;
+    resumePdfBase64: string;
     coverLetterDocxBase64: string;
   };
 }> {
-  const { index, rawJd, extracted, personal, tailored, suffix } = options;
+  const { index, rawJd, extracted, personal, tailored, suffix, resumeFormat } =
+    options;
   const outputRoot = getOutputRoot();
   await mkdir(outputRoot, { recursive: true });
 
@@ -84,14 +84,23 @@ export async function saveJobPackage(options: {
 
   const files = buildDocumentFileNames(personal.name);
   const extractedText = formatExtractedJd(extracted);
-  const resumeDocx = await buildResumeDocx(personal, tailored.resume);
-  const resumePdf = await buildResumePdf(personal, tailored.resume);
+  const resumeDocx = await buildResumeDocx(
+    personal,
+    tailored.resume,
+    resumeFormat,
+  );
+  const resumePdf = await buildResumePdf(
+    personal,
+    tailored.resume,
+    resumeFormat,
+  );
   const coverDocx = await buildCoverLetterDocx(
     personal,
     extracted.company,
     extracted.jobTitle,
     tailored.coverLetter,
     tailored.resume.keywords,
+    resumeFormat,
   );
 
   await writeFile(path.join(folderPath, "jd.txt"), rawJd, "utf8");
@@ -117,6 +126,7 @@ export async function saveJobPackage(options: {
     ? {
         zipBase64: (await readFile(zipPath)).toString("base64"),
         resumeDocxBase64: resumeDocx.toString("base64"),
+        resumePdfBase64: resumePdf.toString("base64"),
         coverLetterDocxBase64: coverDocx.toString("base64"),
       }
     : undefined;

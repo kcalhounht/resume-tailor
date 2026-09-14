@@ -1,19 +1,47 @@
-import Link from "next/link";
 import SignOutButton from "@/components/SignOutButton";
+import { PageStyleSync } from "@/components/PageStyleSync";
+import {
+  DEFAULT_PAGE_STYLE,
+  type PageStyle,
+} from "@/lib/appearance";
+
+function NavItem({
+  href,
+  current,
+  children,
+}: {
+  href: string;
+  current: boolean;
+  children: string;
+}) {
+  if (current) {
+    return <span className="text-btn current">{children}</span>;
+  }
+  // Full document navigation so a stale client cache cannot reuse a
+  // signed-out redirect for Database / Settings.
+  return (
+    <a href={href} className="text-btn">
+      {children}
+    </a>
+  );
+}
 
 export default function SiteHeader({
   name,
   email,
   isAdmin = false,
   current = "home",
+  pageStyle = DEFAULT_PAGE_STYLE,
 }: {
   name: string;
   email: string;
   isAdmin?: boolean;
-  current?: "home" | "admin";
+  current?: "home" | "admin" | "settings";
+  pageStyle?: PageStyle;
 }) {
   return (
     <header className="topbar">
+      <PageStyleSync style={pageStyle} />
       <div className="topbar-inner">
         <div className="brand-block">
           <p className="brand">Resume Tailor</p>
@@ -25,14 +53,18 @@ export default function SiteHeader({
           <p className="session-name">{name}</p>
           <p className="session-email">{email}</p>
           <div className="session-actions">
-            {current === "admin" ? (
-              <Link href="/" className="text-btn">
-                Home
-              </Link>
-            ) : isAdmin ? (
-              <Link href="/admin" className="text-btn">
-                Admin
-              </Link>
+            <NavItem href="/" current={current === "home"}>
+              Home
+            </NavItem>
+            {isAdmin ? (
+              <>
+                <NavItem href="/admin" current={current === "admin"}>
+                  Database
+                </NavItem>
+                <NavItem href="/admin/settings" current={current === "settings"}>
+                  Settings
+                </NavItem>
+              </>
             ) : null}
             <SignOutButton />
           </div>

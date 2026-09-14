@@ -11,11 +11,13 @@ export interface PersonalInfo {
   name: string;
   phone: string;
   linkedin: string;
+  portfolio: string;
   email: string;
   location: string;
 }
 
 export interface ExperienceInput {
+  id: string;
   company: string;
   title: string;
   period: string;
@@ -23,10 +25,11 @@ export interface ExperienceInput {
 }
 
 export interface EducationInput {
+  id: string;
   school: string;
+  discipline: string;
   degree: string;
   period: string;
-  location: string;
 }
 
 export interface CandidateProfile {

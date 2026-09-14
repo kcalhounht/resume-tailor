@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { useActionState } from "react";
 import { signup, type AuthFormState } from "@/app/actions/auth";
 
@@ -9,6 +10,14 @@ export default function SignUpForm() {
     signup,
     undefined as AuthFormState | undefined,
   );
+
+  useEffect(() => {
+    if (state?.redirectTo) {
+      window.location.assign(state.redirectTo);
+    }
+  }, [state]);
+
+  const busy = pending || Boolean(state?.redirectTo);
 
   return (
     <form className="auth-form" action={action}>
@@ -70,8 +79,8 @@ export default function SignUpForm() {
         )}
       </div>
       {state?.message && <p className="error">{state.message}</p>}
-      <button className="primary" type="submit" disabled={pending}>
-        {pending ? "Creating account…" : "Sign up"}
+      <button className="primary" type="submit" disabled={busy}>
+        {busy ? "Creating account…" : "Sign up"}
       </button>
       <p className="auth-switch">
         Already have an account? <Link href="/signin">Sign in</Link>

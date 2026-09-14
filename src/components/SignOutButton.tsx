@@ -1,11 +1,8 @@
-import { signout } from "@/app/actions/auth";
-
 export default function SignOutButton() {
+  // Full document GET so Next.js does not try to stream /api/auth/clear as RSC.
   return (
-    <form action={signout}>
-      <button type="submit" className="text-btn">
-        Sign out
-      </button>
-    </form>
+    <a href="/api/auth/clear" className="text-btn">
+      Sign out
+    </a>
   );
 }

@@ -2,14 +2,20 @@ import { ZodError } from "zod";
 import { processOneJob } from "@/lib/process-job";
 import { JOB_STEPS, type JobStep, type ProgressEvent } from "@/lib/progress";
 import { parseTailorRequest } from "@/lib/validate";
-import { getSession } from "@/app/actions/auth";
-import { findUserById, isUserAble, saveUserProfile } from "@/lib/users";
+import { loadCurrentUser } from "@/lib/dal";
+import { cookies } from "next/headers";
+import { isUserAble, saveUserProfile, PRIORITY_DISABLED_MESSAGE } from "@/lib/users";
+import {
+  parseResumeFormat,
+  RESUME_FORMAT_COOKIE,
+} from "@/lib/resume-format";
 import { normalizeProfile } from "@/lib/profile";
 import {
   addTailorRecord,
   newTailorRecordId,
   recordOutputSuffix,
 } from "@/lib/tailor-records";
+import { isAbortError } from "@/lib/abort";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -19,13 +25,22 @@ function encodeSse(event: ProgressEvent): string {
 }
 
 export async function POST(request: Request) {
-  const session = await getSession();
-  const user = session ? await findUserById(session.userId) : null;
-  if (!session || !user || !isUserAble(user)) {
+  const current = await loadCurrentUser();
+  if (!current) {
     return new Response(JSON.stringify({ ok: false, error: "Sign in required" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
     });
+  }
+  const { session, user } = current;
+  if (!isUserAble(user)) {
+    return new Response(
+      JSON.stringify({ ok: false, error: PRIORITY_DISABLED_MESSAGE }),
+      {
+        status: 403,
+        headers: { "Content-Type": "application/json" },
+      },
+    );
   }
 
   let payload;
@@ -51,11 +66,23 @@ export async function POST(request: Request) {
     // Generation can still proceed if the profile write fails.
   }
 
+  const resumeFormat = parseResumeFormat(
+    payload.resumeFormat ??
+      user.resumeFormat ??
+      (await cookies()).get(RESUME_FORMAT_COOKIE)?.value,
+  );
+
   const encoder = new TextEncoder();
+  const signal = request.signal;
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: ProgressEvent) => {
-        controller.enqueue(encoder.encode(encodeSse(event)));
+        if (signal.aborted) return;
+        try {
+          controller.enqueue(encoder.encode(encodeSse(event)));
+        } catch {
+          // Stream already closed after the client stopped.
+        }
       };
 
       try {
@@ -72,6 +99,8 @@ export async function POST(request: Request) {
                 profile: payload.profile,
                 personal: payload.profile.personal,
                 outputSuffix: recordOutputSuffix(recordId),
+                resumeFormat,
+                signal,
                 onStep: (step, message) => {
                   currentStep = step;
                   send({
@@ -120,6 +149,9 @@ export async function POST(request: Request) {
 
               return { ok: true as const };
             } catch (err) {
+              if (signal.aborted || isAbortError(err)) {
+                return { ok: false as const };
+              }
               const message =
                 err instanceof Error
                   ? err.message
@@ -149,12 +181,15 @@ export async function POST(request: Request) {
         );
 
         const succeeded = outcomes.filter((o) => o.ok).length;
-        send({
-          type: "done",
-          succeeded,
-          failed: outcomes.length - succeeded,
-        });
+        if (!signal.aborted) {
+          send({
+            type: "done",
+            succeeded,
+            failed: outcomes.length - succeeded,
+          });
+        }
       } catch (err) {
+        if (signal.aborted || isAbortError(err)) return;
         send({
           type: "fatal",
           error: err instanceof Error ? err.message : "Unexpected error",

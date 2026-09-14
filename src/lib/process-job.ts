@@ -1,4 +1,5 @@
 import { scoreAtsMatch } from "./ats-score";
+import { throwIfAborted } from "./abort";
 import { extractJobDescription } from "./extract";
 import { generateTailoredPackage } from "./generate";
 import { saveJobPackage } from "./package";
@@ -6,6 +7,7 @@ import { MIN_JOB_DESCRIPTION_CHARS } from "./limits";
 import { validateAndFixResume } from "./validate-resume";
 import type { JobStep } from "./progress";
 import type { CandidateProfile, ExtractedJD, PersonalInfo } from "./types";
+import type { ResumeFormat } from "./resume-format";
 
 export async function processOneJob(options: {
   index: number;
@@ -13,6 +15,8 @@ export async function processOneJob(options: {
   profile: CandidateProfile;
   personal: PersonalInfo;
   outputSuffix?: string;
+  resumeFormat?: ResumeFormat | null;
+  signal?: AbortSignal;
   onStep: (step: JobStep, message: string) => void;
 }): Promise<{
   index: number;
@@ -28,10 +32,12 @@ export async function processOneJob(options: {
   downloads?: {
     zipBase64: string;
     resumeDocxBase64: string;
+    resumePdfBase64: string;
     coverLetterDocxBase64: string;
   };
 }> {
-  const { index, profile, personal, outputSuffix, onStep } = options;
+  const { index, profile, personal, outputSuffix, resumeFormat, signal, onStep } =
+    options;
   const rawText = options.jobDescription.trim().slice(0, 50000);
 
   if (rawText.length < MIN_JOB_DESCRIPTION_CHARS) {
@@ -40,18 +46,38 @@ export async function processOneJob(options: {
     );
   }
 
+  throwIfAborted(signal);
   onStep("extracting", "Extracting structured JD…");
-  const extracted = await extractJobDescription(rawText);
+  const extracted = await extractJobDescription(rawText, signal);
 
+  throwIfAborted(signal);
   onStep("generating", "Generating resume & cover letter…");
-  let tailored = await generateTailoredPackage(profile, extracted, rawText);
+  let tailored = await generateTailoredPackage(
+    profile,
+    extracted,
+    rawText,
+    [],
+    signal,
+  );
 
+  throwIfAborted(signal);
   onStep("validating", "Validating resume format and content…");
   let validation = validateAndFixResume(tailored, profile, extracted);
 
   if (!validation.ok) {
+    throwIfAborted(signal);
     onStep("validating", "Fixing validation issues and regenerating…");
-    tailored = await generateTailoredPackage(profile, extracted, rawText);
+    const repairHints = validation.issues
+      .filter((issue) => issue.level === "error")
+      .map((issue) => issue.message);
+    tailored = await generateTailoredPackage(
+      profile,
+      extracted,
+      rawText,
+      repairHints,
+      signal,
+    );
+    throwIfAborted(signal);
     validation = validateAndFixResume(tailored, profile, extracted);
   }
 
@@ -69,6 +95,7 @@ export async function processOneJob(options: {
 
   const fixedCount = validation.issues.filter((i) => i.level === "fixed").length;
   const ats = scoreAtsMatch(tailored.resume, extracted, rawText);
+  throwIfAborted(signal);
   onStep(
     "zipping",
     `Validated${fixedCount ? ` (${fixedCount} fixes)` : ""} · ATS ${ats.score}/100 · packaging…`,
@@ -81,6 +108,7 @@ export async function processOneJob(options: {
     personal,
     tailored,
     suffix: outputSuffix,
+    resumeFormat,
   });
 
   return {

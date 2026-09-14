@@ -1,17 +1,27 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { useActionState } from "react";
 import { signin, type AuthFormState } from "@/app/actions/auth";
 
-export default function SignInForm() {
+export default function SignInForm({ next = "/" }: { next?: string }) {
   const [state, action, pending] = useActionState(
     signin,
     undefined as AuthFormState | undefined,
   );
 
+  useEffect(() => {
+    if (state?.redirectTo) {
+      window.location.assign(state.redirectTo);
+    }
+  }, [state]);
+
+  const busy = pending || Boolean(state?.redirectTo);
+
   return (
     <form className="auth-form" action={action}>
+      <input type="hidden" name="next" value={next} />
       <div className="field">
         <label htmlFor="email">Email</label>
         <input
@@ -40,8 +50,8 @@ export default function SignInForm() {
         )}
       </div>
       {state?.message && <p className="error">{state.message}</p>}
-      <button className="primary" type="submit" disabled={pending}>
-        {pending ? "Signing in…" : "Sign in"}
+      <button className="primary" type="submit" disabled={busy}>
+        {busy ? "Signing in…" : "Sign in"}
       </button>
       <p className="auth-switch">
         New here? <Link href="/signup">Create an account</Link>

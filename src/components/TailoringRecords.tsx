@@ -1,8 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { removeTailorRecord } from "@/app/actions/admin";
-import type { AdminTailorRecord } from "@/app/actions/admin";
+import {
+  clearUserTailorRecords,
+  removeTailorRecord,
+  type AdminTailorRecord,
+} from "@/app/actions/admin";
+import type { ConfirmRequest } from "@/components/MessageBox";
 
 function recordDate(value: string) {
   const date = new Date(value);
@@ -33,6 +37,10 @@ function formatTime(value: string) {
   });
 }
 
+function atsClass(score: number) {
+  return score >= 85 ? "high" : score >= 70 ? "mid" : "low";
+}
+
 type DayGroup = {
   key: string;
   records: AdminTailorRecord[];
@@ -40,16 +48,22 @@ type DayGroup = {
 
 export default function TailoringRecords({
   records,
+  profileName,
+  userId,
   busy,
   onBusy,
   onRecordsChange,
+  onConfirm,
 }: {
   records: AdminTailorRecord[];
+  profileName: string;
+  userId: string;
   busy: boolean;
-  onBusy: (label: string, work: () => Promise<void>) => Promise<void>;
+  onBusy: (label: string | null, work: () => Promise<void>) => Promise<void>;
   onRecordsChange: (
     update: (current: AdminTailorRecord[]) => AdminTailorRecord[],
   ) => void;
+  onConfirm: (request: ConfirmRequest) => void;
 }) {
   const [query, setQuery] = useState("");
   const [day, setDay] = useState("all");
@@ -67,7 +81,14 @@ export default function TailoringRecords({
       const key = recordDate(record.createdAt);
       if (selectedDay !== "all" && key !== selectedDay) return false;
       if (!needle) return true;
-      return [record.company, record.jobTitle, record.jobDescription, record.error]
+      return [
+        profileName,
+        record.company,
+        record.jobTitle,
+        record.jobDescription,
+        record.error,
+        record.extracted?.summary,
+      ]
         .join(" ")
         .toLowerCase()
         .includes(needle);
@@ -87,7 +108,39 @@ export default function TailoringRecords({
         key,
         records: items.sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
       })) satisfies DayGroup[];
-  }, [day, days, query, records]);
+  }, [day, days, profileName, query, records]);
+
+  function deleteRecord(record: AdminTailorRecord) {
+    onConfirm({
+      message: "Delete this tailoring record and its files?",
+      confirmLabel: "Delete",
+      work: () => {
+        void onBusy(null, async () => {
+          await removeTailorRecord(record.id);
+          onRecordsChange((current) =>
+            current.filter((entry) => entry.id !== record.id),
+          );
+          if (openId === record.id) setOpenId(null);
+        });
+      },
+    });
+  }
+
+  function clearAll() {
+    onConfirm({
+      message: "Delete all tailoring records for this user? This cannot be undone.",
+      confirmLabel: "Clear all",
+      work: () => {
+        void onBusy(null, async () => {
+          await clearUserTailorRecords(userId);
+          onRecordsChange((current) =>
+            current.filter((entry) => entry.userId !== userId),
+          );
+          setOpenId(null);
+        });
+      },
+    });
+  }
 
   return (
     <>
@@ -98,6 +151,14 @@ export default function TailoringRecords({
             This user’s generate history, grouped by date.
           </p>
         </div>
+        <button
+          type="button"
+          className="text-btn danger-btn"
+          disabled={busy || records.length === 0}
+          onClick={clearAll}
+        >
+          Clear all
+        </button>
       </div>
 
       <div className="field-grid">
@@ -123,7 +184,7 @@ export default function TailoringRecords({
             id="record-search"
             value={query}
             disabled={busy}
-            placeholder="Company, role, or JD text"
+            placeholder="Name, role, or JD text"
             onChange={(event) => setQuery(event.target.value)}
           />
         </div>
@@ -147,112 +208,58 @@ export default function TailoringRecords({
                   const open = openId === record.id;
                   return (
                     <li key={record.id} className="record-card">
-                      <div className="record-head">
-                        <div>
-                          <p className="record-title">
-                            {record.company || record.jobTitle
-                              ? `${record.company || "Unknown company"} · ${record.jobTitle || "Untitled role"}`
-                              : "Failed generate"}
-                          </p>
-                          <p className="record-meta">{formatTime(record.createdAt)}</p>
-                        </div>
-                        <span
-                          className={`record-status${
-                            record.status === "done"
-                              ? ""
-                              : " record-status-error"
-                          }`}
-                        >
-                          {record.status === "done"
-                            ? `ATS ${record.atsScore ?? "—"}/100`
-                            : "Failed"}
+                      <div className="record-row">
+                        <span className="record-name">
+                          {profileName || record.userName || "—"}
                         </span>
+                        <span className="record-role">
+                          {record.jobTitle || "—"}
+                        </span>
+                        <span className="record-time">
+                          {formatTime(record.createdAt) || "—"}
+                        </span>
+                        {record.status === "done" &&
+                        typeof record.atsScore === "number" ? (
+                          <span
+                            className={`ats-score ${atsClass(record.atsScore)}`}
+                          >
+                            ATS {record.atsScore}/100
+                          </span>
+                        ) : record.status === "done" ? (
+                          <span className="ats-score">ATS —/100</span>
+                        ) : (
+                          <span className="record-status record-status-error">
+                            Failed
+                          </span>
+                        )}
+                        <div className="record-row-actions">
+                          <button
+                            type="button"
+                            className="text-btn"
+                            disabled={busy}
+                            onClick={() => setOpenId(open ? null : record.id)}
+                          >
+                            {open ? "Hide summary" : "Summary"}
+                          </button>
+                          <button
+                            type="button"
+                            className="text-btn danger-btn"
+                            disabled={busy}
+                            onClick={() => deleteRecord(record)}
+                          >
+                            Delete
+                          </button>
+                        </div>
                       </div>
 
                       {record.error && <p className="error">{record.error}</p>}
 
-                      <div className="download-actions record-actions">
-                        <button
-                          type="button"
-                          className="text-btn"
-                          disabled={busy}
-                          onClick={() => setOpenId(open ? null : record.id)}
-                        >
-                          {open ? "Hide details" : "Details"}
-                        </button>
-                        {record.status === "done" &&
-                          record.folderName &&
-                          record.resumeDocxName && (
-                            <a
-                              className="download-btn"
-                              href={`/api/download?folder=${encodeURIComponent(record.folderName)}&name=${encodeURIComponent(record.resumeDocxName)}`}
-                            >
-                              Resume
-                            </a>
-                          )}
-                        {record.status === "done" &&
-                          record.folderName &&
-                          record.coverLetterDocxName && (
-                            <a
-                              className="download-btn"
-                              href={`/api/download?folder=${encodeURIComponent(record.folderName)}&name=${encodeURIComponent(record.coverLetterDocxName)}`}
-                            >
-                              Cover letter
-                            </a>
-                          )}
-                        {record.status === "done" && record.zipName && (
-                          <a
-                            className="download-btn"
-                            href={`/api/download?file=${encodeURIComponent(record.zipName)}`}
-                          >
-                            Zip
-                          </a>
-                        )}
-                        <button
-                          type="button"
-                          className="text-btn danger-btn"
-                          disabled={busy}
-                          onClick={() => {
-                            if (
-                              !window.confirm(
-                                "Delete this tailoring record and its files?",
-                              )
-                            ) {
-                              return;
-                            }
-                            void onBusy("Tailoring record deleted.", async () => {
-                              await removeTailorRecord(record.id);
-                              onRecordsChange((current) =>
-                                current.filter((entry) => entry.id !== record.id),
-                              );
-                              if (openId === record.id) setOpenId(null);
-                            });
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-
-                      {open && (
-                        <div className="record-details">
-                          {record.extracted && (
-                            <p className="hint">
-                              {record.extracted.summary}
-                              {record.extracted.hardTechnicalSkills.length
-                                ? ` Skills: ${record.extracted.hardTechnicalSkills.slice(0, 8).join(", ")}`
-                                : ""}
-                            </p>
-                          )}
-                          <label className="field">
-                            <span>Job description</span>
-                            <textarea
-                              readOnly
-                              value={record.jobDescription}
-                              rows={8}
-                            />
-                          </label>
-                        </div>
-                      )}
+                      {open ? (
+                        <p className="record-summary">
+                          {record.extracted?.summary?.trim() ||
+                            "No summary saved."}
+                        </p>
+                      ) : null}
                     </li>
                   );
                 })}

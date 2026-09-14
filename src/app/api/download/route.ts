@@ -3,8 +3,8 @@ import { createReadStream, existsSync } from "fs";
 import path from "path";
 import { Readable } from "stream";
 import { getOutputRoot } from "@/lib/package";
-import { getSession } from "@/app/actions/auth";
-import { findUserById, isAdminUser, isUserAble } from "@/lib/users";
+import { loadCurrentUser } from "@/lib/dal";
+import { isAdminUser } from "@/lib/users";
 import { findTailorRecordByOutput } from "@/lib/tailor-records";
 
 export const runtime = "nodejs";
@@ -49,15 +49,11 @@ function isSafeZipName(name: string): boolean {
 }
 
 export async function GET(request: Request) {
-  const session = await getSession();
-  if (!session) {
+  const current = await loadCurrentUser();
+  if (!current) {
     return NextResponse.json({ error: "Sign in required" }, { status: 401 });
   }
-
-  const user = await findUserById(session.userId);
-  if (!user || !isUserAble(user)) {
-    return NextResponse.json({ error: "Sign in required" }, { status: 401 });
-  }
+  const { user } = current;
   const admin = isAdminUser(user);
 
   const { searchParams } = new URL(request.url);
@@ -70,7 +66,11 @@ export async function GET(request: Request) {
     zipName,
     folderName: folder,
   });
-  if (record && !admin && record.userId !== session.userId) {
+  if (record) {
+    if (!admin && record.userId !== user.id) {
+      return NextResponse.json({ error: "File not found" }, { status: 404 });
+    }
+  } else if (!admin) {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
   }
 

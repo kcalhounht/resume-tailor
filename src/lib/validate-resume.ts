@@ -6,6 +6,11 @@ import type {
   TailoredResume,
 } from "./types";
 import { buildResumeHeadline } from "./headline";
+import {
+  alignExperienceYears,
+  summaryMentionsYears,
+  yearsOfExperienceFromProfile,
+} from "./experience-years";
 
 export interface ValidationIssue {
   level: "error" | "warning" | "fixed";
@@ -59,8 +64,80 @@ function collectMarkdownIssues(label: string, text: string): ValidationIssue[] {
   return issues;
 }
 
-function wordCount(text: string): number {
+export function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length;
+}
+
+const MIN_SUMMARY_WORDS = 91;
+
+function summaryExpansionParts(
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): string[] {
+  const years = yearsOfExperienceFromProfile(profile);
+  const role = extracted.jobTitle || extracted.type || "the target role";
+  const skills = extracted.hardTechnicalSkills.filter(Boolean).slice(0, 8);
+  const parts: string[] = [];
+
+  if (years) {
+    parts.push(
+      `Brings ${years} years of experience delivering production software for ${role}, with emphasis on reliability, delivery speed, and outcomes that match the job description.`,
+    );
+  }
+
+  parts.push(
+    `The professional focus is ${role} work involving ${
+      skills.join(", ") || "core engineering, analysis, and delivery practices"
+    } in a ${extracted.workMode || "flexible"} environment.`,
+  );
+
+  for (const exp of profile.experiences) {
+    if (!exp.company?.trim()) continue;
+    parts.push(
+      `At ${exp.company} as ${exp.title || "a contributor"} (${exp.period || "the listed period"}) in ${
+        exp.location || "a distributed setting"
+      }, owned feature delivery, technical execution, and partnership with stakeholders on business-critical workflows.`,
+    );
+  }
+
+  const education = profile.education.find((edu) => edu.school?.trim());
+  if (education) {
+    parts.push(
+      `Academic preparation includes ${education.degree || "study"} in ${
+        education.discipline || "the listed discipline"
+      } at ${education.school}.`,
+    );
+  }
+
+  parts.push(
+    `Day-to-day strengths include requirements analysis, iterative delivery, documentation, code quality, testing, and production support so hiring screens can match the full scope of this background to ${role}.`,
+  );
+
+  return parts;
+}
+
+function fillSummaryToMinWords(
+  summary: string,
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): { text: string; expanded: boolean } {
+  let text = sanitizePlainText(summary);
+  if (wordCount(text) >= MIN_SUMMARY_WORDS) {
+    return { text, expanded: false };
+  }
+
+  for (const part of summaryExpansionParts(profile, extracted)) {
+    if (wordCount(text) >= MIN_SUMMARY_WORDS) break;
+    text = text ? `${text} ${part}` : part;
+  }
+
+  let guard = 0;
+  while (wordCount(text) < MIN_SUMMARY_WORDS && guard < 8) {
+    text = `${text} Additional depth includes collaboration, operational support, and continuous improvement on production systems.`.trim();
+    guard += 1;
+  }
+
+  return { text: sanitizePlainText(text), expanded: true };
 }
 
 function hasUnrealisticPercent(text: string): boolean {
@@ -80,6 +157,141 @@ function sanitizeSkills(skills: SkillGroup[]): SkillGroup[] {
         .filter(Boolean),
     }))
     .filter((group) => group.category && group.items.length > 0);
+}
+
+const MIN_SKILL_ITEMS = 41;
+const MAX_SKILL_ITEMS = 49;
+const FILL_SKILL_ITEMS = 45;
+
+const FALLBACK_SKILL_ITEMS = [
+  "Agile",
+  "Scrum",
+  "Kanban",
+  "Git",
+  "GitHub",
+  "CI/CD",
+  "REST APIs",
+  "GraphQL",
+  "SQL",
+  "NoSQL",
+  "Unit Testing",
+  "Integration Testing",
+  "Code Review",
+  "Documentation",
+  "Debugging",
+  "Linux",
+  "Jira",
+  "Confluence",
+  "System Design",
+  "Monitoring",
+  "Troubleshooting",
+  "API Design",
+  "Data Modeling",
+  "Performance Tuning",
+  "Cloud Fundamentals",
+  "Python",
+  "JavaScript",
+  "TypeScript",
+  "Java",
+  "HTML",
+  "CSS",
+  "Docker",
+  "Kubernetes",
+  "AWS",
+  "Azure",
+  "PostgreSQL",
+  "Excel",
+  "Stakeholder Communication",
+  "Requirements Analysis",
+  "Sprint Planning",
+  "Incident Response",
+  "Root Cause Analysis",
+  "Test Automation",
+  "Object-Oriented Design",
+  "Data Visualization",
+  "ETL",
+  "Microservices",
+  "Security Basics",
+  "Accessibility",
+  "Cross-functional Collaboration",
+  "Mentoring",
+  "Technical Writing",
+  "Customer Support",
+  "Quality Assurance",
+  "Release Management",
+];
+
+function skillItemCount(groups: SkillGroup[]): number {
+  return groups.reduce((count, group) => count + group.items.length, 0);
+}
+
+function skillItemKey(item: string): string {
+  return item.trim().toLowerCase();
+}
+
+function fitSkillItemsToRange(
+  groups: SkillGroup[],
+  extracted: ExtractedJD,
+): { groups: SkillGroup[]; trimmed: boolean; filled: boolean } {
+  const seen = new Set<string>();
+  const next = groups
+    .map((group) => ({
+      category: group.category,
+      items: group.items.filter((item) => {
+        const key = skillItemKey(item);
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
+
+  let trimmed = false;
+  let filled = false;
+
+  if (skillItemCount(next) > MAX_SKILL_ITEMS) {
+    trimmed = true;
+    for (let i = next.length - 1; i >= 0 && skillItemCount(next) > MAX_SKILL_ITEMS; i -= 1) {
+      while (next[i].items.length && skillItemCount(next) > MAX_SKILL_ITEMS) {
+        const removed = next[i].items.pop();
+        if (removed) seen.delete(skillItemKey(removed));
+      }
+    }
+  }
+
+  const kept = next.filter((group) => group.items.length > 0);
+
+  if (skillItemCount(kept) < MIN_SKILL_ITEMS) {
+    filled = true;
+    let bucket = kept.find((group) =>
+      /technical|tools|core|practices/i.test(group.category),
+    );
+    if (!bucket) {
+      bucket = { category: "Tools/Practices", items: [] };
+      kept.push(bucket);
+    }
+    const extras = [
+      ...extracted.hardTechnicalSkills,
+      ...extracted.softSkills,
+      ...FALLBACK_SKILL_ITEMS,
+    ]
+      .map((item) => sanitizePlainText(String(item)))
+      .filter(Boolean);
+
+    for (const item of extras) {
+      if (skillItemCount(kept) >= FILL_SKILL_ITEMS) break;
+      const key = skillItemKey(item);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      bucket.items.push(item);
+    }
+  }
+
+  return {
+    groups: kept.filter((group) => group.items.length > 0),
+    trimmed,
+    filled,
+  };
 }
 
 /**
@@ -113,18 +325,66 @@ export function validateAndFixResume(
     resume.skills,
     resume.headline,
   );
-  const summary = sanitizePlainText(resume.summary);
-  const coverLetter = sanitizePlainText(tailored.coverLetter);
-  const skills = sanitizeSkills(resume.skills);
+  let summary = sanitizePlainText(resume.summary);
+  let coverLetter = sanitizePlainText(tailored.coverLetter);
+  let skills = sanitizeSkills(resume.skills);
+  const fittedSkills = fitSkillItemsToRange(skills, extracted);
+  skills = fittedSkills.groups;
+  if (fittedSkills.trimmed) {
+    issues.push({
+      level: "fixed",
+      message: "Trimmed skills to under 50 items across all groups.",
+    });
+  }
+  if (fittedSkills.filled) {
+    issues.push({
+      level: "fixed",
+      message: "Filled skills to more than 40 items across all groups.",
+    });
+  }
   const keywords = resume.keywords
     .map((k) => sanitizePlainText(k))
     .filter(Boolean);
 
-  if (!summary || wordCount(summary) < 20) {
+  const filledSummary = fillSummaryToMinWords(summary, profile, extracted);
+  summary = filledSummary.text;
+  if (filledSummary.expanded) {
+    issues.push({
+      level: "fixed",
+      message: "Expanded the summary to more than 90 words from the profile and job description.",
+    });
+  }
+  if (wordCount(summary) < MIN_SUMMARY_WORDS) {
     issues.push({
       level: "error",
-      message: "Summary is missing or too short.",
+      message: "Summary must be more than 90 words.",
     });
+  }
+
+  const yearsOfExperience = yearsOfExperienceFromProfile(profile);
+  if (yearsOfExperience) {
+    const alignedSummary = alignExperienceYears(summary, yearsOfExperience);
+    if (alignedSummary.changed) {
+      summary = alignedSummary.text;
+      issues.push({
+        level: "fixed",
+        message: `Corrected years of experience in the summary to ${yearsOfExperience} years from the profile.`,
+      });
+    } else if (!summaryMentionsYears(summary)) {
+      issues.push({
+        level: "error",
+        message: `Summary must include ${yearsOfExperience} years of experience from the profile.`,
+      });
+    }
+
+    const alignedCover = alignExperienceYears(coverLetter, yearsOfExperience);
+    if (alignedCover.changed) {
+      coverLetter = alignedCover.text;
+      issues.push({
+        level: "fixed",
+        message: `Corrected years of experience in the cover letter to ${yearsOfExperience} years from the profile.`,
+      });
+    }
   }
 
   if (!coverLetter || wordCount(coverLetter) < 40) {
@@ -138,6 +398,19 @@ export function validateAndFixResume(
     issues.push({
       level: "warning",
       message: "Skills should be grouped into at least 3 categories.",
+    });
+  }
+
+  const totalSkillItems = skillItemCount(skills);
+  if (totalSkillItems < MIN_SKILL_ITEMS) {
+    issues.push({
+      level: "error",
+      message: "Skills must include more than 40 and under 50 items across all groups.",
+    });
+  } else if (totalSkillItems > MAX_SKILL_ITEMS) {
+    issues.push({
+      level: "error",
+      message: "Skills must include more than 40 and under 50 items across all groups.",
     });
   }
 
@@ -247,14 +520,15 @@ export function validateAndFixResume(
 
   const education =
     Array.isArray(resume.education) && resume.education.length
-      ? resume.education.map((edu) => ({
+      ? resume.education.map((edu, index) => ({
+          id: edu.id || profile.education[index]?.id || profile.education[0]?.id || "",
           school: sanitizePlainText(edu.school) || profile.education[0]?.school || "",
+          discipline:
+            sanitizePlainText(edu.discipline) ||
+            profile.education[0]?.discipline ||
+            "",
           degree: sanitizePlainText(edu.degree) || profile.education[0]?.degree || "",
           period: sanitizePlainText(edu.period) || profile.education[0]?.period || "",
-          location:
-            sanitizePlainText(edu.location) ||
-            profile.education[0]?.location ||
-            "",
         }))
       : profile.education;
 
@@ -269,10 +543,11 @@ export function validateAndFixResume(
       });
     }
     return {
+      id: edu.id,
       school: edu.school,
+      discipline: edu.discipline,
       degree: generated.degree || edu.degree,
       period: edu.period,
-      location: edu.location,
     };
   });
 

@@ -1,21 +1,19 @@
 "use server";
 
 import { z } from "zod";
-import { requireAdmin } from "@/app/actions/auth";
+import { requireAdmin } from "@/lib/dal";
 import { hashPassword } from "@/lib/password";
-import { parseProfileDraft } from "@/lib/profile";
+import { parseProfileDraft, initializeProfileFromAccount } from "@/lib/profile";
 import { deleteJobOutput } from "@/lib/package";
 import {
   deleteTailorRecord,
   deleteTailorRecordsForUser,
-  listTailorRecords,
-  type TailorRecord,
 } from "@/lib/tailor-records";
 import {
   createUser,
   deleteUser,
-  listPublicUsers,
   profileFromUser,
+  findUserById,
   saveUserProfile,
   updateUserAccount,
   type PublicUser,
@@ -24,25 +22,7 @@ import {
 } from "@/lib/users";
 import type { CandidateProfile } from "@/lib/types";
 
-export type AdminTailorRecord = TailorRecord & {
-  userName: string;
-  userEmail: string;
-};
-
-async function toAdminRecords(
-  records: TailorRecord[],
-): Promise<AdminTailorRecord[]> {
-  const users = await listPublicUsers();
-  const byId = new Map(users.map((user) => [user.id, user]));
-  return records.map((record) => {
-    const user = byId.get(record.userId);
-    return {
-      ...record,
-      userName: user?.name || "Deleted user",
-      userEmail: user?.email || "",
-    };
-  });
-}
+export type { AdminTailorRecord } from "@/lib/admin-records";
 
 const accountSchema = z.object({
   name: z.string().trim().min(2, "Name must be at least 2 characters."),
@@ -138,11 +118,6 @@ export async function removeAccount(userId: string): Promise<void> {
   await deleteUser(userId);
 }
 
-export async function listAdminTailorRecords(): Promise<AdminTailorRecord[]> {
-  await requireAdmin();
-  return toAdminRecords(await listTailorRecords());
-}
-
 export async function removeTailorRecord(recordId: string): Promise<void> {
   await requireAdmin();
   const record = await deleteTailorRecord(recordId);
@@ -153,6 +128,19 @@ export async function removeTailorRecord(recordId: string): Promise<void> {
   });
 }
 
+export async function clearUserTailorRecords(userId: string): Promise<void> {
+  await requireAdmin();
+  const records = await deleteTailorRecordsForUser(userId);
+  await Promise.all(
+    records.map((record) =>
+      deleteJobOutput({
+        folderName: record.folderName,
+        zipName: record.zipName,
+      }),
+    ),
+  );
+}
+
 export async function saveAccountProfile(
   userId: string,
   profile: CandidateProfile,
@@ -161,5 +149,27 @@ export async function saveAccountProfile(
   const parsed = parseProfileDraft(profile);
   if (!parsed) throw new Error("Invalid profile.");
   await saveUserProfile(userId, parsed);
+}
+
+export async function initializeAccountProfile(
+  userId: string,
+): Promise<PublicUser> {
+  await requireAdmin();
+  const user = await findUserById(userId);
+  if (!user) throw new Error("Account not found.");
+  const profile = initializeProfileFromAccount({
+    name: user.name,
+    email: user.email,
+  });
+  await saveUserProfile(userId, profile);
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    priority: user.priority,
+    createdAt: user.createdAt,
+    profile,
+  };
 }
 

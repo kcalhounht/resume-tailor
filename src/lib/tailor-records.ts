@@ -2,7 +2,8 @@ import { mkdir, readFile, writeFile } from "fs/promises";
 import path from "path";
 import { randomUUID } from "crypto";
 import type { ExtractedJD } from "./types";
-import { asIsoDate, hasDatabase, withDatabase } from "./db";
+import { asIsoDate, accountsUseDatabase, withDatabase } from "./db";
+import { getDataRoot } from "./runtime";
 
 export type TailorRecordStatus = "done" | "error";
 
@@ -47,7 +48,7 @@ type RecordRow = {
 };
 
 function storePath() {
-  return path.join(process.cwd(), "data", "tailor-records.json");
+  return path.join(getDataRoot(), "tailor-records.json");
 }
 
 let queue: Promise<unknown> = Promise.resolve();
@@ -121,7 +122,7 @@ export async function addTailorRecord(
     createdAt: input.createdAt || new Date().toISOString(),
   };
 
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     await sql`
       INSERT INTO tailor_records (
@@ -158,7 +159,7 @@ export async function addTailorRecord(
 }
 
 export async function listTailorRecords(): Promise<TailorRecord[]> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const rows = (await sql`
       SELECT * FROM tailor_records ORDER BY created_at DESC
@@ -171,7 +172,7 @@ export async function listTailorRecords(): Promise<TailorRecord[]> {
 export async function listTailorRecordsForUser(
   userId: string,
 ): Promise<TailorRecord[]> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const rows = (await sql`
       SELECT * FROM tailor_records
@@ -189,7 +190,7 @@ export async function listTailorRecordsForUser(
 export async function findTailorRecordById(
   id: string,
 ): Promise<TailorRecord | null> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     const rows = (await sql`
       SELECT * FROM tailor_records WHERE id = ${id} LIMIT 1
@@ -204,7 +205,7 @@ export async function findTailorRecordByOutput(input: {
   zipName?: string | null;
   folderName?: string | null;
 }): Promise<TailorRecord | null> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const sql = await withDatabase();
     if (input.zipName) {
       const rows = (await sql`
@@ -237,7 +238,7 @@ export async function findTailorRecordByOutput(input: {
 }
 
 export async function deleteTailorRecord(id: string): Promise<TailorRecord | null> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const existing = await findTailorRecordById(id);
     if (!existing) return null;
     const sql = await withDatabase();
@@ -258,7 +259,7 @@ export async function deleteTailorRecord(id: string): Promise<TailorRecord | nul
 export async function deleteTailorRecordsForUser(
   userId: string,
 ): Promise<TailorRecord[]> {
-  if (hasDatabase()) {
+  if (await accountsUseDatabase()) {
     const removed = await listTailorRecordsForUser(userId);
     const sql = await withDatabase();
     await sql`DELETE FROM tailor_records WHERE user_id = ${userId}`;

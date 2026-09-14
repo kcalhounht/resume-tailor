@@ -1,0 +1,8 @@
+These TrueType files are bundled so generated PDFs and the Settings font
+previews can use the selected resume font.
+
+- Aptos substitute: Source Sans 3 (SIL Open Font License 1.1), Adobe
+- Calibri substitute: Carlito (SIL Open Font License 1.1), Google / tyPoland
+- Times substitute: Tinos (SIL Open Font License 1.1), Google / Steve Matteson
+- Georgia substitute: Gelasio (SIL Open Font License 1.1), Sorkin Type
+- Arial substitute: Arimo (SIL Open Font License 1.1), Google / Steve Matteson
