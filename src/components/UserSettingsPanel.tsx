@@ -10,6 +10,7 @@ import {
   resumeLook,
   RESUME_ACCENT_OPTIONS,
   RESUME_FONT_OPTIONS,
+  RESUME_KEYWORD_OPTIONS,
   RESUME_STYLE_OPTIONS,
   type ResumeAccent,
   type ResumeFont,
@@ -143,8 +144,8 @@ export function UserSettingsPanel({
         <div>
           <h2>Resume format</h2>
           <p className="hint">
-            Font, layout, and accent color for generated resumes and cover
-            letters. Changes apply to the next package you generate.
+            Font, layout, accent, and keyword emphasis for generated resumes
+            and cover letters. Changes apply to the next package you generate.
           </p>
         </div>
       </div>
@@ -177,8 +178,20 @@ export function UserSettingsPanel({
           Summary
         </p>
         <p className="format-preview-body">
-          {fontOption.name} · {styleOption.name} · {accentOption.name}. This is
-          how headings and body text will look in the generated resume.
+          {fontOption.name} · {styleOption.name} · {accentOption.name}. Sample
+          line with{" "}
+          <span style={{ fontWeight: resumeFormat.boldKeywords ? 700 : 400 }}>
+            AWS
+          </span>
+          ,{" "}
+          <span style={{ fontWeight: resumeFormat.boldKeywords ? 700 : 400 }}>
+            Kubernetes
+          </span>
+          , and{" "}
+          <span style={{ fontWeight: resumeFormat.boldKeywords ? 700 : 400 }}>
+            Terraform
+          </span>
+          .
         </p>
       </div>
 
@@ -255,6 +268,28 @@ export function UserSettingsPanel({
                   aria-hidden
                 />
                 <span className="format-option-name">{option.name}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="format-block">
+        <p className="format-label">Keyword emphasis</p>
+        <div className="format-options keyword-options">
+          {RESUME_KEYWORD_OPTIONS.map((option) => {
+            const active = resumeFormat.boldKeywords === option.id;
+            return (
+              <button
+                key={String(option.id)}
+                type="button"
+                className={`format-option${active ? " active" : ""}`}
+                disabled={busy || !canOperate}
+                aria-pressed={active}
+                onClick={() => saveResumePatch({ boldKeywords: option.id })}
+              >
+                <span className="format-option-name">{option.name}</span>
+                <span className="format-option-hint">{option.hint}</span>
               </button>
             );
           })}

@@ -14,6 +14,7 @@ export async function saveOwnResumeFormat(input: {
   font?: string;
   style?: string;
   accent?: string;
+  boldKeywords?: boolean;
 }): Promise<{ resumeFormat: ResumeFormat }> {
   const user = await requireAbleUser();
   const resumeFormat = await updateUserResumeFormat(

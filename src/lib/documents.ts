@@ -266,7 +266,7 @@ function runsFromText(
     (seg) =>
       new TextRun({
         text: seg.text,
-        bold: seg.bold,
+        bold: Boolean(look.boldKeywords && seg.bold),
         size,
         font: docxFont(look),
       }),
@@ -589,7 +589,7 @@ function drawSegmentedLine(
   segments.forEach((seg, i) => {
     doc
       .fillColor("#000000")
-      .font(seg.bold ? look.pdfBold : look.pdfRegular)
+      .font(look.boldKeywords && seg.bold ? look.pdfBold : look.pdfRegular)
       .fontSize(fontSize)
       .text(seg.text, {
         continued: i < segments.length - 1,

@@ -565,6 +565,10 @@ a {
   line-height: 1.35;
 }
 
+.keyword-options {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .format-swatch {
   display: block;
   width: 1.35rem;

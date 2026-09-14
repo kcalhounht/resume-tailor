@@ -63,6 +63,7 @@ export const tailorRequestSchema = z
         font: z.string().optional(),
         style: z.string().optional(),
         accent: z.string().optional(),
+        boldKeywords: z.boolean().optional(),
       })
       .optional(),
   })

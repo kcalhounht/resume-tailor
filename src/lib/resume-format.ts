@@ -28,12 +28,14 @@ export type ResumeFormat = {
   font: ResumeFont;
   style: ResumeLayoutStyle;
   accent: ResumeAccent;
+  boldKeywords: boolean;
 };
 
 export const DEFAULT_RESUME_FORMAT: ResumeFormat = {
   font: "aptos",
   style: "classic",
   accent: "navy",
+  boldKeywords: true,
 };
 
 export const RESUME_FONT_OPTIONS: Array<{
@@ -96,6 +98,15 @@ export const RESUME_ACCENT_OPTIONS: Array<{
   { id: "burgundy", name: "Burgundy", color: "#6B2D3C" },
 ];
 
+export const RESUME_KEYWORD_OPTIONS: Array<{
+  id: boolean;
+  name: string;
+  hint: string;
+}> = [
+  { id: true, name: "Bold", hint: "Emphasize JD keywords in body text" },
+  { id: false, name: "Plain", hint: "Keep body text the same weight" },
+];
+
 export type ResumeLook = {
   docxFont: string;
   pdfRegular: string;
@@ -121,6 +132,7 @@ export type ResumeLook = {
   headingRuleWidth: number;
   nameSpacing: number;
   sectionSpacing: number;
+  boldKeywords: boolean;
 };
 
 function asFont(value: unknown): ResumeFont {
@@ -139,6 +151,16 @@ function asAccent(value: unknown): ResumeAccent {
   return RESUME_ACCENT_IDS.includes(value as ResumeAccent)
     ? (value as ResumeAccent)
     : DEFAULT_RESUME_FORMAT.accent;
+}
+
+function asBoldKeywords(value: unknown): boolean {
+  if (value === false || value === "false" || value === 0 || value === "0") {
+    return false;
+  }
+  if (value === true || value === "true" || value === 1 || value === "1") {
+    return true;
+  }
+  return DEFAULT_RESUME_FORMAT.boldKeywords;
 }
 
 export const RESUME_FORMAT_COOKIE = "rt_resume_format";
@@ -169,6 +191,7 @@ export function parseResumeFormat(value: unknown): ResumeFormat {
     font: asFont(raw.font),
     style: asStyle(raw.style),
     accent: asAccent(raw.accent),
+    boldKeywords: asBoldKeywords(raw.boldKeywords),
   };
 }
 
@@ -248,5 +271,6 @@ export function resumeLook(format?: ResumeFormat | null): ResumeLook {
     headingRuleWidth: modern ? 8 : executive ? 6 : 12,
     nameSpacing: compact ? 40 : modern ? 80 : 60,
     sectionSpacing: compact ? 180 : modern ? 340 : 280,
+    boldKeywords: next.boldKeywords,
   };
 }
