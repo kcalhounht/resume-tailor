@@ -1,4 +1,4 @@
-import { existsSync } from "fs";
+import { existsSync, readFileSync } from "fs";
 import path from "path";
 import type { ResumeFont } from "./resume-format";
 
@@ -67,46 +67,92 @@ const BUILTIN: Record<
   },
 };
 
-const PROBE_FILES = [
-  "source-sans-3-regular.ttf",
-  "carlito-regular.ttf",
-  "arimo-regular.ttf",
-  "tinos-regular.ttf",
-  "gelasio-regular.ttf",
+/** Literal paths so Next.js file tracing always ships the TTF files. */
+const TRACED_FONT_PATHS = [
+  path.join(process.cwd(), "src/lib/fonts/arimo-bold.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/arimo-italic.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/arimo-regular.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/carlito-bold.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/carlito-italic.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/carlito-regular.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/gelasio-bold.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/gelasio-italic.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/gelasio-regular.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/source-sans-3-bold.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/source-sans-3-italic.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/source-sans-3-regular.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/tinos-bold.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/tinos-italic.ttf"),
+  path.join(process.cwd(), "src/lib/fonts/tinos-regular.ttf"),
 ];
 
-function fontsDir() {
-  const candidates = [
-    path.join(process.cwd(), "src/lib/fonts"),
-    path.join(process.cwd(), "lib/fonts"),
-    path.join(__dirname, "fonts"),
-  ];
-  return candidates.find((dir) =>
-    PROBE_FILES.some((file) => existsSync(path.join(dir, file))),
-  );
+function addFontDir(dirs: string[], seen: Set<string>, dir: string) {
+  const next = path.normalize(dir);
+  if (!next || seen.has(next)) return;
+  seen.add(next);
+  dirs.push(next);
+}
+
+export function resolveResumePdfFontsDir() {
+  const dirs: string[] = [];
+  const seen = new Set<string>();
+
+  addFontDir(dirs, seen, path.join(process.cwd(), "src/lib/fonts"));
+  addFontDir(dirs, seen, path.join(process.cwd(), "lib/fonts"));
+  addFontDir(dirs, seen, path.join(__dirname, "fonts"));
+  addFontDir(dirs, seen, "/var/task/src/lib/fonts");
+
+  let current = __dirname;
+  for (let i = 0; i < 12; i++) {
+    addFontDir(dirs, seen, path.join(current, "src/lib/fonts"));
+    addFontDir(dirs, seen, path.join(current, "lib/fonts"));
+    addFontDir(dirs, seen, path.join(current, "fonts"));
+    const parent = path.dirname(current);
+    if (parent === current) break;
+    current = parent;
+  }
+
+  for (const traced of TRACED_FONT_PATHS) {
+    addFontDir(dirs, seen, path.dirname(traced));
+  }
+
+  return dirs.find((dir) => existsSync(path.join(dir, "arimo-regular.ttf")));
+}
+
+function readFont(filePath: string) {
+  try {
+    if (!existsSync(filePath)) return null;
+    return readFileSync(filePath);
+  } catch {
+    return null;
+  }
 }
 
 export function registerResumePdfFonts(
   doc: PDFKit.PDFDocument,
   font: ResumeFont,
 ): { regular: string; bold: string; italic: string } {
-  const dir = fontsDir();
   const files = FONT_FILES[font];
-  if (!dir) return BUILTIN[font];
+  const dir = resolveResumePdfFontsDir();
+  if (!dir || !files) return BUILTIN[font];
 
-  const regular = path.join(dir, files.regular);
-  const bold = path.join(dir, files.bold);
-  const italic = path.join(dir, files.italic);
-  if (!existsSync(regular) || !existsSync(bold) || !existsSync(italic)) {
-    return BUILTIN[font];
-  }
+  const regular = readFont(path.join(dir, files.regular));
+  const bold = readFont(path.join(dir, files.bold));
+  const italic = readFont(path.join(dir, files.italic));
+  if (!regular || !bold || !italic) return BUILTIN[font];
 
   const regularName = `Resume-${font}-Regular`;
   const boldName = `Resume-${font}-Bold`;
   const italicName = `Resume-${font}-Italic`;
-  doc.registerFont(regularName, regular);
-  doc.registerFont(boldName, bold);
-  doc.registerFont(italicName, italic);
+  try {
+    doc.registerFont(regularName, regular);
+    doc.registerFont(boldName, bold);
+    doc.registerFont(italicName, italic);
+    doc.font(regularName);
+  } catch {
+    return BUILTIN[font];
+  }
+
   return {
     regular: regularName,
     bold: boldName,

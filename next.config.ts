@@ -11,9 +11,9 @@ const nextConfig: NextConfig = {
     "unpdf",
   ],
   outputFileTracingIncludes: {
-    "/api/tailor": ["./src/lib/fonts/**/*"],
-    "/api/*": ["./src/lib/fonts/**/*"],
-    "/*": ["./src/lib/fonts/**/*"],
+    "/api/tailor": ["src/lib/fonts/**/*.ttf", "./src/lib/fonts/**/*"],
+    "/api/*": ["src/lib/fonts/**/*.ttf", "./src/lib/fonts/**/*"],
+    "/*": ["src/lib/fonts/**/*.ttf", "./src/lib/fonts/**/*"],
   },
   experimental: {
     serverActions: {
