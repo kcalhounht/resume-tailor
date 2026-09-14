@@ -73,9 +73,64 @@ function emailHref(email: string): string {
   return `mailto:${email}`;
 }
 
-function contactSeparator(look: ResumeLook) {
+type ContactPart = { label: string; href?: string };
+
+function packContactLines<T extends { label: string }>(
+  parts: T[],
+  maxWidth: number,
+  measure: (text: string) => number,
+  sep: string,
+): T[][] {
+  if (!parts.length) return [];
+  const sepWidth = measure(sep);
+  const lines: T[][] = [];
+  let line: T[] = [];
+  let width = 0;
+  for (const part of parts) {
+    const partWidth = Math.max(measure(part.label), 1);
+    const needed = line.length ? sepWidth + partWidth : partWidth;
+    if (line.length && width + needed > maxWidth) {
+      lines.push(line);
+      line = [part];
+      width = partWidth;
+    } else {
+      line.push(part);
+      width += needed;
+    }
+  }
+  if (line.length) lines.push(line);
+  return lines;
+}
+
+function contactPartsFromPersonal(personal: PersonalInfo): ContactPart[] {
+  const parts: ContactPart[] = [];
+  if (personal.phone) {
+    parts.push({ label: personal.phone, href: phoneHref(personal.phone) });
+  }
+  if (personal.email) {
+    parts.push({ label: personal.email, href: emailHref(personal.email) });
+  }
+  if (personal.linkedin) {
+    parts.push({
+      label: linkedInDisplay(personal.linkedin),
+      href: linkedInHref(personal.linkedin),
+    });
+  }
+  if (personal.portfolio) {
+    parts.push({
+      label: websiteDisplay(personal.portfolio),
+      href: linkedInHref(personal.portfolio),
+    });
+  }
+  if (personal.location) {
+    parts.push({ label: personal.location });
+  }
+  return parts;
+}
+
+function contactSeparator(look: ResumeLook, text = "  ·  ") {
   return new TextRun({
-    text: "  ·  ",
+    text,
     size: look.contactSize,
     font: docxFont(look),
     color: look.muted,
@@ -116,53 +171,38 @@ function headingLabel(text: string, look: ResumeLook) {
   return look.headingAllCaps ? text.toUpperCase() : text;
 }
 
+function contactLineChildren(
+  parts: ContactPart[],
+  look: ResumeLook,
+  sep: string,
+) {
+  const children: Array<TextRun | ExternalHyperlink> = [];
+  for (const part of parts) {
+    if (children.length) children.push(contactSeparator(look, sep));
+    children.push(
+      part.href
+        ? hyperlinkRun(part.label, part.href, look)
+        : plainContactRun(part.label, look),
+    );
+  }
+  return children;
+}
+
 function buildResumeHeader(
   personal: PersonalInfo,
   headline: string | undefined,
   look: ResumeLook,
 ): Paragraph[] {
-  const contactChildren: Array<TextRun | ExternalHyperlink> = [];
-
-  const pushSep = () => {
-    if (contactChildren.length) contactChildren.push(contactSeparator(look));
-  };
-
-  if (personal.phone) {
-    pushSep();
-    contactChildren.push(
-      hyperlinkRun(personal.phone, phoneHref(personal.phone), look),
-    );
-  }
-  if (personal.email) {
-    pushSep();
-    contactChildren.push(
-      hyperlinkRun(personal.email, emailHref(personal.email), look),
-    );
-  }
-  if (personal.linkedin) {
-    pushSep();
-    contactChildren.push(
-      hyperlinkRun(
-        linkedInDisplay(personal.linkedin),
-        linkedInHref(personal.linkedin),
-        look,
-      ),
-    );
-  }
-  if (personal.portfolio) {
-    pushSep();
-    contactChildren.push(
-      hyperlinkRun(
-        websiteDisplay(personal.portfolio),
-        linkedInHref(personal.portfolio),
-        look,
-      ),
-    );
-  }
-  if (personal.location) {
-    pushSep();
-    contactChildren.push(plainContactRun(personal.location, look));
-  }
+  const sep = "  ·  ";
+  const usableTwip = 12240 - 2 * look.marginTwip - 160;
+  const charTwip = Math.max(80, look.contactSize * 5);
+  const packed = packContactLines(
+    contactPartsFromPersonal(personal),
+    usableTwip,
+    (text) => text.length * charTwip,
+    sep,
+  );
+  const contactLines = packed.length ? packed : [[]];
 
   return [
     new Paragraph({
@@ -195,18 +235,23 @@ function buildResumeHeader(
           }),
         ]
       : []),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      spacing: { after: 160 },
-      border: {
-        bottom: {
-          style: BorderStyle.SINGLE,
-          size: 12,
-          color: look.accent,
-          space: 10,
-        },
-      },
-      children: contactChildren,
+    ...contactLines.map((line, index) => {
+      const last = index === contactLines.length - 1;
+      return new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { after: last ? 160 : 40 },
+        border: last
+          ? {
+              bottom: {
+                style: BorderStyle.SINGLE,
+                size: 12,
+                color: look.accent,
+                space: 10,
+              },
+            }
+          : undefined,
+        children: contactLineChildren(line, look, sep),
+      });
     }),
   ];
 }
@@ -561,54 +606,68 @@ function drawPdfContactLine(
   const left = doc.page.margins.left;
   const usableWidth =
     doc.page.width - doc.page.margins.left - doc.page.margins.right;
-  const y = Number.isFinite(doc.y) ? doc.y : doc.page.margins.top + 40;
+  let y = Number.isFinite(doc.y) ? doc.y : doc.page.margins.top + 40;
   const sep = " | ";
   const accent = `#${look.accent}`;
+  const muted = `#${look.muted}`;
+  const lineHeight = look.pdfMetaSize + 3;
 
   doc.font(look.pdfRegular).fontSize(look.pdfMetaSize);
-  const full = parts.map((p) => p.label).join(sep);
-  let fullWidth = 0;
-  try {
-    fullWidth = doc.widthOfString(full);
-  } catch {
-    fullWidth = 0;
-  }
-  if (!Number.isFinite(fullWidth)) fullWidth = 0;
 
-  let x = left + Math.max(0, (usableWidth - fullWidth) / 2);
+  const measure = (text: string) => {
+    try {
+      const width = doc.widthOfString(text);
+      return Number.isFinite(width)
+        ? width
+        : text.length * look.pdfMetaSize * 0.5;
+    } catch {
+      return text.length * look.pdfMetaSize * 0.5;
+    }
+  };
 
-  if (!Number.isFinite(x) || !Number.isFinite(y) || !parts.length) {
+  if (!Number.isFinite(y) || !parts.length) {
     doc.x = left;
     doc.y = Number.isFinite(y) ? y : 80;
-    doc.fillColor(`#${look.muted}`).text(full || " ", {
-      width: usableWidth,
-      align: "center",
-    });
+    doc.fillColor(muted).text(" ", { width: usableWidth, align: "center" });
     return;
   }
 
-  for (let i = 0; i < parts.length; i++) {
-    if (i > 0) {
-      const sepWidth = doc.widthOfString(sep);
-      doc.fillColor(`#${look.muted}`).text(sep, x, y, { lineBreak: false });
-      x += sepWidth;
+  const maxWidth = Math.max(120, usableWidth - 8);
+  const lines = packContactLines(parts, maxWidth, measure, sep);
+
+  for (const line of lines) {
+    const full = line.map((part) => part.label).join(sep);
+    const fullWidth = measure(full);
+    if (fullWidth <= usableWidth) {
+      let x = left + Math.max(0, (usableWidth - fullWidth) / 2);
+      for (let i = 0; i < line.length; i++) {
+        if (i > 0) {
+          const sepWidth = measure(sep);
+          doc.fillColor(muted).text(sep, x, y, { lineBreak: false });
+          x += sepWidth;
+        }
+        const part = line[i];
+        const width = measure(part.label);
+        doc
+          .fillColor(part.href ? accent : muted)
+          .text(part.label, x, y, { lineBreak: false });
+        if (part.href && Number.isFinite(x) && Number.isFinite(width)) {
+          doc.link(x, y - 1, width, look.pdfMetaSize + 2, part.href);
+        }
+        x += width;
+      }
+      y += lineHeight;
+    } else {
+      doc.fillColor(muted).text(full, left, y, {
+        width: usableWidth,
+        align: "center",
+      });
+      y = Number.isFinite(doc.y) ? doc.y + 2 : y + lineHeight;
     }
-
-    const part = parts[i];
-    const width = doc.widthOfString(part.label);
-    doc
-      .fillColor(part.href ? accent : `#${look.muted}`)
-      .text(part.label, x, y, { lineBreak: false });
-
-    if (part.href && Number.isFinite(x) && Number.isFinite(width)) {
-      doc.link(x, y - 1, width, 12, part.href);
-    }
-
-    x += width;
   }
 
   doc.x = left;
-  doc.y = y + 14;
+  doc.y = y;
 }
 
 export async function buildResumePdf(
@@ -661,36 +720,7 @@ export async function buildResumePdf(
     }
     doc.moveDown(0.3);
 
-    const contactParts: Array<{ label: string; href?: string }> = [];
-    if (personal.phone) {
-      contactParts.push({
-        label: personal.phone,
-        href: phoneHref(personal.phone),
-      });
-    }
-    if (personal.email) {
-      contactParts.push({
-        label: personal.email,
-        href: emailHref(personal.email),
-      });
-    }
-    if (personal.linkedin) {
-      contactParts.push({
-        label: linkedInDisplay(personal.linkedin),
-        href: linkedInHref(personal.linkedin),
-      });
-    }
-    if (personal.portfolio) {
-      contactParts.push({
-        label: websiteDisplay(personal.portfolio),
-        href: linkedInHref(personal.portfolio),
-      });
-    }
-    if (personal.location) {
-      contactParts.push({ label: personal.location });
-    }
-
-    drawPdfContactLine(doc, contactParts, look);
+    drawPdfContactLine(doc, contactPartsFromPersonal(personal), look);
 
     const lineY = Number.isFinite(doc.y) ? doc.y + 2 : 90;
     doc
