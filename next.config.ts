@@ -20,6 +20,19 @@ const nextConfig: NextConfig = {
       bodySizeLimit: "5mb",
     },
   },
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "frame-ancestors 'self' chrome-extension:",
+          },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -34,6 +34,7 @@ async function registerAppContentScript(appUrl) {
       js: ["content-app.js"],
       matches: [`${origin}/*`],
       runAt: "document_idle",
+      allFrames: true,
       persistAcrossSessions: true,
     },
   ]);
@@ -77,55 +78,41 @@ function sameOrigin(url, origin) {
   }
 }
 
-async function openApp(appUrl) {
-  const origin = new URL(appUrl).origin;
-  const existing = (
-    await Promise.all(
-      originAliases(origin).map((alias) => chrome.tabs.query({ url: `${alias}/*` })),
-    )
-  ).flat();
-  let appTab = existing.find((tab) => tab.id) || null;
+async function getActiveJobTab() {
+  const [focused] = await chrome.tabs.query({
+    active: true,
+    lastFocusedWindow: true,
+  });
+  if (focused?.id) return focused;
+  const [current] = await chrome.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+  return current;
+}
 
-  const inject = (tabId) =>
-    chrome.scripting
-      .executeScript({
-        target: { tabId },
-        files: ["content-app.js"],
-      })
-      .catch(() => {});
-
-  if (appTab?.id) {
-    await chrome.tabs.update(appTab.id, { active: true });
-    if (appTab.windowId != null) {
-      await chrome.windows.update(appTab.windowId, { focused: true });
-    }
-    inject(appTab.id);
-  } else {
-    appTab = await chrome.tabs.create({ url: `${origin}/` });
-    if (appTab.id) inject(appTab.id);
-  }
-
-  const targetId = appTab?.id;
-  if (!targetId) return;
-
-  const onUpdated = (tabId, info) => {
-    if (tabId !== targetId || info.status !== "complete") return;
-    inject(tabId);
-  };
-  chrome.tabs.onUpdated.addListener(onUpdated);
-  setTimeout(
-    () => chrome.tabs.onUpdated.removeListener(onUpdated),
-    5 * 60 * 1000,
-  );
+async function enableSidePanel() {
+  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+  await chrome.sidePanel.setOptions({
+    path: "sidepanel.html",
+    enabled: true,
+  });
 }
 
 chrome.runtime.onInstalled.addListener(async () => {
+  await enableSidePanel().catch(() => {});
   try {
     await registerAppContentScript(await getAppUrl());
   } catch {
     // permission for a custom host may not be granted yet
   }
 });
+
+chrome.runtime.onStartup.addListener(() => {
+  enableSidePanel().catch(() => {});
+});
+
+enableSidePanel().catch(() => {});
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "sync" || !changes.appUrl) return;
@@ -135,18 +122,30 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  if (message?.type === "resume-tailor:active-tab") {
+    (async () => {
+      const tab = await getActiveJobTab();
+      sendResponse({
+        ok: Boolean(tab?.id),
+        title: tab?.title || "",
+        url: tab?.url || "",
+      });
+    })();
+    return true;
+  }
+
   if (message?.type !== "resume-tailor:capture") return;
   (async () => {
     try {
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true,
-      });
+      const tab = await getActiveJobTab();
       if (!tab?.id) throw new Error("No active tab.");
 
       const appUrl = await getAppUrl();
       if (tab.url && sameOrigin(tab.url, appUrl)) {
-        throw new Error("Open a job posting, then send it from there.");
+        throw new Error("Open a job posting, then capture it from there.");
+      }
+      if (tab.url && !/^https?:/i.test(tab.url)) {
+        throw new Error("Open a regular web page, then capture that tab.");
       }
 
       const results = await chrome.scripting.executeScript({
@@ -165,8 +164,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       } catch {
         // localhost is already in the manifest
       }
-      await openApp(appUrl);
-      sendResponse({ ok: true });
+      sendResponse({ ok: true, text });
     } catch (err) {
       sendResponse({
         ok: false,

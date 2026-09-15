@@ -36,7 +36,7 @@ import {
   EXTENSION_APP_MESSAGE_SOURCE,
   EXTENSION_JD_CONSUMED_TYPE,
   EXTENSION_JD_STORAGE_KEY,
-  jobDescriptionFromExtensionMessage,
+  isTrustedExtensionJobEvent,
 } from "@/lib/extension-jd";
 
 type StepStatus = "pending" | "active" | "done" | "error";
@@ -343,9 +343,7 @@ export default function ResumeForm({
     }
 
     function onMessage(event: MessageEvent) {
-      if (event.origin !== window.location.origin) return;
-      if (event.source !== window) return;
-      const text = jobDescriptionFromExtensionMessage(event.data);
+      const text = isTrustedExtensionJobEvent(event);
       if (!text) return;
       if (applyIncomingJob(text)) ackConsumed();
     }

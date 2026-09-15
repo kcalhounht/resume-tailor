@@ -11,3 +11,19 @@ export function jobDescriptionFromExtensionMessage(data: unknown): string {
   if (payload.type !== EXTENSION_JD_MESSAGE_TYPE) return "";
   return typeof payload.text === "string" ? payload.text : "";
 }
+
+export function isTrustedExtensionJobEvent(event: MessageEvent): string {
+  const text = jobDescriptionFromExtensionMessage(event.data);
+  if (!text) return "";
+  if (event.origin === window.location.origin && event.source === window) {
+    return text;
+  }
+  if (
+    event.source === window.parent &&
+    typeof event.origin === "string" &&
+    event.origin.startsWith("chrome-extension:")
+  ) {
+    return text;
+  }
+  return "";
+}
