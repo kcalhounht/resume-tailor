@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
   "name": "Resume Tailor",
-  "version": "1.4.2",
-  "description": "Dock Resume Tailor in Chrome’s right side panel, like Acrobat, and send a job from any tab.",
+  "version": "1.5.0",
+  "description": "Add Resume Tailor to Chrome, then click its toolbar icon to dock the app on the right.",
   "action": {
-    "default_title": "Resume Tailor",
+    "default_title": "Open Resume Tailor on the right",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
