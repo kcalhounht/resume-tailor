@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Resume Tailor</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        font-family: "Segoe UI", sans-serif;
+      }
+      body {
+        margin: 0;
+        width: 280px;
+        padding: 14px;
+        background: #151b18;
+        color: #e8eee9;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 15px;
+      }
+      p {
+        margin: 0 0 12px;
+        color: #93a399;
+        font-size: 12px;
+        line-height: 1.4;
+      }
+      button {
+        width: 100%;
+        border: 0;
+        padding: 8px 10px;
+        background: #3ecf8e;
+        color: #04140c;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+      }
+      .error {
+        margin-top: 10px;
+        color: #f07178;
+        font-size: 12px;
+      }
+      a {
+        color: #3ecf8e;
+        font-size: 12px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Resume Tailor</h1>
+    <p>
+      Capture the job posting on this page and open Generate resume.
+    </p>
+    <button id="capture" type="button">Send job to Resume Tailor</button>
+    <p id="status" class="error" hidden></p>
+    <p><a id="options" href="#">Set your Resume Tailor site</a></p>
+    <script src="popup.js"></script>
+  </body>
+</html>

@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useMemo, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   JOB_STEPS,
   JOB_STEP_LABELS,
@@ -32,6 +32,12 @@ import {
   DEFAULT_RESUME_FORMAT,
   type ResumeFormat,
 } from "@/lib/resume-format";
+import {
+  EXTENSION_APP_MESSAGE_SOURCE,
+  EXTENSION_JD_CONSUMED_TYPE,
+  EXTENSION_JD_STORAGE_KEY,
+  jobDescriptionFromExtensionMessage,
+} from "@/lib/extension-jd";
 
 type StepStatus = "pending" | "active" | "done" | "error";
 
@@ -304,6 +310,50 @@ export default function ResumeForm({
     [jobEntries],
   );
   const profileReady = isProfileReady(profile);
+
+  useEffect(() => {
+    function applyIncomingJob(text: string) {
+      const next = text.trim();
+      if (!next) return false;
+      setJobTexts([{ id: crypto.randomUUID(), text: next }]);
+      setTab("generate");
+      setError(null);
+      return true;
+    }
+
+    function ackConsumed() {
+      window.postMessage(
+        {
+          source: EXTENSION_APP_MESSAGE_SOURCE,
+          type: EXTENSION_JD_CONSUMED_TYPE,
+        },
+        window.location.origin,
+      );
+    }
+
+    function consumeStoredJob() {
+      try {
+        const stored = sessionStorage.getItem(EXTENSION_JD_STORAGE_KEY);
+        if (!stored) return;
+        sessionStorage.removeItem(EXTENSION_JD_STORAGE_KEY);
+        if (applyIncomingJob(stored)) ackConsumed();
+      } catch {
+        // sessionStorage can be blocked
+      }
+    }
+
+    function onMessage(event: MessageEvent) {
+      if (event.origin !== window.location.origin) return;
+      if (event.source !== window) return;
+      const text = jobDescriptionFromExtensionMessage(event.data);
+      if (!text) return;
+      if (applyIncomingJob(text)) ackConsumed();
+    }
+
+    consumeStoredJob();
+    window.addEventListener("message", onMessage);
+    return () => window.removeEventListener("message", onMessage);
+  }, []);
 
   function showIncompleteProfile(message = REQUIRED_PROFILE_MESSAGE) {
     setShowProfileErrors(true);
@@ -767,6 +817,7 @@ export default function ResumeForm({
               </div>
               <textarea
                 id={`jd-${job.id}`}
+                data-resume-tailor-jd=""
                 rows={8}
                 defaultValue={job.text}
                 onChange={(e) => setJobText(slot, e.target.value)}

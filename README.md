@@ -73,3 +73,18 @@ Each completed job shows an ATS score (/100) in the UI.
 Document files use `Resume-{FirstName}` / `Coverletter-{FirstName}`.
 Zip files are named `{Company}-{Role}.zip`.
 Download links appear after processing.
+
+## Browser extension
+
+The `extension/` folder is a Chrome/Edge (Manifest V3) add-on. It copies a job posting from the current tab and opens **Generate resume** with that text filled in.
+
+### Install (unpacked)
+
+1. Run the app (`npm run dev`) or use your deployed site.
+2. Open `chrome://extensions` (Edge: `edge://extensions`).
+3. Turn on **Developer mode**.
+4. Click **Load unpacked** and choose this repo’s `extension/` folder.
+5. Pin **Resume Tailor**. Optionally open the extension options and set your site URL (default `http://localhost:3000`). For a Vercel or other HTTPS URL, accept the permission prompt so the extension can open that origin.
+6. On a job posting, click **Send job to Resume Tailor**. Sign in if asked — the captured description stays until the Generate tab receives it.
+
+If you highlight text first, that selection is used. Otherwise the extension looks for common job-description containers (LinkedIn, Indeed, and similar), then falls back to the page text.
