@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useActionState } from "react";
 import { signup, type AuthFormState } from "@/app/actions/auth";
-import { OpenSidePanelButton } from "@/components/OpenSidePanelButton";
 
 export default function SignUpForm() {
   const [state, action, pending] = useActionState(
@@ -21,7 +20,6 @@ export default function SignUpForm() {
   const busy = pending || Boolean(state?.redirectTo);
 
   return (
-    <>
     <form className="auth-form" action={action}>
       <div className="field">
         <label htmlFor="name">Name</label>
@@ -87,8 +85,9 @@ export default function SignUpForm() {
       <p className="auth-switch">
         Already have an account? <Link href="/signin">Sign in</Link>
       </p>
+      <p className="auth-switch">
+        <Link href="/extension">Send a job from any tab</Link>
+      </p>
     </form>
-    <OpenSidePanelButton />
-    </>
   );
 }

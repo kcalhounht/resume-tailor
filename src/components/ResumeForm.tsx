@@ -37,6 +37,7 @@ import {
   EXTENSION_JD_CONSUMED_TYPE,
   EXTENSION_JD_STORAGE_KEY,
   isTrustedExtensionJobEvent,
+  takeJobDescriptionFromHash,
 } from "@/lib/extension-jd";
 
 type StepStatus = "pending" | "active" | "done" | "error";
@@ -332,6 +333,8 @@ export default function ResumeForm({
     }
 
     function consumeStoredJob() {
+      const fromHash = takeJobDescriptionFromHash();
+      if (fromHash && applyIncomingJob(fromHash)) ackConsumed();
       try {
         const stored = sessionStorage.getItem(EXTENSION_JD_STORAGE_KEY);
         if (!stored) return;

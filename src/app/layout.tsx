@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import "./globals.css";
 import type { Metadata } from "next";
 import { PAGE_STYLE_COOKIE, parsePageStyle } from "@/lib/appearance";
+import { CaptureIncomingJob } from "@/components/CaptureIncomingJob";
 import { EmbedFrame } from "@/components/EmbedFrame";
 
 const display = Source_Serif_4({
@@ -40,6 +41,7 @@ export default async function RootLayout({
     >
       <body className="min-h-full">
         <EmbedFrame />
+        <CaptureIncomingJob />
         {children}
       </body>
     </html>

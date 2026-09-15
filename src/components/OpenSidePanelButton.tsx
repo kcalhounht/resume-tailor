@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MessageBox } from "@/components/MessageBox";
+import { openAppOnTheRight } from "@/lib/bookmarklet";
 import {
   EXTENSION_APP_MESSAGE_SOURCE,
   EXTENSION_AVAILABLE_TYPE,
@@ -9,26 +10,13 @@ import {
   EXTENSION_OPEN_PANEL_TYPE,
   EXTENSION_PING_TYPE,
   EXTENSION_SIDE_PANEL_RESULT_TYPE,
-  INSTALL_SIDE_PANEL_MESSAGE,
 } from "@/lib/extension-jd";
-
-const STORE_URL = process.env.NEXT_PUBLIC_CHROME_WEBSTORE_URL?.trim() || "";
-const ZIP_URL = "/resume-tailor-extension.zip";
 
 function postToExtension(type: string) {
   window.postMessage(
     { source: EXTENSION_APP_MESSAGE_SOURCE, type },
     window.location.origin,
   );
-}
-
-function downloadExtensionZip() {
-  const link = document.createElement("a");
-  link.href = ZIP_URL;
-  link.download = "resume-tailor-extension.zip";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
 }
 
 export function OpenSidePanelButton({
@@ -62,7 +50,7 @@ export function OpenSidePanelButton({
         setMessage(
           typeof payload.error === "string"
             ? payload.error
-            : INSTALL_SIDE_PANEL_MESSAGE,
+            : "Could not open the side panel.",
         );
       }
     }
@@ -80,29 +68,18 @@ export function OpenSidePanelButton({
       postToExtension(EXTENSION_OPEN_PANEL_TYPE);
       return;
     }
-    if (STORE_URL) {
-      window.location.assign(STORE_URL);
-      return;
+    if (!openAppOnTheRight()) {
+      setMessage("Allow popups, then click Open on the right again.");
     }
-    downloadExtensionZip();
-    setMessage(INSTALL_SIDE_PANEL_MESSAGE);
   }
 
   return (
     <>
       <button type="button" className={className} onClick={onClick}>
-        {installed ? "Open in side panel" : "Add Chrome extension"}
+        {installed ? "Open in side panel" : "Open on the right"}
       </button>
       {message ? (
-        <MessageBox
-          message={message}
-          confirmLabel="Download again"
-          onConfirm={() => {
-            downloadExtensionZip();
-            setMessage(null);
-          }}
-          onClose={() => setMessage(null)}
-        />
+        <MessageBox message={message} onClose={() => setMessage(null)} />
       ) : null}
     </>
   );

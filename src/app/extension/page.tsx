@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-const STORE_URL = process.env.NEXT_PUBLIC_CHROME_WEBSTORE_URL?.trim() || "";
+import { CaptureBookmarklet } from "@/components/CaptureBookmarklet";
+import { OpenSidePanelButton } from "@/components/OpenSidePanelButton";
 
 export const dynamic = "force-dynamic";
 
@@ -11,50 +11,35 @@ export default function ExtensionInstallPage() {
       <main className="auth-main">
         <div className="auth-card install-card">
           <p className="brand">Resume Tailor</p>
-          <h1>Add the Chrome extension</h1>
+          <h1>Use it beside any job tab</h1>
           <p className="hint">
-            Chrome cannot install an extension from this website in one click
-            unless it is listed in the Chrome Web Store. Until then, download
-            the zip and load it unpacked.
+            Chrome will not let a website install an extension, and most people
+            cannot turn on Developer mode. Drag this bookmark instead.
           </p>
-
-          {STORE_URL ? (
-            <p>
-              <a className="primary install-store-btn" href={STORE_URL}>
-                Add to Chrome
-              </a>
-            </p>
-          ) : null}
-
-          <p>
-            <a
-              className={
-                STORE_URL ? "text-btn" : "primary install-store-btn"
-              }
-              href="/resume-tailor-extension.zip"
-              download
-            >
-              Download extension zip
-            </a>
-          </p>
-
-          <h2>Then load it</h2>
+          <CaptureBookmarklet className="primary install-store-btn bookmarklet-btn" />
           <ol className="install-steps">
-            <li>Unzip <code>resume-tailor-extension.zip</code>.</li>
             <li>
-              In the address bar open <code>chrome://extensions</code> (Edge:{" "}
-              <code>edge://extensions</code>).
-            </li>
-            <li>Turn on <strong>Developer mode</strong>.</li>
-            <li>
-              Click <strong>Load unpacked</strong> and select the unzipped
-              folder (the one that contains <code>manifest.json</code>).
+              Show the bookmarks bar (<code>Ctrl+Shift+B</code> or{" "}
+              <code>⌘+Shift+B</code>).
             </li>
             <li>
-              Return here and click <strong>Open in side panel</strong>.
+              Drag <strong>Send job to Resume Tailor</strong> onto that bar.
+            </li>
+            <li>
+              Open a job posting, then click the bookmark. Resume Tailor opens
+              on the right with the posting filled in. Allow popups if asked.
             </li>
           </ol>
-
+          <p className="hint">
+            Try it on a{" "}
+            <Link href="/extension/sample">sample job posting</Link> after you
+            add the bookmark.
+          </p>
+          <p className="hint">
+            Already signed in? <strong>Open on the right</strong> puts this app
+            in a side window.
+          </p>
+          <OpenSidePanelButton className="side-panel-btn" />
           <p className="auth-switch">
             <Link href="/signin">Back to sign in</Link>
           </p>

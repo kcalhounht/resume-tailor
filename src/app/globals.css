@@ -382,7 +382,8 @@ html[data-embed="1"] .auth-main {
   color: var(--on-accent);
 }
 
-html[data-embed="1"] .side-panel-btn {
+html[data-embed="1"] .side-panel-btn,
+html[data-embed="1"] .bookmarklet-btn {
   display: none;
 }
 
@@ -390,6 +391,20 @@ html[data-embed="1"] .side-panel-btn {
   width: 100%;
   margin-top: 0.85rem;
   padding: 0.55rem 0.75rem;
+}
+
+.bookmarklet-btn {
+  cursor: grab;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.auth-card .bookmarklet-btn {
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 0.85rem;
 }
 
 .auth-main {
@@ -443,6 +458,38 @@ html[data-embed="1"] .side-panel-btn {
   text-decoration: none;
   margin-top: 0.75rem;
   padding: 0.55rem 0.9rem;
+}
+
+.sample-job {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem;
+}
+
+.sample-job-kicker {
+  margin: 0 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.sample-job h1 {
+  margin: 0 0 0.75rem;
+  font-family: var(--font-display);
+  font-size: 1.85rem;
+}
+
+.sample-job h2 {
+  margin: 1.4rem 0 0.45rem;
+  font-size: 1.05rem;
+}
+
+.sample-job .job-description {
+  margin-top: 1.25rem;
+  padding: 1rem 1.05rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, black);
 }
 
 .auth-form {

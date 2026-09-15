@@ -1,12 +1,16 @@
 # Resume Tailor extension
 
-Chrome/Edge Manifest V3 extension that keeps Resume Tailor in the **right side panel** and sends the current tab’s job posting into **Generate resume**.
+Chrome/Edge Manifest V3 add-on that keeps Resume Tailor in the **right side panel** and sends the current tab’s job posting into **Generate resume**.
 
-## For everyone (Vercel / production)
+## For everyone
 
-Do **not** ask people to Load unpacked. Publish once to the [Chrome Web Store](STORE.md). Users then click **Add to Chrome**.
+Do **not** ask people to download a zip or Load unpacked. They cannot enable Developer mode on most machines.
 
-Until the listing is live, testers can download the zip from `/api/extension/zip` and Load unpacked themselves.
+Ship the in-app bookmark instead: `/extension` → drag **Send job to Resume Tailor** onto the bookmarks bar. That path does not need this folder.
+
+## Optional store listing
+
+If you want a real Chrome side panel, publish this folder once. See [STORE.md](STORE.md). Until a listing exists, only developers should load this unpacked.
 
 ## Developer load unpacked
 

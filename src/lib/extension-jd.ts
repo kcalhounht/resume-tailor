@@ -8,9 +8,7 @@ export const EXTENSION_PING_TYPE = "resume-tailor:ping";
 export const EXTENSION_OPEN_PANEL_TYPE = "resume-tailor:open-side-panel";
 export const EXTENSION_SIDE_PANEL_RESULT_TYPE =
   "resume-tailor:side-panel-result";
-
-export const INSTALL_SIDE_PANEL_MESSAGE =
-  "Chrome is downloading resume-tailor-extension.zip. Unzip it, go to chrome://extensions, turn on Developer mode, click Load unpacked, and choose that unzipped folder. Then click this button again to dock the app on the right.";
+export const EXTENSION_JD_HASH_PREFIX = "rtjd=";
 
 export function jobDescriptionFromExtensionMessage(data: unknown): string {
   if (!data || typeof data !== "object") return "";
@@ -33,5 +31,43 @@ export function isTrustedExtensionJobEvent(event: MessageEvent): string {
   ) {
     return text;
   }
+  if (typeof window !== "undefined" && window.opener && event.source === window.opener) {
+    return text;
+  }
+  if (
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("ext")
+  ) {
+    return text;
+  }
   return "";
+}
+
+export function takeJobDescriptionFromHash(): string {
+  if (typeof window === "undefined") return "";
+  const raw = window.location.hash.replace(/^#/, "");
+  if (!raw.startsWith(EXTENSION_JD_HASH_PREFIX)) return "";
+  try {
+    const text = decodeURIComponent(
+      raw.slice(EXTENSION_JD_HASH_PREFIX.length),
+    ).trim();
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
+    return text;
+  } catch {
+    return "";
+  }
+}
+
+export function storeIncomingJobDescription(text: string) {
+  const next = text.trim();
+  if (!next) return;
+  try {
+    sessionStorage.setItem(EXTENSION_JD_STORAGE_KEY, next);
+  } catch {
+    // sessionStorage can be blocked
+  }
 }

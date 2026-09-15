@@ -74,25 +74,18 @@ Document files use `Resume-{FirstName}` / `Coverletter-{FirstName}`.
 Zip files are named `{Company}-{Role}.zip`.
 Download links appear after processing.
 
-## Browser extension
+## Send a job from any tab
 
-The `extension/` folder is a Chrome/Edge add-on. It docks Resume Tailor on the **right** so people can capture a job from any tab into **Generate resume**.
+Chrome will not let this site install an add-on, and most people cannot Load unpacked. Use a bookmark instead — no Developer mode.
 
-Most users **cannot Load unpacked** until you publish to the Chrome Web Store. Until that listing exists, **Add Chrome extension** downloads a zip so you can Load unpacked yourself.
+1. Open `/extension` on your live site.
+2. Show the bookmarks bar (`Ctrl+Shift+B` / `⌘+Shift+B`).
+3. Drag **Send job to Resume Tailor** onto the bar.
+4. On a job posting, click that bookmark. Resume Tailor opens on the right and fills **Generate resume**. Allow popups if the browser asks.
 
-### Publish for your users
+Signed-in users can also drag **Add job bookmark** from the header, or click **Open on the right** for a side window of the app.
 
-1. `npm run extension:zip`
-2. Upload `resume-tailor-extension.zip` in the [Chrome Web Store developer dashboard](https://chrome.google.com/webstore/devconsole) (see `extension/STORE.md`).
-3. Set Vercel env `NEXT_PUBLIC_CHROME_WEBSTORE_URL` to the listing URL.
-4. Redeploy. Visitors click **Add Chrome extension**, then **Open in side panel**. The extension detects your Vercel origin automatically.
+### Optional Chrome extension
 
-Privacy policy URL for the store: `https://your-app.vercel.app/privacy`.
+The `extension/` folder is a Manifest V3 add-on with a real side panel. That path only works after you publish to the Chrome Web Store (see `extension/STORE.md`) or load it unpacked yourself for development. Do not ask end users to Load unpacked.
 
-### Developer / tester (unpacked)
-
-1. `chrome://extensions` → Developer mode → Load unpacked → `extension/`
-2. Open the app and click **Open in side panel**
-3. On a job posting, click **Use this tab**
-
-If you highlight text first, that selection is used. Otherwise the extension looks for common job-description containers (LinkedIn, Indeed, and similar), then falls back to the page text.
