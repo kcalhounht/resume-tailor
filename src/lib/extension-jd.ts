@@ -10,7 +10,7 @@ export const EXTENSION_SIDE_PANEL_RESULT_TYPE =
   "resume-tailor:side-panel-result";
 
 export const INSTALL_SIDE_PANEL_MESSAGE =
-  "Install the Resume Tailor browser extension, then click Open in side panel again. In Chrome or Edge: open chrome://extensions (or edge://extensions), turn on Developer mode, Load unpacked, and choose this project’s extension folder. The app will dock on the right so you can capture a job from any tab.";
+  "Load the Resume Tailor extension, point it at this site, then click Open in side panel again. Chrome/Edge: chrome://extensions → Developer mode → Load unpacked → this project’s extension folder. If you use Vercel, open the extension side panel, paste your https://…vercel.app URL next to Save site, then try the button again.";
 
 export function jobDescriptionFromExtensionMessage(data: unknown): string {
   if (!data || typeof data !== "object") return "";
