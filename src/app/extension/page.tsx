@@ -1,6 +1,6 @@
 import Link from "next/link";
-
-const STORE_URL = process.env.NEXT_PUBLIC_CHROME_WEBSTORE_URL?.trim() || "";
+import { CaptureBookmarklet } from "@/components/CaptureBookmarklet";
+import { OpenSidePanelButton } from "@/components/OpenSidePanelButton";
 
 export const dynamic = "force-dynamic";
 
@@ -11,59 +11,35 @@ export default function ExtensionInstallPage() {
       <main className="auth-main">
         <div className="auth-card install-card">
           <p className="brand">Resume Tailor</p>
-          <h1>Add the Chrome extension</h1>
+          <h1>Use it beside any job tab</h1>
           <p className="hint">
-            Regular users should install from the Chrome Web Store. Chrome does
-            not let a website load an unpacked folder for everyone.
+            Chrome will not let a website install an extension, and most people
+            cannot turn on Developer mode. Drag this bookmark instead.
           </p>
-
-          {STORE_URL ? (
-            <p>
-              <a className="primary install-store-btn" href={STORE_URL}>
-                Add to Chrome
-              </a>
-            </p>
-          ) : (
-            <p className="hint">
-              The store listing is not linked yet. After the site owner publishes
-              the extension, this page will show an <strong>Add to Chrome</strong>{" "}
-              button.
-            </p>
-          )}
-
-          <h2>If you run this site</h2>
+          <CaptureBookmarklet className="primary install-store-btn bookmarklet-btn" />
           <ol className="install-steps">
             <li>
-              Zip the extension: <code>npm run extension:zip</code>
+              Show the bookmarks bar (<code>Ctrl+Shift+B</code> or{" "}
+              <code>⌘+Shift+B</code>).
             </li>
             <li>
-              Open the{" "}
-              <a href="https://chrome.google.com/webstore/devconsole">
-                Chrome Web Store developer dashboard
-              </a>{" "}
-              (one-time developer fee).
+              Drag <strong>Send job to Resume Tailor</strong> onto that bar.
             </li>
             <li>
-              Upload <code>resume-tailor-extension.zip</code>, submit for review,
-              and set the item visibility to public or unlisted.
-            </li>
-            <li>
-              On Vercel, set{" "}
-              <code>NEXT_PUBLIC_CHROME_WEBSTORE_URL</code> to the listing URL.
-              Users then click <strong>Add to Chrome</strong> and{" "}
-              <strong>Open in side panel</strong>.
+              Open a job posting, then click the bookmark. Resume Tailor opens
+              on the right with the posting filled in. Allow popups if asked.
             </li>
           </ol>
-
-          <h2>Tester fallback</h2>
           <p className="hint">
-            Load unpacked still works for you, but most people cannot use it.
-            Testers can{" "}
-            <a href="/api/extension/zip">download the zip</a>, unzip it, then
-            on <code>chrome://extensions</code> enable Developer mode and Load
-            unpacked.
+            Try it on a{" "}
+            <Link href="/extension/sample">sample job posting</Link> after you
+            add the bookmark.
           </p>
-
+          <p className="hint">
+            Already signed in? <strong>Open on the right</strong> puts this app
+            in a side window.
+          </p>
+          <OpenSidePanelButton className="side-panel-btn" />
           <p className="auth-switch">
             <Link href="/signin">Back to sign in</Link>
           </p>

@@ -8,9 +8,7 @@ export const EXTENSION_PING_TYPE = "resume-tailor:ping";
 export const EXTENSION_OPEN_PANEL_TYPE = "resume-tailor:open-side-panel";
 export const EXTENSION_SIDE_PANEL_RESULT_TYPE =
   "resume-tailor:side-panel-result";
-
-export const INSTALL_SIDE_PANEL_MESSAGE =
-  "Install the Resume Tailor Chrome extension from the Chrome Web Store (or the Install instructions page). Chrome does not allow most people to Load unpacked. After it is installed, this button docks the app on the right so you can capture a job from any tab.";
+export const EXTENSION_JD_HASH_PREFIX = "rtjd=";
 
 export function jobDescriptionFromExtensionMessage(data: unknown): string {
   if (!data || typeof data !== "object") return "";
@@ -33,5 +31,48 @@ export function isTrustedExtensionJobEvent(event: MessageEvent): string {
   ) {
     return text;
   }
+  if (typeof window !== "undefined" && window.opener && event.source === window.opener) {
+    return text;
+  }
+  if (
+    typeof window !== "undefined" &&
+    new URLSearchParams(window.location.search).has("ext")
+  ) {
+    return text;
+  }
   return "";
+}
+
+export function takeJobDescriptionFromHash(): string {
+  if (typeof window === "undefined") return "";
+  const raw = window.location.hash.replace(/^#/, "");
+  if (!raw.startsWith(EXTENSION_JD_HASH_PREFIX)) return "";
+  let text = "";
+  try {
+    text = decodeURIComponent(
+      raw.slice(EXTENSION_JD_HASH_PREFIX.length),
+    ).trim();
+  } catch {
+    return "";
+  }
+  try {
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}${window.location.search}`,
+    );
+  } catch {
+    // Very long hashes can fail history.replaceState; the text is still usable.
+  }
+  return text;
+}
+
+export function storeIncomingJobDescription(text: string) {
+  const next = text.trim();
+  if (!next) return;
+  try {
+    sessionStorage.setItem(EXTENSION_JD_STORAGE_KEY, next);
+  } catch {
+    // sessionStorage can be blocked
+  }
 }

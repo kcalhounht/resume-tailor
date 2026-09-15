@@ -4,7 +4,6 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useActionState } from "react";
 import { signin, type AuthFormState } from "@/app/actions/auth";
-import { OpenSidePanelButton } from "@/components/OpenSidePanelButton";
 
 export default function SignInForm({ next = "/" }: { next?: string }) {
   const [state, action, pending] = useActionState(
@@ -21,7 +20,6 @@ export default function SignInForm({ next = "/" }: { next?: string }) {
   const busy = pending || Boolean(state?.redirectTo);
 
   return (
-    <>
     <form className="auth-form" action={action}>
       <input type="hidden" name="next" value={next} />
       <div className="field">
@@ -58,8 +56,9 @@ export default function SignInForm({ next = "/" }: { next?: string }) {
       <p className="auth-switch">
         New here? <Link href="/signup">Create an account</Link>
       </p>
+      <p className="auth-switch">
+        <Link href="/extension">Send a job from any tab</Link>
+      </p>
     </form>
-    <OpenSidePanelButton />
-    </>
   );
 }
