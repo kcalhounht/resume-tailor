@@ -116,7 +116,7 @@ function summaryExpansionParts(
   return parts;
 }
 
-function fillSummaryToMinWords(
+export function fillSummaryToMinWords(
   summary: string,
   profile: CandidateProfile,
   extracted: ExtractedJD,
@@ -138,6 +138,50 @@ function fillSummaryToMinWords(
   }
 
   return { text: sanitizePlainText(text), expanded: true };
+}
+
+const MIN_COVER_LETTER_WORDS = 40;
+
+export function fillCoverLetter(
+  coverLetter: string,
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): { text: string; filled: boolean } {
+  let text = sanitizePlainText(coverLetter);
+  if (wordCount(text) >= MIN_COVER_LETTER_WORDS) {
+    return { text, filled: false };
+  }
+
+  const years = yearsOfExperienceFromProfile(profile);
+  const name = profile.personal.name.trim() || "the candidate";
+  const role = extracted.jobTitle || extracted.type || "this role";
+  const company = extracted.company || "your team";
+  const skills =
+    extracted.hardTechnicalSkills.filter(Boolean).slice(0, 6).join(", ") ||
+    "the skills in this posting";
+  const latest = profile.experiences.find((exp) => exp.company.trim());
+  const yearsPhrase = years
+    ? `${years} years of experience`
+    : "hands-on experience";
+
+  const paragraphs = [
+    `Dear Hiring Manager,\n\nI am writing to apply for the ${role} position at ${company}. I bring ${yearsPhrase} delivering production work in ${extracted.type || "this field"}, with a focus on ${skills}.`,
+    latest
+      ? `Most recently at ${latest.company} as ${latest.title || "a contributor"} (${latest.period || "the listed period"}), I delivered production software, partnered with stakeholders, and owned outcomes that map closely to this ${role} posting.`
+      : `I have delivered production software, partnered with stakeholders, and owned technical outcomes that map closely to this ${role} posting.`,
+    `I would welcome the chance to contribute to ${company} as a ${role} and can discuss how this background supports the team's delivery, reliability, and hiring-bar needs.\n\nSincerely,\n${name}`,
+  ];
+
+  text = text ? `${text}\n\n${paragraphs.join("\n\n")}` : paragraphs.join("\n\n");
+  text = sanitizePlainText(text);
+
+  let guard = 0;
+  while (wordCount(text) < MIN_COVER_LETTER_WORDS && guard < 6) {
+    text = `${text} I am ready to contribute on delivery, documentation, testing, and production support for ${company}.`.trim();
+    guard += 1;
+  }
+
+  return { text: sanitizePlainText(text), filled: true };
 }
 
 function hasUnrealisticPercent(text: string): boolean {
@@ -387,7 +431,15 @@ export function validateAndFixResume(
     }
   }
 
-  if (!coverLetter || wordCount(coverLetter) < 40) {
+  const filledCover = fillCoverLetter(coverLetter, profile, extracted);
+  coverLetter = filledCover.text;
+  if (filledCover.filled) {
+    issues.push({
+      level: "fixed",
+      message: "Filled a missing or short cover letter from the profile and job description.",
+    });
+  }
+  if (!coverLetter || wordCount(coverLetter) < MIN_COVER_LETTER_WORDS) {
     issues.push({
       level: "error",
       message: "Cover letter is missing or too short.",
