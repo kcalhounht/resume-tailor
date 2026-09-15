@@ -47,19 +47,24 @@ export function takeJobDescriptionFromHash(): string {
   if (typeof window === "undefined") return "";
   const raw = window.location.hash.replace(/^#/, "");
   if (!raw.startsWith(EXTENSION_JD_HASH_PREFIX)) return "";
+  let text = "";
   try {
-    const text = decodeURIComponent(
+    text = decodeURIComponent(
       raw.slice(EXTENSION_JD_HASH_PREFIX.length),
     ).trim();
+  } catch {
+    return "";
+  }
+  try {
     window.history.replaceState(
       null,
       "",
       `${window.location.pathname}${window.location.search}`,
     );
-    return text;
   } catch {
-    return "";
+    // Very long hashes can fail history.replaceState; the text is still usable.
   }
+  return text;
 }
 
 export function storeIncomingJobDescription(text: string) {

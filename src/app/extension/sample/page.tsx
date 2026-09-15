@@ -4,13 +4,13 @@ export default function SampleJobPage() {
   return (
     <main className="sample-job">
       <p className="sample-job-kicker">Sample posting</p>
-      <h1>Senior Software Engineer</h1>
-      <p>
-        Acme Health is hiring a Senior Software Engineer to build ATS-friendly
-        hiring tools. Use the <strong>Send job to Resume Tailor</strong> bookmark
-        on this page to try capturing a posting — no Chrome Developer mode.
-      </p>
       <article className="job-description" id="job-details">
+        <h1>Senior Software Engineer</h1>
+        <p>
+          Acme Health is hiring a Senior Software Engineer to build ATS-friendly
+          hiring tools. Use the <strong>Send job to Resume Tailor</strong>{" "}
+          bookmark on this page to try capturing a posting.
+        </p>
         <h2>About the role</h2>
         <p>
           You will own end-to-end features in a Next.js app: job capture, resume
@@ -31,7 +31,10 @@ export default function SampleJobPage() {
           <li>5+ years building web applications</li>
           <li>Strong TypeScript and React</li>
           <li>Experience with document generation or hiring products</li>
-          <li>Comfortable debugging browser popups, session storage, and postMessage</li>
+          <li>
+            Comfortable debugging browser popups, session storage, and
+            postMessage
+          </li>
         </ul>
       </article>
     </main>
