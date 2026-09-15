@@ -95,6 +95,17 @@ async function getActiveJobTab() {
   return current;
 }
 
+function openPanelForTab(tab) {
+  if (!tab) return;
+  if (tab.id != null) {
+    chrome.sidePanel.open({ tabId: tab.id });
+    return;
+  }
+  if (tab.windowId != null) {
+    chrome.sidePanel.open({ windowId: tab.windowId });
+  }
+}
+
 async function enableSidePanel() {
   await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   await chrome.sidePanel.setOptions({
@@ -103,12 +114,15 @@ async function enableSidePanel() {
   });
 }
 
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   await enableSidePanel().catch(() => {});
   try {
     await registerAppContentScript(await getAppUrl());
   } catch {
     // permission for a custom host may not be granted yet
+  }
+  if (details.reason === "install") {
+    chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
   }
 });
 
@@ -117,6 +131,11 @@ chrome.runtime.onStartup.addListener(() => {
 });
 
 enableSidePanel().catch(() => {});
+
+// If setPanelBehavior is not in effect, clicking the toolbar avatar still docks the panel.
+chrome.action.onClicked.addListener((tab) => {
+  openPanelForTab(tab);
+});
 
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "sync" || !changes.appUrl) return;

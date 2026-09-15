@@ -1,5 +1,5 @@
 import SignOutButton from "@/components/SignOutButton";
-import { OpenSidePanelButton } from "@/components/OpenSidePanelButton";
+import { ChromeExtensionCta } from "@/components/ChromeExtensionCta";
 import { CaptureBookmarklet } from "@/components/CaptureBookmarklet";
 import { PageStyleSync } from "@/components/PageStyleSync";
 import {
@@ -56,7 +56,7 @@ export default function SiteHeader({
           <p className="session-email">{email}</p>
           <div className="session-actions">
             <CaptureBookmarklet>Add job bookmark</CaptureBookmarklet>
-            <OpenSidePanelButton />
+            <ChromeExtensionCta />
             <NavItem href="/" current={current === "home"}>
               Home
             </NavItem>
