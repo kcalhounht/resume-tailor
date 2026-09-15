@@ -40,10 +40,49 @@ function consumePending(stored) {
   if (typeof text === "string" && text.trim()) deliver(text);
 }
 
+function announce() {
+  window.postMessage(
+    {
+      source: "resume-tailor-extension",
+      type: "resume-tailor:available",
+    },
+    window.location.origin,
+  );
+}
+
+function openSidePanel() {
+  chrome.runtime.sendMessage(
+    { type: "resume-tailor:open-side-panel" },
+    (response) => {
+      window.postMessage(
+        {
+          source: "resume-tailor-extension",
+          type: "resume-tailor:side-panel-result",
+          ok: Boolean(response?.ok),
+          error: response?.error,
+        },
+        window.location.origin,
+      );
+    },
+  );
+}
+
 chrome.storage.sync.get({ appUrl: DEFAULT_APP_URL }, ({ appUrl }) => {
   if (!isAppOrigin(window.location.origin, appUrl)) return;
 
+  announce();
   chrome.storage.local.get(PENDING_JD_KEY, consumePending);
+
+  document.addEventListener(
+    "click",
+    (event) => {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      if (!target.closest(".side-panel-btn")) return;
+      openSidePanel();
+    },
+    true,
+  );
 
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== "local" || !changes[PENDING_JD_KEY]) return;
@@ -55,11 +94,17 @@ chrome.storage.sync.get({ appUrl: DEFAULT_APP_URL }, ({ appUrl }) => {
     if (event.origin !== window.location.origin) return;
     if (event.source !== window) return;
     const data = event.data;
-    if (
-      data?.source === "resume-tailor-app" &&
-      data?.type === "resume-tailor:jd-consumed"
-    ) {
+    if (data?.source !== "resume-tailor-app") return;
+    if (data?.type === "resume-tailor:jd-consumed") {
       chrome.storage.local.remove(PENDING_JD_KEY);
+      return;
+    }
+    if (data?.type === "resume-tailor:ping") {
+      announce();
+      return;
+    }
+    if (data?.type === "resume-tailor:open-side-panel") {
+      openSidePanel();
     }
   });
 });

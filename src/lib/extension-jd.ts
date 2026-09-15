@@ -3,6 +3,14 @@ export const EXTENSION_JD_MESSAGE_SOURCE = "resume-tailor-extension";
 export const EXTENSION_JD_MESSAGE_TYPE = "resume-tailor:job-description";
 export const EXTENSION_APP_MESSAGE_SOURCE = "resume-tailor-app";
 export const EXTENSION_JD_CONSUMED_TYPE = "resume-tailor:jd-consumed";
+export const EXTENSION_AVAILABLE_TYPE = "resume-tailor:available";
+export const EXTENSION_PING_TYPE = "resume-tailor:ping";
+export const EXTENSION_OPEN_PANEL_TYPE = "resume-tailor:open-side-panel";
+export const EXTENSION_SIDE_PANEL_RESULT_TYPE =
+  "resume-tailor:side-panel-result";
+
+export const INSTALL_SIDE_PANEL_MESSAGE =
+  "Install the Resume Tailor browser extension, then click Open in side panel again. In Chrome or Edge: open chrome://extensions (or edge://extensions), turn on Developer mode, Load unpacked, and choose this project’s extension folder. The app will dock on the right so you can capture a job from any tab.";
 
 export function jobDescriptionFromExtensionMessage(data: unknown): string {
   if (!data || typeof data !== "object") return "";

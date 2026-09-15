@@ -367,6 +367,31 @@ html[data-embed="1"] .auth-main {
   margin: 0;
 }
 
+.side-panel-btn {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border: 1px solid var(--accent-deep);
+  padding: 0.35rem 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.side-panel-btn:hover {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+html[data-embed="1"] .side-panel-btn {
+  display: none;
+}
+
+.auth-card .side-panel-btn {
+  width: 100%;
+  margin-top: 0.85rem;
+  padding: 0.55rem 0.75rem;
+}
+
 .auth-main {
   position: relative;
   z-index: 1;
