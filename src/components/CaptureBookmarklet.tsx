@@ -5,7 +5,7 @@ import { MessageBox } from "@/components/MessageBox";
 import { buildCaptureBookmarklet } from "@/lib/bookmarklet";
 
 const DRAG_HINT =
-  "Drag this button onto your bookmarks bar. Then open a job posting and click the bookmark — Resume Tailor opens on the right with that job filled in.";
+  "Drag this button onto your bookmarks bar. Then open a job posting and click the bookmark — Resume Tailor opens with that job filled in. Ad blockers often stop pop-up windows, so this opens a normal tab (or this tab) instead.";
 
 export function CaptureBookmarklet({
   className = "side-panel-btn bookmarklet-btn",

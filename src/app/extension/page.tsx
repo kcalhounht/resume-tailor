@@ -14,7 +14,9 @@ export default function ExtensionInstallPage() {
           <h1>Use it beside any job tab</h1>
           <p className="hint">
             Chrome will not let a website install an extension, and most people
-            cannot turn on Developer mode. Drag this bookmark instead.
+            cannot turn on Developer mode. Drag this bookmark instead. It does
+            not use a pop-up window, so uBlock, Adblock, and similar tools
+            leave it alone.
           </p>
           <CaptureBookmarklet className="primary install-store-btn bookmarklet-btn" />
           <ol className="install-steps">
@@ -27,7 +29,9 @@ export default function ExtensionInstallPage() {
             </li>
             <li>
               Open a job posting, then click the bookmark. Resume Tailor opens
-              on the right with the posting filled in. Allow popups if asked.
+              in a tab with the posting filled in. If a blocker still stops the
+              extra tab, this page becomes Resume Tailor — use Back to return
+              to the job.
             </li>
           </ol>
           <p className="hint">
@@ -36,8 +40,9 @@ export default function ExtensionInstallPage() {
             add the bookmark.
           </p>
           <p className="hint">
-            Already signed in? <strong>Open on the right</strong> puts this app
-            in a side window.
+            Already signed in? <strong>Open on the right</strong> uses the
+            Chrome side panel when the optional extension is present; otherwise
+            it opens a tab (not a pop-up).
           </p>
           <OpenSidePanelButton className="side-panel-btn" />
           <p className="auth-switch">

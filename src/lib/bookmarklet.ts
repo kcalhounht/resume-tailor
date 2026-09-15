@@ -1,4 +1,13 @@
-const HASH_BUDGET = 6000;
+/** Ad blockers treat window.open(..., "popup=1,width=...") as an ad. A named tab is allowed. */
+function openResumeTailorTab(url: string) {
+  try {
+    const tab = window.open(url, "resume-tailor");
+    if (tab) return tab;
+  } catch {
+    // uBlock / Adblock Plus / Chrome popup blocker
+  }
+  return null;
+}
 
 export function buildCaptureBookmarklet(appOrigin: string): string {
   const origin = new URL(appOrigin).origin;
@@ -18,11 +27,11 @@ if(x&&x.length>=M){t=x.slice(0,5e4);break}
 if(t.length<M)t=String(document.body&&document.body.innerText||"").trim().slice(0,5e4);
 if(t.length<M){alert("Select the job description, then click the bookmark again.");return}
 try{sessionStorage.setItem("rt_extension_jd",t)}catch(e){}
-var left=Math.max(0,(screen.availLeft||0)+screen.availWidth-460);
 var url=A+"/?ext=1";
-try{var encoded=encodeURIComponent(t);if(encoded.length<${HASH_BUDGET})url+="#rtjd="+encoded}catch(e){}
-var w=window.open(url,"resume-tailor","popup=1,width=440,height=900,left="+left+",top=0");
-if(!w){alert("Allow popups for Resume Tailor, then click the bookmark again.");return}
+try{url+="#rtjd="+encodeURIComponent(t)}catch(e){}
+var w=null;
+try{w=window.open(url,"resume-tailor")}catch(e){}
+if(!w){location.assign(url);return}
 var p={source:"resume-tailor-extension",type:"resume-tailor:job-description",text:t};
 var n=0;
 var i=setInterval(function(){try{w.postMessage(p,A)}catch(e){}if(++n>50)clearInterval(i)},300);
@@ -32,15 +41,8 @@ var i=setInterval(function(){try{w.postMessage(p,A)}catch(e){}if(++n>50)clearInt
 
 export function openAppOnTheRight(appOrigin = window.location.origin) {
   const origin = new URL(appOrigin).origin;
-  const screenWithOrigin = window.screen as Screen & { availLeft?: number };
-  const left = Math.max(
-    0,
-    (screenWithOrigin.availLeft || 0) + window.screen.availWidth - 460,
-  );
-  const popup = window.open(
-    `${origin}/?ext=1`,
-    "resume-tailor",
-    `popup=1,width=440,height=900,left=${left},top=0`,
-  );
-  return Boolean(popup);
+  const url = `${origin}/?ext=1`;
+  if (openResumeTailorTab(url)) return true;
+  window.location.assign(url);
+  return true;
 }

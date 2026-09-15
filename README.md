@@ -81,7 +81,7 @@ Chrome will not let this site install an add-on, and most people cannot Load unp
 1. Open `/extension` on your live site.
 2. Show the bookmarks bar (`Ctrl+Shift+B` / `⌘+Shift+B`).
 3. Drag **Send job to Resume Tailor** onto the bar.
-4. On a job posting, click that bookmark. Resume Tailor opens on the right and fills **Generate resume**. Allow popups if the browser asks.
+4. On a job posting, click that bookmark. Resume Tailor opens in a tab and fills **Generate resume**. It does not use a pop-up window, so ad blockers typically do not stop it. If an extra tab is still blocked, the current tab becomes Resume Tailor (use Back for the job).
 
 Signed-in users can also drag **Add job bookmark** from the header, or click **Open on the right** for a side window of the app.
 
