@@ -1613,7 +1613,7 @@ button {
 
 .record-name,
 .record-role {
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

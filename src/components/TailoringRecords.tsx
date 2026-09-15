@@ -215,24 +215,24 @@ export default function TailoringRecords({
                         <span className="record-role">
                           {record.jobTitle || "—"}
                         </span>
-                        <span className="record-time">
-                          {formatTime(record.createdAt) || "—"}
-                        </span>
-                        {record.status === "done" &&
-                        typeof record.atsScore === "number" ? (
-                          <span
-                            className={`ats-score ${atsClass(record.atsScore)}`}
-                          >
-                            ATS {record.atsScore}/100
-                          </span>
-                        ) : record.status === "done" ? (
-                          <span className="ats-score">ATS —/100</span>
-                        ) : (
-                          <span className="record-status record-status-error">
-                            Failed
-                          </span>
-                        )}
                         <div className="record-row-actions">
+                          <span className="record-time">
+                            {formatTime(record.createdAt) || "—"}
+                          </span>
+                          {record.status === "done" &&
+                          typeof record.atsScore === "number" ? (
+                            <span
+                              className={`ats-score ${atsClass(record.atsScore)}`}
+                            >
+                              ATS {record.atsScore}/100
+                            </span>
+                          ) : record.status === "done" ? (
+                            <span className="ats-score">ATS —/100</span>
+                          ) : (
+                            <span className="record-status record-status-error">
+                              Failed
+                            </span>
+                          )}
                           <button
                             type="button"
                             className="text-btn"
