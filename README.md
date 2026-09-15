@@ -76,12 +76,8 @@ Download links appear after processing.
 
 ## Send a job from any tab
 
-The Acrobat-style split is Chrome’s **side panel**. Add the Resume Tailor extension to the browser first, pin its toolbar avatar, then click that icon. A button on the website cannot open that panel.
+The Acrobat-style split is Chrome’s **side panel**. Most people cannot install it from a downloaded zip (that needs Developer mode). Publish `extension/` to the Chrome Web Store once, set `NEXT_PUBLIC_CHROME_WEBSTORE_URL`, then visitors click **Add to Chrome** like Adblock, pin the icon, and click it.
 
-1. Open `/extension` and click **Add to Chrome**.
-2. Puzzle piece → pin **Resume Tailor**.
-3. Click that toolbar icon. The panel captures the current tab into **Generate resume**.
-
-Until the listing exists, `/extension` also offers a bookmark. The bookmark can send a job, but it will not dock beside the page the way Acrobat does.
+Until that listing exists, `/extension` offers a bookmark. The bookmark can send a job, but it will not dock beside the page the way Acrobat does.
 
 
