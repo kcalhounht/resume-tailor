@@ -89,3 +89,14 @@ The `extension/` folder is a Chrome/Edge (Manifest V3) add-on. It keeps Resume T
 7. On a job posting, click **Use this tab** in the panel. Sign in inside the panel if asked.
 
 If you highlight text first, that selection is used. Otherwise the extension looks for common job-description containers (LinkedIn, Indeed, and similar), then falls back to the page text.
+
+### Use with Vercel
+
+The extension still lives on your computer. It only needs your live site URL.
+
+1. Deploy the latest app (it must allow framing from `chrome-extension:`).
+2. Load unpacked `extension/` as above, then **Reload** it.
+3. Click the Resume Tailor toolbar icon to open the right-hand panel.
+4. Paste your Vercel URL (`https://your-app.vercel.app`) into **Save site** and save. Accept the permission prompt if Chrome shows one.
+5. Sign in inside the panel if asked.
+6. Leave the panel open, open a job posting in any tab, and click **Use this tab**.

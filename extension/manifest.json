@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Resume Tailor",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "description": "Keep Resume Tailor in the right side panel and send a job posting from any tab.",
   "action": {
     "default_title": "Resume Tailor",

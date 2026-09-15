@@ -75,6 +75,27 @@
         border: 0;
         background: #0d1210;
       }
+      .site-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        padding: 8px 10px;
+        border-bottom: 1px solid #2a3530;
+        background: #0d1210;
+      }
+      .site-row input {
+        flex: 1;
+        min-width: 0;
+        box-sizing: border-box;
+        padding: 7px 8px;
+        border: 1px solid #3a4840;
+        background: #151b18;
+        color: #e8eee9;
+      }
+      .site-row button {
+        background: #2a3530;
+        color: #e8eee9;
+      }
     </style>
   </head>
   <body>
@@ -85,6 +106,15 @@
         <span id="tab-url">Switch to a job posting, then capture it.</span>
       </div>
       <a id="options" href="#">Site</a>
+    </div>
+    <div class="site-row">
+      <input
+        id="appUrl"
+        type="url"
+        placeholder="https://your-app.vercel.app"
+        aria-label="Resume Tailor site"
+      />
+      <button id="saveSite" type="button">Save site</button>
     </div>
     <p id="status" class="error" hidden></p>
     <iframe id="app" title="Resume Tailor"></iframe>

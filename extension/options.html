@@ -45,8 +45,16 @@
   </head>
   <body>
     <label for="appUrl">Resume Tailor site</label>
-    <input id="appUrl" type="url" placeholder="http://localhost:3000" />
+    <input
+      id="appUrl"
+      type="url"
+      placeholder="https://your-app.vercel.app"
+    />
     <button id="save" type="button">Save</button>
+    <p>
+      Local default is http://localhost:3000. For Vercel, paste your live
+      https://…vercel.app URL, save, then open the side panel.
+    </p>
     <p id="saved" hidden>Saved.</p>
     <script src="options.js"></script>
   </body>

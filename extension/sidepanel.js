@@ -5,6 +5,8 @@ const options = document.getElementById("options");
 const frame = document.getElementById("app");
 const tabTitle = document.getElementById("tab-title");
 const tabUrl = document.getElementById("tab-url");
+const appUrlInput = document.getElementById("appUrl");
+const saveSite = document.getElementById("saveSite");
 
 function normalizeAppUrl(value) {
   const raw = String(value || DEFAULT_APP_URL).trim() || DEFAULT_APP_URL;
@@ -18,6 +20,7 @@ async function getAppUrl() {
 
 function loadApp(appUrl) {
   const next = `${appUrl}/`;
+  appUrlInput.value = appUrl;
   if (frame.dataset.src === next) return;
   frame.dataset.src = next;
   frame.src = next;
@@ -41,6 +44,24 @@ function deliverToApp(text, appUrl) {
   } catch {
     // iframe may not be ready; content script still delivers from storage
   }
+}
+
+async function saveAppUrl(value) {
+  const origin = normalizeAppUrl(value);
+  const originPattern = `${origin}/*`;
+  const already = await chrome.permissions.contains({
+    origins: [originPattern],
+  });
+  if (!already) {
+    const granted = await chrome.permissions.request({
+      origins: [originPattern],
+    });
+    if (!granted) {
+      throw new Error("Allow access to your Resume Tailor site in the prompt.");
+    }
+  }
+  await chrome.storage.sync.set({ appUrl: origin });
+  return origin;
 }
 
 async function refreshTabLabel() {
@@ -75,6 +96,30 @@ button.addEventListener("click", async () => {
   } finally {
     button.disabled = false;
   }
+});
+
+saveSite.addEventListener("click", async () => {
+  status.hidden = true;
+  try {
+    const origin = await saveAppUrl(appUrlInput.value);
+    loadApp(origin);
+  } catch (err) {
+    showError(
+      err instanceof Error
+        ? err.message
+        : "Enter your Vercel URL, such as https://your-app.vercel.app",
+    );
+  }
+});
+
+appUrlInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") saveSite.click();
+});
+
+frame.addEventListener("error", () => {
+  showError(
+    "Could not load that site. Paste your Vercel URL (https://your-app.vercel.app) and click Save site.",
+  );
 });
 
 options.addEventListener("click", (event) => {
