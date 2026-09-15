@@ -10,7 +10,7 @@ export const EXTENSION_SIDE_PANEL_RESULT_TYPE =
   "resume-tailor:side-panel-result";
 
 export const INSTALL_SIDE_PANEL_MESSAGE =
-  "Install the Resume Tailor Chrome extension from the Chrome Web Store (or the Install instructions page). Chrome does not allow most people to Load unpacked. After it is installed, this button docks the app on the right so you can capture a job from any tab.";
+  "Chrome is downloading resume-tailor-extension.zip. Unzip it, go to chrome://extensions, turn on Developer mode, click Load unpacked, and choose that unzipped folder. Then click this button again to dock the app on the right.";
 
 export function jobDescriptionFromExtensionMessage(data: unknown): string {
   if (!data || typeof data !== "object") return "";

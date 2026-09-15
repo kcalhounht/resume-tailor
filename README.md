@@ -78,7 +78,7 @@ Download links appear after processing.
 
 The `extension/` folder is a Chrome/Edge add-on. It docks Resume Tailor on the **right** so people can capture a job from any tab into **Generate resume**.
 
-Most users **cannot Load unpacked**. Chrome only allows that in Developer mode. For a Vercel site, **publish the extension once** to the Chrome Web Store, then everyone installs with Add to Chrome.
+Most users **cannot Load unpacked** until you publish to the Chrome Web Store. Until that listing exists, **Add Chrome extension** downloads a zip so you can Load unpacked yourself.
 
 ### Publish for your users
 

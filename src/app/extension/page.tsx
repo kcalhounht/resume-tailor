@@ -13,8 +13,9 @@ export default function ExtensionInstallPage() {
           <p className="brand">Resume Tailor</p>
           <h1>Add the Chrome extension</h1>
           <p className="hint">
-            Regular users should install from the Chrome Web Store. Chrome does
-            not let a website load an unpacked folder for everyone.
+            Chrome cannot install an extension from this website in one click
+            unless it is listed in the Chrome Web Store. Until then, download
+            the zip and load it unpacked.
           </p>
 
           {STORE_URL ? (
@@ -23,46 +24,36 @@ export default function ExtensionInstallPage() {
                 Add to Chrome
               </a>
             </p>
-          ) : (
-            <p className="hint">
-              The store listing is not linked yet. After the site owner publishes
-              the extension, this page will show an <strong>Add to Chrome</strong>{" "}
-              button.
-            </p>
-          )}
+          ) : null}
 
-          <h2>If you run this site</h2>
+          <p>
+            <a
+              className={
+                STORE_URL ? "text-btn" : "primary install-store-btn"
+              }
+              href="/resume-tailor-extension.zip"
+              download
+            >
+              Download extension zip
+            </a>
+          </p>
+
+          <h2>Then load it</h2>
           <ol className="install-steps">
+            <li>Unzip <code>resume-tailor-extension.zip</code>.</li>
             <li>
-              Zip the extension: <code>npm run extension:zip</code>
+              In the address bar open <code>chrome://extensions</code> (Edge:{" "}
+              <code>edge://extensions</code>).
+            </li>
+            <li>Turn on <strong>Developer mode</strong>.</li>
+            <li>
+              Click <strong>Load unpacked</strong> and select the unzipped
+              folder (the one that contains <code>manifest.json</code>).
             </li>
             <li>
-              Open the{" "}
-              <a href="https://chrome.google.com/webstore/devconsole">
-                Chrome Web Store developer dashboard
-              </a>{" "}
-              (one-time developer fee).
-            </li>
-            <li>
-              Upload <code>resume-tailor-extension.zip</code>, submit for review,
-              and set the item visibility to public or unlisted.
-            </li>
-            <li>
-              On Vercel, set{" "}
-              <code>NEXT_PUBLIC_CHROME_WEBSTORE_URL</code> to the listing URL.
-              Users then click <strong>Add to Chrome</strong> and{" "}
-              <strong>Open in side panel</strong>.
+              Return here and click <strong>Open in side panel</strong>.
             </li>
           </ol>
-
-          <h2>Tester fallback</h2>
-          <p className="hint">
-            Load unpacked still works for you, but most people cannot use it.
-            Testers can{" "}
-            <a href="/api/extension/zip">download the zip</a>, unzip it, then
-            on <code>chrome://extensions</code> enable Developer mode and Load
-            unpacked.
-          </p>
 
           <p className="auth-switch">
             <Link href="/signin">Back to sign in</Link>

@@ -13,13 +13,22 @@ import {
 } from "@/lib/extension-jd";
 
 const STORE_URL = process.env.NEXT_PUBLIC_CHROME_WEBSTORE_URL?.trim() || "";
-const INSTALL_PATH = "/extension";
+const ZIP_URL = "/resume-tailor-extension.zip";
 
 function postToExtension(type: string) {
   window.postMessage(
     { source: EXTENSION_APP_MESSAGE_SOURCE, type },
     window.location.origin,
   );
+}
+
+function downloadExtensionZip() {
+  const link = document.createElement("a");
+  link.href = ZIP_URL;
+  link.download = "resume-tailor-extension.zip";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
 }
 
 export function OpenSidePanelButton({
@@ -67,11 +76,16 @@ export function OpenSidePanelButton({
 
   function onClick() {
     postToExtension(EXTENSION_PING_TYPE);
-    if (!availableRef.current) {
-      setMessage(INSTALL_SIDE_PANEL_MESSAGE);
+    if (availableRef.current) {
+      postToExtension(EXTENSION_OPEN_PANEL_TYPE);
       return;
     }
-    postToExtension(EXTENSION_OPEN_PANEL_TYPE);
+    if (STORE_URL) {
+      window.location.assign(STORE_URL);
+      return;
+    }
+    downloadExtensionZip();
+    setMessage(INSTALL_SIDE_PANEL_MESSAGE);
   }
 
   return (
@@ -82,9 +96,10 @@ export function OpenSidePanelButton({
       {message ? (
         <MessageBox
           message={message}
-          confirmLabel={STORE_URL ? "Add to Chrome" : "Install instructions"}
+          confirmLabel="Download again"
           onConfirm={() => {
-            window.location.assign(STORE_URL || INSTALL_PATH);
+            downloadExtensionZip();
+            setMessage(null);
           }}
           onClose={() => setMessage(null)}
         />
