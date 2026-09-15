@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import "./globals.css";
 import type { Metadata } from "next";
 import { PAGE_STYLE_COOKIE, parsePageStyle } from "@/lib/appearance";
+import { EmbedFrame } from "@/components/EmbedFrame";
 
 const display = Source_Serif_4({
   subsets: ["latin"],
@@ -34,7 +35,10 @@ export default async function RootLayout({
       data-theme={pageStyle}
       className={`${display.variable} ${body.variable} h-full`}
     >
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <EmbedFrame />
+        {children}
+      </body>
     </html>
   );
 }

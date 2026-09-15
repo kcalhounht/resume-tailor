@@ -183,6 +183,52 @@ a {
   overflow-x: clip;
 }
 
+html[data-embed="1"] .page {
+  min-height: 100%;
+}
+
+html[data-embed="1"] .atmosphere {
+  opacity: 0.55;
+}
+
+html[data-embed="1"] .topbar,
+html[data-embed="1"] .main {
+  width: calc(100% - 1rem);
+}
+
+html[data-embed="1"] .topbar {
+  padding: 0.75rem 0 0.5rem;
+}
+
+html[data-embed="1"] .topbar-inner {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.65rem;
+  padding-bottom: 0.7rem;
+}
+
+html[data-embed="1"] .brand {
+  font-size: 1.35rem;
+}
+
+html[data-embed="1"] .brand-sub {
+  display: none;
+}
+
+html[data-embed="1"] .session-box {
+  text-align: left;
+  justify-items: start;
+}
+
+html[data-embed="1"] .main {
+  padding: 0.75rem 0 1.5rem;
+}
+
+html[data-embed="1"] .auth-main {
+  min-height: 100%;
+  padding: 1rem 0.5rem;
+}
+
 .atmosphere {
   position: fixed;
   inset: 0;
