@@ -415,6 +415,36 @@ html[data-embed="1"] .side-panel-btn {
   font-weight: 600;
 }
 
+.install-card {
+  width: min(560px, 100%);
+}
+
+.install-card h2 {
+  margin: 1.2rem 0 0.45rem;
+  font-size: 1.02rem;
+}
+
+.install-steps {
+  margin: 0;
+  padding-left: 1.2rem;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.55;
+}
+
+.install-steps a {
+  color: var(--accent);
+}
+
+.install-store-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  margin-top: 0.75rem;
+  padding: 0.55rem 0.9rem;
+}
+
 .auth-form {
   display: grid;
   gap: 0.85rem;

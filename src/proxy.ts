@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 const SESSION_COOKIE = "rt_session";
-const PUBLIC_PATHS = ["/signin", "/signup", "/api/auth/clear"];
+const PUBLIC_PATHS = [
+  "/signin",
+  "/signup",
+  "/api/auth/clear",
+  "/extension",
+  "/privacy",
+];
 
 function hasSessionCookie(request: NextRequest) {
   if (request.cookies.get(SESSION_COOKIE)?.value) return true;

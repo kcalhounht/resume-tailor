@@ -12,6 +12,9 @@ import {
   INSTALL_SIDE_PANEL_MESSAGE,
 } from "@/lib/extension-jd";
 
+const STORE_URL = process.env.NEXT_PUBLIC_CHROME_WEBSTORE_URL?.trim() || "";
+const INSTALL_PATH = "/extension";
+
 function postToExtension(type: string) {
   window.postMessage(
     { source: EXTENSION_APP_MESSAGE_SOURCE, type },
@@ -26,6 +29,7 @@ export function OpenSidePanelButton({
 }) {
   const [message, setMessage] = useState<string | null>(null);
   const [hidden, setHidden] = useState(false);
+  const [installed, setInstalled] = useState(false);
   const availableRef = useRef(false);
 
   useEffect(() => {
@@ -43,6 +47,7 @@ export function OpenSidePanelButton({
       if (payload.source !== EXTENSION_JD_MESSAGE_SOURCE) return;
       if (payload.type === EXTENSION_AVAILABLE_TYPE) {
         availableRef.current = true;
+        setInstalled(true);
       }
       if (payload.type === EXTENSION_SIDE_PANEL_RESULT_TYPE && payload.ok === false) {
         setMessage(
@@ -72,10 +77,17 @@ export function OpenSidePanelButton({
   return (
     <>
       <button type="button" className={className} onClick={onClick}>
-        Open in side panel
+        {installed ? "Open in side panel" : "Add Chrome extension"}
       </button>
       {message ? (
-        <MessageBox message={message} onClose={() => setMessage(null)} />
+        <MessageBox
+          message={message}
+          confirmLabel={STORE_URL ? "Add to Chrome" : "Install instructions"}
+          onConfirm={() => {
+            window.location.assign(STORE_URL || INSTALL_PATH);
+          }}
+          onClose={() => setMessage(null)}
+        />
       ) : null}
     </>
   );

@@ -12,7 +12,8 @@ const nextConfig: NextConfig = {
   ],
   outputFileTracingIncludes: {
     "/api/tailor": ["src/lib/fonts/**/*.ttf", "./src/lib/fonts/**/*"],
-    "/api/*": ["src/lib/fonts/**/*.ttf", "./src/lib/fonts/**/*"],
+    "/api/extension/zip": ["./extension/**/*"],
+    "/api/*": ["src/lib/fonts/**/*.ttf", "./src/lib/fonts/**/*", "./extension/**/*"],
     "/*": ["src/lib/fonts/**/*.ttf", "./src/lib/fonts/**/*"],
   },
   experimental: {

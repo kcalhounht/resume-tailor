@@ -17,6 +17,10 @@ function isAppOrigin(pageOrigin, appUrl) {
   return local.has(pageOrigin) && local.has(app);
 }
 
+function isResumeTailorApp() {
+  return Boolean(document.querySelector('meta[name="resume-tailor-app"]'));
+}
+
 function deliver(text) {
   const next = String(text || "").trim();
   if (!next) return;
@@ -67,9 +71,7 @@ function openSidePanel() {
   );
 }
 
-chrome.storage.sync.get({ appUrl: DEFAULT_APP_URL }, ({ appUrl }) => {
-  if (!isAppOrigin(window.location.origin, appUrl)) return;
-
+function attachAppHandlers() {
   announce();
   chrome.storage.local.get(PENDING_JD_KEY, consumePending);
 
@@ -107,4 +109,17 @@ chrome.storage.sync.get({ appUrl: DEFAULT_APP_URL }, ({ appUrl }) => {
       openSidePanel();
     }
   });
+}
+
+chrome.storage.sync.get({ appUrl: DEFAULT_APP_URL }, ({ appUrl }) => {
+  const origin = window.location.origin;
+  if (isResumeTailorApp()) {
+    if (!isAppOrigin(origin, appUrl)) {
+      chrome.storage.sync.set({ appUrl: origin });
+    }
+    attachAppHandlers();
+    return;
+  }
+  if (!isAppOrigin(origin, appUrl)) return;
+  attachAppHandlers();
 });
