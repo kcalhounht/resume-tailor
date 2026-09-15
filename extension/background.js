@@ -139,22 +139,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message?.type === "resume-tailor:open-side-panel") {
-    (async () => {
-      try {
-        const windowId = sender.tab?.windowId;
-        if (windowId == null) throw new Error("No browser window to dock.");
-        await chrome.sidePanel.open({ windowId });
-        sendResponse({ ok: true });
-      } catch (err) {
-        sendResponse({
-          ok: false,
-          error:
-            err instanceof Error
-              ? err.message
-              : "Could not open the side panel.",
-        });
-      }
-    })();
+    const tabId = sender.tab?.id;
+    const windowId = sender.tab?.windowId;
+    if (tabId == null && windowId == null) {
+      sendResponse({ ok: false, error: "No browser window to dock." });
+      return;
+    }
+    // Must run in this turn. An async/await wrapper drops Chrome's user gesture,
+    // and then sidePanel.open() fails — the page button looks like a no-op.
+    const target = tabId != null ? { tabId } : { windowId };
+    try {
+      const opening = chrome.sidePanel.open(target);
+      opening.then(
+        () => sendResponse({ ok: true }),
+        (err) =>
+          sendResponse({
+            ok: false,
+            error:
+              err instanceof Error ? err.message : "Could not open the side panel.",
+          }),
+      );
+    } catch (err) {
+      sendResponse({
+        ok: false,
+        error:
+          err instanceof Error ? err.message : "Could not open the side panel.",
+      });
+    }
     return true;
   }
 
