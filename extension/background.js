@@ -70,9 +70,13 @@ function originAliases(origin) {
   return [origin];
 }
 
-function sameOrigin(url, origin) {
+function isResumeTailorUi(url, origin) {
   try {
-    return originAliases(origin).includes(new URL(url).origin);
+    const parsed = new URL(url);
+    if (!originAliases(origin).includes(parsed.origin)) return false;
+    // In-app sample posting is a stand-in for LinkedIn/Indeed, not the app shell.
+    if (parsed.pathname.startsWith("/extension/sample")) return false;
+    return true;
   } catch {
     return false;
   }
@@ -161,7 +165,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (!tab?.id) throw new Error("No active tab.");
 
       const appUrl = await getAppUrl();
-      if (tab.url && sameOrigin(tab.url, appUrl)) {
+      if (tab.url && isResumeTailorUi(tab.url, appUrl)) {
         throw new Error("Open a job posting, then capture it from there.");
       }
       if (tab.url && !/^https?:/i.test(tab.url)) {

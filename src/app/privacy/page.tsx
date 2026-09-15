@@ -9,12 +9,10 @@ export default function PrivacyPage() {
           <p className="brand">Resume Tailor</p>
           <h1>Privacy</h1>
           <p className="hint">
-            The <strong>Send job to Resume Tailor</strong> bookmark reads the
-            job posting in the current tab when you click it, then opens Resume
-            Tailor on the right with that text in Generate resume. If you later
-            install the optional Chrome extension, it reads the current tab only
-            when you click <strong>Use this tab</strong>. In both cases the text
-            is sent only to this Resume Tailor site. Nothing is sold, and there
+            The Chrome extension reads the job posting in the current tab when
+            you open the side panel or click <strong>Use this tab</strong>, then
+            sends that text only to this Resume Tailor site. The optional
+            bookmark does the same when you click it. Nothing is sold, and there
             is no analytics SDK.
           </p>
         </div>

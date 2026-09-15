@@ -69,7 +69,9 @@ export function OpenSidePanelButton({
       return;
     }
     if (!openAppOnTheRight()) {
-      setMessage("Allow popups, then click Open on the right again.");
+      setMessage(
+        "Adblock may have stopped the extra window. Allow this site, then try again.",
+      );
     }
   }
 

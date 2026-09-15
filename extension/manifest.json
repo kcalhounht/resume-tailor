@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Resume Tailor",
-  "version": "1.3.0",
-  "description": "Dock Resume Tailor on the right and send a job posting from any tab.",
+  "version": "1.4.1",
+  "description": "Dock Resume Tailor in Chrome’s right side panel, like Acrobat, and send a job from any tab.",
   "action": {
     "default_title": "Resume Tailor",
     "default_icon": {
