@@ -7,6 +7,7 @@ const tabTitle = document.getElementById("tab-title");
 const tabUrl = document.getElementById("tab-url");
 const appUrlInput = document.getElementById("appUrl");
 const saveSite = document.getElementById("saveSite");
+const siteRow = document.getElementById("site-row");
 
 function normalizeAppUrl(value) {
   const raw = String(value || DEFAULT_APP_URL).trim() || DEFAULT_APP_URL;
@@ -77,7 +78,7 @@ async function refreshTabLabel() {
   tabUrl.textContent = response.url || "";
 }
 
-button.addEventListener("click", async () => {
+async function captureTab({ quiet = false } = {}) {
   status.hidden = true;
   button.disabled = true;
   try {
@@ -87,15 +88,25 @@ button.addEventListener("click", async () => {
       type: "resume-tailor:capture",
     });
     if (!response?.ok) {
-      showError(response?.error || "Could not capture that page.");
+      if (!quiet) {
+        showError(response?.error || "Could not capture that page.");
+      }
       return;
     }
     deliverToApp(response.text, appUrl);
   } catch (err) {
-    showError(err instanceof Error ? err.message : "Could not capture that page.");
+    if (!quiet) {
+      showError(
+        err instanceof Error ? err.message : "Could not capture that page.",
+      );
+    }
   } finally {
     button.disabled = false;
   }
+}
+
+button.addEventListener("click", () => {
+  captureTab().catch(() => {});
 });
 
 saveSite.addEventListener("click", async () => {
@@ -124,7 +135,8 @@ frame.addEventListener("error", () => {
 
 options.addEventListener("click", (event) => {
   event.preventDefault();
-  chrome.runtime.openOptionsPage();
+  siteRow.hidden = !siteRow.hidden;
+  if (!siteRow.hidden) appUrlInput.focus();
 });
 
 chrome.tabs.onActivated.addListener(() => {
@@ -140,5 +152,10 @@ chrome.storage.onChanged.addListener((changes, area) => {
   getAppUrl().then(loadApp).catch(() => {});
 });
 
-getAppUrl().then(loadApp).catch(() => {});
-refreshTabLabel().catch(() => {});
+getAppUrl()
+  .then(async (appUrl) => {
+    loadApp(appUrl);
+    await refreshTabLabel();
+    await captureTab({ quiet: true });
+  })
+  .catch(() => {});

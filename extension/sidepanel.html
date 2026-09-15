@@ -83,6 +83,9 @@
         border-bottom: 1px solid #2a3530;
         background: #0d1210;
       }
+      .site-row[hidden] {
+        display: none;
+      }
       .site-row input {
         flex: 1;
         min-width: 0;
@@ -107,7 +110,7 @@
       </div>
       <a id="options" href="#">Site</a>
     </div>
-    <div class="site-row">
+    <div class="site-row" id="site-row" hidden>
       <input
         id="appUrl"
         type="url"

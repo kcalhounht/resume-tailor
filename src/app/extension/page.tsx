@@ -2,6 +2,8 @@ import Link from "next/link";
 import { CaptureBookmarklet } from "@/components/CaptureBookmarklet";
 import { OpenSidePanelButton } from "@/components/OpenSidePanelButton";
 
+const STORE_URL = process.env.NEXT_PUBLIC_CHROME_WEBSTORE_URL?.trim() || "";
+
 export const dynamic = "force-dynamic";
 
 export default function ExtensionInstallPage() {
@@ -11,40 +13,63 @@ export default function ExtensionInstallPage() {
       <main className="auth-main">
         <div className="auth-card install-card">
           <p className="brand">Resume Tailor</p>
-          <h1>Use it beside any job tab</h1>
+          <h1>Dock it on the right of any tab</h1>
           <p className="hint">
-            Chrome will not let a website install an extension, and most people
-            cannot turn on Developer mode. Drag this bookmark instead. It does
-            not use a pop-up window, so uBlock, Adblock, and similar tools
-            leave it alone.
+            Same Chrome side panel Adobe Acrobat uses: the job (or any site)
+            stays on the left, Resume Tailor sits on the right. Adblock-style
+            extensions install from the Chrome Web Store, then pin to the
+            toolbar.
           </p>
-          <CaptureBookmarklet className="primary install-store-btn bookmarklet-btn" />
+          <div className="side-panel-demo" aria-hidden="true">
+            <div className="side-panel-demo-page">
+              <p className="side-panel-demo-chrome">Current tab</p>
+              <p className="side-panel-demo-title">Job posting</p>
+              <p>LinkedIn, Indeed, Greenhouse — whatever you are reading.</p>
+            </div>
+            <div className="side-panel-demo-panel">
+              <p className="side-panel-demo-chrome">Resume Tailor</p>
+              <p className="side-panel-demo-title">Generate resume</p>
+              <p>Use this tab fills the posting from the page on the left.</p>
+            </div>
+          </div>
+          {STORE_URL ? (
+            <p>
+              <a className="primary install-store-btn" href={STORE_URL}>
+                Add to Chrome
+              </a>
+            </p>
+          ) : (
+            <p className="hint">
+              After the site owner publishes the extension (see{" "}
+              <code>extension/STORE.md</code>), this page shows{" "}
+              <strong>Add to Chrome</strong>. Until then, only someone who can
+              load the <code>extension/</code> folder will see the split view.
+            </p>
+          )}
           <ol className="install-steps">
+            <li>Install Resume Tailor from Chrome (Add to Chrome).</li>
             <li>
-              Show the bookmarks bar (<code>Ctrl+Shift+B</code> or{" "}
-              <code>⌘+Shift+B</code>).
+              Puzzle piece → pin <strong>Resume Tailor</strong> on the toolbar.
             </li>
             <li>
-              Drag <strong>Send job to Resume Tailor</strong> onto that bar.
-            </li>
-            <li>
-              Open a job posting, then click the bookmark. Resume Tailor opens
-              in a tab with the posting filled in. If a blocker still stops the
-              extra tab, this page becomes Resume Tailor — use Back to return
-              to the job.
+              Open a job posting, then click that icon. Chrome docks Resume
+              Tailor on the right, like Acrobat.
             </li>
           </ol>
           <p className="hint">
-            Try it on a{" "}
-            <Link href="/extension/sample">sample job posting</Link> after you
-            add the bookmark.
-          </p>
-          <p className="hint">
-            Already signed in? <strong>Open on the right</strong> uses the
-            Chrome side panel when the optional extension is present; otherwise
-            it opens a tab (not a pop-up).
+            Already installed? Open the panel from here:
           </p>
           <OpenSidePanelButton className="side-panel-btn" />
+          <h2>Without the side panel</h2>
+          <p className="hint">
+            A bookmark can still send a job, but Chrome will not split the
+            window this way without the extension.
+          </p>
+          <CaptureBookmarklet className="side-panel-btn bookmarklet-btn" />
+          <p className="hint">
+            Try the bookmark on a{" "}
+            <Link href="/extension/sample">sample job posting</Link>.
+          </p>
           <p className="auth-switch">
             <Link href="/signin">Back to sign in</Link>
           </p>

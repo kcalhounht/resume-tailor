@@ -434,6 +434,55 @@ html[data-embed="1"] .bookmarklet-btn {
   width: min(560px, 100%);
 }
 
+.side-panel-demo {
+  display: grid;
+  grid-template-columns: 1.35fr 1fr;
+  min-height: 11rem;
+  margin: 1rem 0 0.35rem;
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+
+.side-panel-demo-page,
+.side-panel-demo-panel {
+  padding: 0.75rem 0.8rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.side-panel-demo-page {
+  background: color-mix(in srgb, var(--surface) 88%, white);
+}
+
+.side-panel-demo-panel {
+  background: #151b18;
+  color: #e8eee9;
+  border-left: 1px solid #2a3530;
+}
+
+.side-panel-demo-chrome {
+  margin: 0 0 0.45rem;
+  font-size: 0.68rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.side-panel-demo-panel .side-panel-demo-chrome {
+  color: #93a399;
+}
+
+.side-panel-demo-title {
+  margin: 0 0 0.35rem;
+  font-weight: 700;
+  font-size: 0.92rem;
+}
+
+.side-panel-demo-page p,
+.side-panel-demo-panel p {
+  margin: 0;
+}
+
 .install-card h2 {
   margin: 1.2rem 0 0.45rem;
   font-size: 1.02rem;

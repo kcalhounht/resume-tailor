@@ -76,16 +76,12 @@ Download links appear after processing.
 
 ## Send a job from any tab
 
-Chrome will not let this site install an add-on, and most people cannot Load unpacked. Use a bookmark instead — no Developer mode.
+The Acrobat-style split (job on the left, Resume Tailor on the right) is Chrome’s **side panel**. That is a browser extension, installed like Adblock: Chrome Web Store → pin the icon → click it on a job tab. A website cannot open that panel by itself.
 
-1. Open `/extension` on your live site.
-2. Show the bookmarks bar (`Ctrl+Shift+B` / `⌘+Shift+B`).
-3. Drag **Send job to Resume Tailor** onto the bar.
-4. On a job posting, click that bookmark. Resume Tailor opens in a tab and fills **Generate resume**. It does not use a pop-up window, so ad blockers typically do not stop it. If an extra tab is still blocked, the current tab becomes Resume Tailor (use Back for the job).
+1. Publish `extension/` once ([STORE.md](extension/STORE.md)) and set `NEXT_PUBLIC_CHROME_WEBSTORE_URL`.
+2. Visitors open `/extension` and click **Add to Chrome**.
+3. They pin Resume Tailor, open a job posting, and click the toolbar icon. The panel captures that tab into **Generate resume**.
 
-Signed-in users can also drag **Add job bookmark** from the header, or click **Open on the right** for a side window of the app.
+Until the listing exists, `/extension` also offers a bookmark. The bookmark can send a job, but it will not dock beside the page the way Acrobat does.
 
-### Optional Chrome extension
-
-The `extension/` folder is a Manifest V3 add-on with a real side panel. That path only works after you publish to the Chrome Web Store (see `extension/STORE.md`) or load it unpacked yourself for development. Do not ask end users to Load unpacked.
 

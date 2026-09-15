@@ -5,7 +5,7 @@ import { MessageBox } from "@/components/MessageBox";
 import { buildCaptureBookmarklet } from "@/lib/bookmarklet";
 
 const DRAG_HINT =
-  "Drag this button onto your bookmarks bar. Then open a job posting and click the bookmark — Resume Tailor opens with that job filled in. Ad blockers often stop pop-up windows, so this opens a normal tab (or this tab) instead.";
+  "Drag this onto the bookmarks bar if you cannot install the Chrome extension. The bookmark sends a job into Resume Tailor, but only the extension can dock beside the page like Acrobat.";
 
 export function CaptureBookmarklet({
   className = "side-panel-btn bookmarklet-btn",
