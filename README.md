@@ -84,7 +84,7 @@ The `extension/` folder is a Chrome/Edge (Manifest V3) add-on. It keeps Resume T
 2. Open `chrome://extensions` (Edge: `edge://extensions`).
 3. Turn on **Developer mode**.
 4. Click **Load unpacked** and choose this repo’s `extension/` folder.
-5. Click the **Resume Tailor** toolbar button. The side panel stays open on the right while you switch tabs.
+5. Click **Open in side panel** in the app (or the Resume Tailor toolbar button). The side panel stays open on the right while you switch tabs.
 6. Optionally open extension options and set your site URL (default `http://localhost:3000`).
 7. On a job posting, click **Use this tab** in the panel. Sign in inside the panel if asked.
 

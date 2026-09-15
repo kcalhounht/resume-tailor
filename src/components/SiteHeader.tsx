@@ -1,4 +1,5 @@
 import SignOutButton from "@/components/SignOutButton";
+import { OpenSidePanelButton } from "@/components/OpenSidePanelButton";
 import { PageStyleSync } from "@/components/PageStyleSync";
 import {
   DEFAULT_PAGE_STYLE,
@@ -53,6 +54,7 @@ export default function SiteHeader({
           <p className="session-name">{name}</p>
           <p className="session-email">{email}</p>
           <div className="session-actions">
+            <OpenSidePanelButton />
             <NavItem href="/" current={current === "home"}>
               Home
             </NavItem>

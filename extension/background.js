@@ -121,7 +121,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
     .catch(() => {});
 });
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message?.type === "resume-tailor:active-tab") {
     (async () => {
       const tab = await getActiveJobTab();
@@ -130,6 +130,26 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         title: tab?.title || "",
         url: tab?.url || "",
       });
+    })();
+    return true;
+  }
+
+  if (message?.type === "resume-tailor:open-side-panel") {
+    (async () => {
+      try {
+        const windowId = sender.tab?.windowId;
+        if (windowId == null) throw new Error("No browser window to dock.");
+        await chrome.sidePanel.open({ windowId });
+        sendResponse({ ok: true });
+      } catch (err) {
+        sendResponse({
+          ok: false,
+          error:
+            err instanceof Error
+              ? err.message
+              : "Could not open the side panel.",
+        });
+      }
     })();
     return true;
   }
