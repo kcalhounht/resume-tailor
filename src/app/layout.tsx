@@ -19,6 +19,9 @@ export const metadata: Metadata = {
   title: "Resume Tailor",
   description:
     "Paste your background and a job description to generate ATS-optimized resumes and cover letters.",
+  other: {
+    "resume-tailor-app": "1",
+  },
 };
 
 export default async function RootLayout({

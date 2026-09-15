@@ -6,7 +6,8 @@
     "dev": "next dev --webpack",
     "build": "next build --webpack",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "extension:zip": "node scripts/pack-extension.mjs"
   },
   "dependencies": {
     "@neondatabase/serverless": "^1.1.0",

@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Resume Tailor",
-  "version": "1.2.1",
-  "description": "Keep Resume Tailor in the right side panel and send a job posting from any tab.",
+  "version": "1.3.0",
+  "description": "Dock Resume Tailor on the right and send a job posting from any tab.",
   "action": {
     "default_title": "Resume Tailor",
     "default_icon": {
@@ -31,7 +31,7 @@
   "host_permissions": ["http://*/*", "https://*/*"],
   "content_scripts": [
     {
-      "matches": ["http://127.0.0.1/*", "http://localhost/*"],
+      "matches": ["http://*/*", "https://*/*"],
       "js": ["content-app.js"],
       "run_at": "document_idle",
       "all_frames": true

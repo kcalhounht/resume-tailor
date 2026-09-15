@@ -76,27 +76,23 @@ Download links appear after processing.
 
 ## Browser extension
 
-The `extension/` folder is a Chrome/Edge (Manifest V3) add-on. It keeps Resume Tailor in the **right side panel** so you can browse job postings in any tab and send the current page into **Generate resume**.
+The `extension/` folder is a Chrome/Edge add-on. It docks Resume Tailor on the **right** so people can capture a job from any tab into **Generate resume**.
 
-### Install (unpacked)
+Most users **cannot Load unpacked**. Chrome only allows that in Developer mode. For a Vercel site, **publish the extension once** to the Chrome Web Store, then everyone installs with Add to Chrome.
 
-1. Run the app (`npm run dev`) or use your deployed site.
-2. Open `chrome://extensions` (Edge: `edge://extensions`).
-3. Turn on **Developer mode**.
-4. Click **Load unpacked** and choose this repo’s `extension/` folder.
-5. Click **Open in side panel** in the app (or the Resume Tailor toolbar button). The side panel stays open on the right while you switch tabs.
-6. Optionally open extension options and set your site URL (default `http://localhost:3000`).
-7. On a job posting, click **Use this tab** in the panel. Sign in inside the panel if asked.
+### Publish for your users
+
+1. `npm run extension:zip`
+2. Upload `resume-tailor-extension.zip` in the [Chrome Web Store developer dashboard](https://chrome.google.com/webstore/devconsole) (see `extension/STORE.md`).
+3. Set Vercel env `NEXT_PUBLIC_CHROME_WEBSTORE_URL` to the listing URL.
+4. Redeploy. Visitors click **Add Chrome extension**, then **Open in side panel**. The extension detects your Vercel origin automatically.
+
+Privacy policy URL for the store: `https://your-app.vercel.app/privacy`.
+
+### Developer / tester (unpacked)
+
+1. `chrome://extensions` → Developer mode → Load unpacked → `extension/`
+2. Open the app and click **Open in side panel**
+3. On a job posting, click **Use this tab**
 
 If you highlight text first, that selection is used. Otherwise the extension looks for common job-description containers (LinkedIn, Indeed, and similar), then falls back to the page text.
-
-### Use with Vercel
-
-The extension still lives on your computer. It only needs your live site URL.
-
-1. Deploy the latest app (it must allow framing from `chrome-extension:`).
-2. Load unpacked `extension/` as above, then **Reload** it.
-3. Click the Resume Tailor toolbar icon to open the right-hand panel.
-4. Paste your Vercel URL (`https://your-app.vercel.app`) into **Save site** and save. Accept the permission prompt if Chrome shows one.
-5. Sign in inside the panel if asked.
-6. Leave the panel open, open a job posting in any tab, and click **Use this tab**.
