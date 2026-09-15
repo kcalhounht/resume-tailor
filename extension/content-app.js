@@ -1,6 +1,8 @@
 const PENDING_JD_KEY = "pendingJd";
 const DEFAULT_APP_URL = "http://localhost:3000";
 
+let attached = false;
+
 function appOriginFrom(value) {
   try {
     const raw = String(value || DEFAULT_APP_URL).trim() || DEFAULT_APP_URL;
@@ -55,23 +57,22 @@ function announce() {
 }
 
 function openSidePanel() {
-  chrome.runtime.sendMessage(
-    { type: "resume-tailor:open-side-panel" },
-    (response) => {
-      window.postMessage(
-        {
-          source: "resume-tailor-extension",
-          type: "resume-tailor:side-panel-result",
-          ok: Boolean(response?.ok),
-          error: response?.error,
-        },
-        window.location.origin,
-      );
-    },
-  );
+  chrome.runtime.sendMessage({ type: "resume-tailor:open-side-panel" }, (response) => {
+    window.postMessage(
+      {
+        source: "resume-tailor-extension",
+        type: "resume-tailor:side-panel-result",
+        ok: Boolean(response?.ok),
+        error: response?.error,
+      },
+      window.location.origin,
+    );
+  });
 }
 
 function attachAppHandlers() {
+  if (attached) return;
+  attached = true;
   announce();
   chrome.storage.local.get(PENDING_JD_KEY, consumePending);
 
@@ -80,7 +81,9 @@ function attachAppHandlers() {
     (event) => {
       const target = event.target;
       if (!(target instanceof Element)) return;
-      if (!target.closest(".side-panel-btn")) return;
+      if (!target.closest("[data-rt-side-panel]")) return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
       openSidePanel();
     },
     true,
@@ -111,15 +114,20 @@ function attachAppHandlers() {
   });
 }
 
-chrome.storage.sync.get({ appUrl: DEFAULT_APP_URL }, ({ appUrl }) => {
+function start() {
   const origin = window.location.origin;
   if (isResumeTailorApp()) {
-    if (!isAppOrigin(origin, appUrl)) {
-      chrome.storage.sync.set({ appUrl: origin });
-    }
     attachAppHandlers();
+    chrome.storage.sync.set({ appUrl: origin });
     return;
   }
-  if (!isAppOrigin(origin, appUrl)) return;
-  attachAppHandlers();
-});
+  chrome.storage.sync.get({ appUrl: DEFAULT_APP_URL }, ({ appUrl }) => {
+    if (isAppOrigin(origin, appUrl)) attachAppHandlers();
+  });
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", start, { once: true });
+} else {
+  start();
+}

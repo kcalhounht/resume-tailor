@@ -57,7 +57,8 @@ export default function ExtensionInstallPage() {
             </li>
           </ol>
           <p className="hint">
-            Already installed? Open the panel from here:
+            Already installed? Pin Resume Tailor, then click this — it must
+            open Chrome’s side panel, not a new tab:
           </p>
           <OpenSidePanelButton className="side-panel-btn" />
           <h2>Without the side panel</h2>
