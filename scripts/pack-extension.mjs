@@ -6,10 +6,7 @@ import { fileURLToPath } from "node:url";
 const { ZipArchive } = createRequire(import.meta.url)("archiver");
 const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const source = path.join(root, "extension");
-const outputs = [
-  path.join(root, "resume-tailor-extension.zip"),
-  path.join(root, "public", "resume-tailor-extension.zip"),
-];
+const outputs = [path.join(root, "resume-tailor-extension.zip")];
 
 async function writeZip(out) {
   const archive = new ZipArchive({ zlib: { level: 9 } });

@@ -11,4 +11,4 @@ This is how people get the **right-hand side panel** (the same Chrome UI Adobe A
 7. Submit for review (public or unlisted).
 8. On Vercel set `NEXT_PUBLIC_CHROME_WEBSTORE_URL` to the listing URL (for example `https://chromewebstore.google.com/detail/...`) and redeploy.
 
-After that, in-app **Add to Chrome** and `/install` send visitors to the listing. Chrome shows its own **Add to Chrome** button there — that is the only install Chrome allows for everyone. Pin the icon, then click it on a job tab.
+After that, visitors click **Add to Chrome** and Chrome installs from the listing. They never Load unpacked. Developers still Load unpacked from this folder while testing.

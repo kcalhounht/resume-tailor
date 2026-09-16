@@ -12,7 +12,7 @@ A website button cannot open that panel unless the extension is already installe
 
 ## Publish
 
-See [STORE.md](STORE.md). Set `NEXT_PUBLIC_CHROME_WEBSTORE_URL` so **Add to Chrome** (`/install`) opens the store listing.
+See [STORE.md](STORE.md). Set `NEXT_PUBLIC_CHROME_WEBSTORE_URL` so **Add to Chrome** (`/install`) opens the store listing for users. Load unpacked stays on this folder for developers only.
 
 ## Developer
 
