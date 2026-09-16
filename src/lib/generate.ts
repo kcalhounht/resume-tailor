@@ -10,7 +10,11 @@ import { getLlmClient, getLlmModel } from "./llm";
 import { parseModelJson } from "./parse-json";
 import { buildResumeHeadline } from "./headline";
 import { yearsOfExperienceFromProfile } from "./experience-years";
-import { sanitizePlainText } from "./validate-resume";
+import {
+  fillCoverLetter,
+  fillSummaryToMinWords,
+  sanitizePlainText,
+} from "./validate-resume";
 
 const SYSTEM_PROMPT = `You are an expert ATS resume writer and career coach.
 Create a tailored resume and cover letter that maximize ATS keyword match for the target role.
@@ -78,9 +82,9 @@ export async function generateTailoredPackage(
     signal,
   );
 
-  let parsed: TailoredPackage;
+  let parsed: unknown;
   try {
-    parsed = parseModelJson<TailoredPackage>(content);
+    parsed = parseModelJson<unknown>(content);
   } catch (firstError) {
     content = await requestJson(
       client,
@@ -92,13 +96,13 @@ export async function generateTailoredPackage(
         {
           role: "user",
           content:
-            "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Summary must be more than 90 words and must use the profile years of experience. Include 41-49 distinct skill items across all groups (more than 40 and under 50). No markdown, no commentary.",
+            "Your previous reply was invalid JSON. Return ONLY repaired valid JSON for the same request. Summary must be more than 90 words and must use the profile years of experience. Include 41-49 distinct skill items across all groups (more than 40 and under 50). Include a 3-4 paragraph coverLetter string. No markdown, no commentary.",
         },
       ],
       signal,
     );
     try {
-      parsed = parseModelJson<TailoredPackage>(content);
+      parsed = parseModelJson<unknown>(content);
     } catch {
       throw firstError instanceof Error
         ? firstError
@@ -106,16 +110,74 @@ export async function generateTailoredPackage(
     }
   }
 
-  const resume = normalizeResume(parsed.resume, profile, extracted);
-  const coverLetter = String(parsed.coverLetter || "").trim();
+  return packageFromGeneratedJson(parsed, profile, extracted);
+}
 
-  if (!resume.summary) {
-    throw new Error("Resume summary generation failed.");
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
   }
-  if (!coverLetter) {
-    throw new Error("Cover letter generation failed.");
-  }
+  return null;
+}
 
+function coerceGeneratedText(value: unknown): string {
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value.map(coerceGeneratedText).filter(Boolean).join("\n\n");
+  }
+  const rec = asRecord(value);
+  if (!rec) return "";
+  return coerceGeneratedText(
+    rec.text ??
+      rec.body ??
+      rec.content ??
+      rec.summary ??
+      rec.paragraphs ??
+      rec.letter,
+  );
+}
+
+function pickGeneratedResume(parsed: unknown): TailoredResume | undefined {
+  const rec = asRecord(parsed);
+  if (!rec) return undefined;
+  const resume =
+    rec.resume ?? rec.Resume ?? rec.tailoredResume ?? rec.tailored_resume;
+  return resume as TailoredResume | undefined;
+}
+
+function pickGeneratedCoverLetter(parsed: unknown): string {
+  const rec = asRecord(parsed);
+  const resume = asRecord(pickGeneratedResume(parsed));
+  return coerceGeneratedText(
+    rec?.coverLetter ??
+      rec?.cover_letter ??
+      rec?.coverletter ??
+      rec?.CoverLetter ??
+      resume?.coverLetter ??
+      resume?.cover_letter,
+  );
+}
+
+export function packageFromGeneratedJson(
+  parsed: unknown,
+  profile: CandidateProfile,
+  extracted: ExtractedJD,
+): TailoredPackage {
+  const resume = normalizeResume(
+    pickGeneratedResume(parsed),
+    profile,
+    extracted,
+  );
+  resume.summary = fillSummaryToMinWords(
+    resume.summary,
+    profile,
+    extracted,
+  ).text;
+  const coverLetter = fillCoverLetter(
+    pickGeneratedCoverLetter(parsed),
+    profile,
+    extracted,
+  ).text;
   return { resume, coverLetter };
 }
 
