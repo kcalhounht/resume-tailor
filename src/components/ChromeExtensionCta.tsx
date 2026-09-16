@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MessageBox } from "@/components/MessageBox";
+import { ADD_TO_CHROME_HREF } from "@/lib/chrome-webstore";
 import {
   EXTENSION_APP_MESSAGE_SOURCE,
   EXTENSION_AVAILABLE_TYPE,
@@ -82,7 +83,7 @@ export function ChromeExtensionCta({
   }
 
   return (
-    <a className={className} href="/extension">
+    <a className={className} href={ADD_TO_CHROME_HREF}>
       Add to Chrome
     </a>
   );

@@ -1,7 +1,11 @@
 import Link from "next/link";
 import { CaptureBookmarklet } from "@/components/CaptureBookmarklet";
+import {
+  ADD_TO_CHROME_HREF,
+  chromeWebStoreUrl,
+} from "@/lib/chrome-webstore";
 
-const STORE_URL = process.env.NEXT_PUBLIC_CHROME_WEBSTORE_URL?.trim() || "";
+const STORE_URL = chromeWebStoreUrl();
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +18,10 @@ export default function ExtensionInstallPage() {
           <p className="brand">Resume Tailor</p>
           <h1>Add it to Chrome, then click its icon</h1>
           <p className="hint">
-            The right-hand panel is a browser feature, like Adobe Acrobat.
-            Regular Chrome users can only get that if Resume Tailor is on the
-            Chrome Web Store. Downloading a zip and Load unpacked is something
-            most people cannot do (no Developer mode on work/school Chromes).
+            Chrome will not let this website install the extension by itself.
+            After Resume Tailor is on the Chrome Web Store,{" "}
+            <strong>Add to Chrome</strong> opens that listing so Chrome can
+            install it for anyone — the same flow as Adblock or Acrobat.
           </p>
           <div className="side-panel-demo" aria-hidden="true">
             <div className="side-panel-demo-page">
@@ -34,14 +38,18 @@ export default function ExtensionInstallPage() {
           {STORE_URL ? (
             <>
               <p>
-                <a className="primary install-store-btn" href={STORE_URL}>
+                <a className="primary install-store-btn" href={ADD_TO_CHROME_HREF}>
                   Add to Chrome
                 </a>
               </p>
               <ol className="install-steps">
                 <li>
-                  Click <strong>Add to Chrome</strong> and confirm — same as
-                  Adblock.
+                  Click <strong>Add to Chrome</strong>. Chrome opens the store
+                  listing.
+                </li>
+                <li>
+                  On that page, click Chrome’s <strong>Add to Chrome</strong>{" "}
+                  and confirm. That is the install — this site cannot skip it.
                 </li>
                 <li>
                   Puzzle piece → pin the <strong>Resume Tailor</strong> avatar.
@@ -54,11 +62,12 @@ export default function ExtensionInstallPage() {
           ) : (
             <>
               <p className="hint">
-                This site has no store listing yet, so visitors cannot
-                one-click install. Publish <code>extension/</code> once (see{" "}
-                <code>extension/STORE.md</code>), then set{" "}
-                <code>NEXT_PUBLIC_CHROME_WEBSTORE_URL</code> on Vercel. After
-                that, <strong>Add to Chrome</strong> works for everyone.
+                This deployment has no store listing URL yet, so visitors cannot
+                get a one-click Chrome install. Publish <code>extension/</code>{" "}
+                once (see <code>extension/STORE.md</code>), then set{" "}
+                <code>NEXT_PUBLIC_CHROME_WEBSTORE_URL</code> on Vercel and
+                redeploy. After that, every <strong>Add to Chrome</strong>{" "}
+                button goes straight to Chrome’s installer.
               </p>
               <ol className="install-steps">
                 <li>

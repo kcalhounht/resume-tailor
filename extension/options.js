@@ -1,4 +1,3 @@
-const DEFAULT_APP_URL = "http://localhost:3000";
 const input = document.getElementById("appUrl");
 const saved = document.getElementById("saved");
 

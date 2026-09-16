@@ -1,4 +1,5 @@
-const DEFAULT_APP_URL = "http://localhost:3000";
+importScripts("app-config.js");
+
 const PENDING_JD_KEY = "pendingJd";
 const CONTENT_SCRIPT_ID = "resume-tailor-app";
 const MIN_JOB_CHARS = 80;
