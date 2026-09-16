@@ -2,11 +2,21 @@ import { NextResponse } from "next/server";
 import { PassThrough, Readable } from "node:stream";
 import path from "node:path";
 import { ZipArchive } from "archiver";
+import { loadCurrentUser } from "@/lib/dal";
+import { isAdminUser } from "@/lib/users";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET() {
+  const current = await loadCurrentUser();
+  if (!current || !isAdminUser(current.user)) {
+    return NextResponse.json(
+      { error: "Load unpacked is for developers only." },
+      { status: 403 },
+    );
+  }
+
   const source = path.join(process.cwd(), "extension");
   const archive = new ZipArchive({ zlib: { level: 9 } });
   const pass = new PassThrough();
