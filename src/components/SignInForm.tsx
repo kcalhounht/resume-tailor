@@ -56,9 +56,6 @@ export default function SignInForm({ next = "/" }: { next?: string }) {
       <p className="auth-switch">
         New here? <Link href="/signup">Create an account</Link>
       </p>
-      <p className="auth-switch">
-        <Link href="/install">Add to Chrome</Link>
-      </p>
     </form>
   );
 }
