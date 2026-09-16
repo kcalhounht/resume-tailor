@@ -19,7 +19,7 @@ async function getAppUrl() {
 }
 
 function loadApp(appUrl) {
-  const next = `${appUrl}/`;
+  const next = `${appUrl}/?ext=1`;
   appUrlInput.value = appUrl;
   if (frame.dataset.src === next) return;
   frame.dataset.src = next;

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Resume Tailor",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Add Resume Tailor to Chrome, then click its toolbar icon to dock the app on the right.",
   "homepage_url": "https://resume-tailor-five-phi.vercel.app",
   "action": {

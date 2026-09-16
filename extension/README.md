@@ -8,7 +8,7 @@ Add this to Chrome first. Then click the **Resume Tailor** toolbar avatar to doc
 2. Open a job posting.
 3. Click the Resume Tailor icon. Chrome opens the right-hand panel.
 
-A website button cannot open that panel. The in-app **Add to Chrome** link only installs it.
+A website button cannot open that panel unless the extension is already installed. After it is, **Open on the right** in the app docks it. The toolbar avatar does the same.
 
 ## Publish
 

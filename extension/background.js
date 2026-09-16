@@ -97,22 +97,24 @@ async function getActiveJobTab() {
 }
 
 function openPanelForTab(tab) {
-  if (!tab) return;
-  if (tab.id != null) {
+  // Must stay synchronous. Awaiting before open() drops Chrome's user gesture.
+  if (tab?.id != null) {
     chrome.sidePanel.open({ tabId: tab.id });
     return;
   }
-  if (tab.windowId != null) {
+  if (tab?.windowId != null) {
     chrome.sidePanel.open({ windowId: tab.windowId });
   }
 }
 
 async function enableSidePanel() {
-  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
   await chrome.sidePanel.setOptions({
     path: "sidepanel.html",
     enabled: true,
   });
+  // Open from the action click we handle below. If this stays true, Chrome
+  // swallows action.onClicked and some builds then open nothing.
+  await chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: false });
 }
 
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -133,7 +135,6 @@ chrome.runtime.onStartup.addListener(() => {
 
 enableSidePanel().catch(() => {});
 
-// If setPanelBehavior is not in effect, clicking the toolbar avatar still docks the panel.
 chrome.action.onClicked.addListener((tab) => {
   openPanelForTab(tab);
 });
