@@ -62,12 +62,13 @@ export default function ExtensionInstallPage() {
           ) : (
             <>
               <p className="hint">
-                This deployment has no store listing URL yet, so visitors cannot
-                get a one-click Chrome install. Publish <code>extension/</code>{" "}
-                once (see <code>extension/STORE.md</code>), then set{" "}
-                <code>NEXT_PUBLIC_CHROME_WEBSTORE_URL</code> on Vercel and
-                redeploy. After that, every <strong>Add to Chrome</strong>{" "}
-                button goes straight to Chrome’s installer.
+                Until a store listing exists, <strong>Add to Chrome</strong>{" "}
+                downloads the extension zip for this browser. Load that folder
+                unpacked, pin the avatar, then click it — or use{" "}
+                <strong>Open on the right</strong> in the app. Publish{" "}
+                <code>extension/</code> (see <code>extension/STORE.md</code>)
+                and set <code>NEXT_PUBLIC_CHROME_WEBSTORE_URL</code> so everyone
+                else gets Chrome’s installer instead of a zip.
               </p>
               <ol className="install-steps">
                 <li>

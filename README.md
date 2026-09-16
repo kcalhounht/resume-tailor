@@ -76,8 +76,6 @@ Download links appear after processing.
 
 ## Send a job from any tab
 
-The Acrobat-style split is Chrome’s **side panel**. A website cannot install an extension by itself (Chrome removed inline install). Publish `extension/` to the Chrome Web Store once, set `NEXT_PUBLIC_CHROME_WEBSTORE_URL` to the listing, and **Add to Chrome** (`/install`) sends every visitor to that listing so Chrome can install it.
-
-Until that listing exists, `/install` falls back to `/extension`, which offers a bookmark. The bookmark can send a job, but it will not dock beside the page the way Acrobat does.
+The Acrobat-style split is Chrome’s **side panel**. After the extension is in Chrome, click its toolbar icon or **Open on the right** in the app. Until a Chrome Web Store listing exists, **Add to Chrome** (`/install`) downloads the zip so you can Load unpacked. After you publish and set `NEXT_PUBLIC_CHROME_WEBSTORE_URL`, that same button sends everyone to Chrome’s installer.
 
 
