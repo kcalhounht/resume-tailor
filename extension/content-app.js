@@ -1,5 +1,4 @@
 const PENDING_JD_KEY = "pendingJd";
-const DEFAULT_APP_URL = "http://localhost:3000";
 
 let attached = false;
 

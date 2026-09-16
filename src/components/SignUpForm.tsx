@@ -86,7 +86,7 @@ export default function SignUpForm() {
         Already have an account? <Link href="/signin">Sign in</Link>
       </p>
       <p className="auth-switch">
-        <Link href="/extension">Send a job from any tab</Link>
+        <Link href="/install">Add to Chrome</Link>
       </p>
     </form>
   );

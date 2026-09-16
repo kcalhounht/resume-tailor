@@ -1,4 +1,3 @@
-const DEFAULT_APP_URL = "http://localhost:3000";
 const button = document.getElementById("capture");
 const status = document.getElementById("status");
 const options = document.getElementById("options");

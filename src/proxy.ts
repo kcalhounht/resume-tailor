@@ -7,6 +7,7 @@ const PUBLIC_PATHS = [
   "/signup",
   "/api/auth/clear",
   "/extension",
+  "/install",
   "/privacy",
 ];
 

@@ -12,7 +12,7 @@ A website button cannot open that panel. The in-app **Add to Chrome** link only 
 
 ## Publish
 
-See [STORE.md](STORE.md). Set `NEXT_PUBLIC_CHROME_WEBSTORE_URL` so `/extension` is a store install.
+See [STORE.md](STORE.md). Set `NEXT_PUBLIC_CHROME_WEBSTORE_URL` so **Add to Chrome** (`/install`) opens the store listing.
 
 ## Developer
 
