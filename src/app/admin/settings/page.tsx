@@ -33,22 +33,34 @@ export default async function AdminSettingsPage() {
           initialSettings={toPublicSettings(settings)}
           defaultLlmModel={getDefaultLlmModel()}
         />
-        <section className="composer">
+        <section className="composer" id="developer-chrome">
           <div className="section-head">
             <div>
-              <h2>Developer Chrome</h2>
+              <h2>Get the avatar on this Chrome</h2>
               <p className="hint">
-                Only you Load unpacked. Signed-in users click Add to Chrome and
-                confirm in Chrome — they never use this zip.
+                There is no Web Store listing yet, so Add to Chrome cannot
+                install for you or for users. Load unpacked on this computer,
+                then pin Resume Tailor and click the avatar for the right-hand
+                panel.
               </p>
             </div>
           </div>
-          <p className="hint">
-            <a href="/api/extension/zip" download="resume-tailor-extension.zip">
-              Download the extension zip
-            </a>
-            , then chrome://extensions → Developer mode → Load unpacked.
-          </p>
+          <ol className="install-steps">
+            <li>
+              <a href="/api/extension/zip" download="resume-tailor-extension.zip">
+                Download the extension zip
+              </a>
+              and unzip it.
+            </li>
+            <li>
+              Open <code>chrome://extensions</code>, turn on Developer mode,
+              click Load unpacked, and choose that unzipped folder.
+            </li>
+            <li>
+              Puzzle piece → pin <strong>Resume Tailor</strong>, then click
+              that avatar.
+            </li>
+          </ol>
         </section>
       </main>
     </div>

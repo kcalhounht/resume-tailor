@@ -16,12 +16,26 @@ export default function ExtensionInstallPage() {
       <main className="auth-main">
         <div className="auth-card install-card">
           <p className="brand">Resume Tailor</p>
-          <h1>Add to Chrome, then click the avatar</h1>
-          <p className="hint">
-            Sign in, click <strong>Add to Chrome</strong>, confirm in Chrome,
-            then click the Resume Tailor avatar. Chrome docks the app on the
-            right. You do not Load unpacked.
-          </p>
+          {STORE_URL ? (
+            <>
+              <h1>Add to Chrome, then click the avatar</h1>
+              <p className="hint">
+                Sign in, click <strong>Add to Chrome</strong>, confirm in
+                Chrome, then click the Resume Tailor avatar. Chrome docks the
+                app on the right.
+              </p>
+            </>
+          ) : (
+            <>
+              <h1>Chrome cannot add the avatar yet</h1>
+              <p className="hint">
+                You signed in and clicked <strong>Add to Chrome</strong>. Chrome
+                can only add the Resume Tailor avatar from a Web Store listing.
+                That listing is not connected, so there is no avatar to click
+                and the right-hand panel cannot open.
+              </p>
+            </>
+          )}
           <div className="side-panel-demo" aria-hidden="true">
             <div className="side-panel-demo-page">
               <p className="side-panel-demo-chrome">Current tab</p>
