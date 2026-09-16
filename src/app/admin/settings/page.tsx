@@ -33,6 +33,23 @@ export default async function AdminSettingsPage() {
           initialSettings={toPublicSettings(settings)}
           defaultLlmModel={getDefaultLlmModel()}
         />
+        <section className="composer">
+          <div className="section-head">
+            <div>
+              <h2>Developer Chrome</h2>
+              <p className="hint">
+                Only you Load unpacked. Signed-in users click Add to Chrome and
+                confirm in Chrome — they never use this zip.
+              </p>
+            </div>
+          </div>
+          <p className="hint">
+            <a href="/api/extension/zip" download="resume-tailor-extension.zip">
+              Download the extension zip
+            </a>
+            , then chrome://extensions → Developer mode → Load unpacked.
+          </p>
+        </section>
       </main>
     </div>
   );

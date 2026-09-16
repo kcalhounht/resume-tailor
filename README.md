@@ -76,8 +76,8 @@ Download links appear after processing.
 
 ## Send a job from any tab
 
-The Acrobat-style split is Chrome’s **side panel**. Visitors click **Add to Chrome** (`/install`) and Chrome installs it from the Web Store — they never Load unpacked. Developers Load unpacked from `extension/` while testing.
+The Acrobat-style split is Chrome’s **side panel**. After sign-in, users click **Add to Chrome**, confirm Chrome’s prompt, pin the avatar, and click it. They never Load unpacked. Developers Load unpacked from Admin → Settings.
 
-Publish `extension/` once (see `extension/STORE.md`), set `NEXT_PUBLIC_CHROME_WEBSTORE_URL`, and redeploy. Until that listing URL is set, `/install` explains the store path and offers a bookmark instead of a zip.
+Publish `extension/` once (see `extension/STORE.md`), set `NEXT_PUBLIC_CHROME_WEBSTORE_URL`, and redeploy so Chrome can complete that Add to Chrome step.
 
 

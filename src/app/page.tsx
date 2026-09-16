@@ -1,6 +1,8 @@
 import { connection } from "next/server";
 import ResumeForm from "@/components/ResumeForm";
 import SiteHeader from "@/components/SiteHeader";
+import { UserSidePanelGuide } from "@/components/UserSidePanelGuide";
+import { chromeWebStoreUrl } from "@/lib/chrome-webstore";
 import { requireCurrentUser } from "@/lib/dal";
 import { isAdminUser, isUserAble, profileFromUser } from "@/lib/users";
 import { parsePageStyle } from "@/lib/appearance";
@@ -22,6 +24,7 @@ export default async function Home() {
         pageStyle={parsePageStyle(user.pageStyle)}
       />
       <main className="main">
+        <UserSidePanelGuide storeReady={Boolean(chromeWebStoreUrl())} />
         <ResumeForm
           initialProfile={profileFromUser(user)}
           session={session}

@@ -509,6 +509,26 @@ html[data-embed="1"] .bookmarklet-btn {
   padding: 0.55rem 0.9rem;
 }
 
+.side-panel-guide {
+  margin: 0 0 1.25rem;
+  padding: 1rem 1.1rem 1.05rem;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--surface) 94%, black);
+}
+
+.side-panel-guide h2 {
+  margin: 0 0 0.55rem;
+  font-size: 1.05rem;
+}
+
+.side-panel-guide .install-steps {
+  margin-bottom: 0.35rem;
+}
+
+html[data-embed="1"] .side-panel-guide {
+  display: none;
+}
+
 .sample-job {
   max-width: 42rem;
   margin: 0 auto;
