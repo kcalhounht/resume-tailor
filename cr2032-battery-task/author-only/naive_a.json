@@ -1,0 +1,6 @@
+{
+  "condition": "The analog rail is off in sleep, as the architecture review assumed",
+  "as_built_sleep_uA": 3.0,
+  "fixed_sleep_uA": 3.0,
+  "life_days": 3125
+}

@@ -1,0 +1,5 @@
+ref,value,role,production_stuffing,unit_A4
+R11,100k,series between PA0 and U3_EN,fitted,fitted
+R12,10k,pull-up from VBAT to U3_EN,DNP,fitted
+Q1,load switch,gates VDD_ANALOG; ON when U3_EN is high,fitted,fitted
+U3,VOC AFE,powered from VDD_ANALOG,fitted,fitted

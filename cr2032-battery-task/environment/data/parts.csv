@@ -1,0 +1,6 @@
+ref,block,supply,uA_when_powered,uA_when_unpowered
+U1,MCU STOP,VDD_ALWAYS,0.50,0.50
+U2,radio cold sleep,VDD_ALWAYS,0.30,0.30
+U3,VOC AFE bias,VDD_ANALOG,45.00,0.00
+Rdiv,VBAT sense divider,VBAT,2.00,2.00
+Q1,load-switch off-state leakage,VDD_ANALOG,0.00,0.20

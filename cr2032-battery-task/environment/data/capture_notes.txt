@@ -1,0 +1,7 @@
+Unit A4, returned from the field.
+Chamber temperature 25°C.
+Fresh CR2032. VBAT = 3.00 V at the start of the capture.
+period_current.csv is cell current for one wake period. The wake edge is t = 0.
+The sleep plateau is the last row. Meter accuracy on that plateau is ±0.2 µA.
+pin_capture.csv is logic level on the named net at that time. 1 is high, 0 is low.
+t = 1000 ms falls inside the sleep plateau.

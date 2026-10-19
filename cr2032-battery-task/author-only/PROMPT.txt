@@ -1,0 +1,16 @@
+Returned CR2032 sensor nodes die far earlier than the architecture review claimed. The 25°C bench capture, power architecture, production BOM, part currents, and CR2032 rules are in /app/data.
+
+Find the condition that keeps the sleep drain high, and give the battery life in days that the corrected build holds at 25°C.
+
+Write /app/answer.json with exactly these fields:
+
+{
+  "condition": "<one sentence>",
+  "as_built_sleep_uA": <number>,
+  "fixed_sleep_uA": <number>,
+  "life_days": <number>
+}
+
+as_built_sleep_uA is the sleep-plateau cell current of the captured unit.
+fixed_sleep_uA is the deep-sleep cell current after that condition is corrected.
+life_days uses battery.md on the corrected build. The wake burst does not change.

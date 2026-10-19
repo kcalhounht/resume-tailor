@@ -1,0 +1,6 @@
+{
+  "condition": "R12 is fitted on unit A4, so the VOC analog rail stays powered through deep sleep",
+  "as_built_sleep_uA": 47.8,
+  "fixed_sleep_uA": 47.8,
+  "life_days": 178.5
+}
