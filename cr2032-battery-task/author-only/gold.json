@@ -1,6 +1,6 @@
 {
   "condition": "R12 is fitted on unit A4, so U3_EN stays at 2.73 V and the VOC analog rail remains powered through deep sleep",
-  "as_built_sleep_uA": 47.8,
+  "as_built_sleep_uA": 75.07,
   "fixed_sleep_uA": 3.0,
   "life_days": 1392.7
 }
